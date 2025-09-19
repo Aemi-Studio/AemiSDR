@@ -1,0 +1,26 @@
+# Swift Package Manager build artifacts
+.build/
+.swiftpm/
+
+# Xcode workspace and user data
+*.xcworkspace/
+xcuserdata/
+
+# macOS Finder
+.DS_Store
+
+# Compiled sources (general safety)
+*.o
+*.d
+*.lo
+*.la
+*.al
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+*.app
+
+# Logs and generated files
+*.log
