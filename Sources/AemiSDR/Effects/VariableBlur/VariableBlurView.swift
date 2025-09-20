@@ -100,7 +100,7 @@ public struct VariableBlurView: UIViewRepresentable {
      *   - maxBlurRadius: Maximum blur radius in points (default: 3)
      *   - cornerRadius: Effective corner radius in points (default: UIScreen.displayCornerRadius)
      *   - fadeWidth: Width of the fade transition in points (default: 16)
-     *   - superellipseExponent: Shape exponent - higher values create squarer shapes (default: 2)
+     *   - exponent: Shape exponent - higher values create squarer 
      *   - startOffset: Transition control parameter (default: 0)
      *   - transition: Transformation function type - linear or eased (default: .eased)
      */
