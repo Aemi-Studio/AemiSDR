@@ -42,7 +42,7 @@ open class AlphaMaskUIView: UIView {
     private var configuredFadeWidth: CGFloat
 
     /// Exponent for superellipse shape (typically 4.5-5.2 for optimal squircle appearance)
-    private var configuredSuperellipseExponent: CGFloat
+    private var configuredExponent: CGFloat
 
     /// Whether to invert the mask (true = destination-out effect, false = normal mask)
     private var configuredInverted: Bool
@@ -50,7 +50,7 @@ open class AlphaMaskUIView: UIView {
     // MARK: - Caching and Performance
 
     /// Tracks the last generated mask signature to avoid unnecessary regeneration
-    private var lastMaskSignature: MaskSignature = .init()
+    private var lastMaskSignature = MaskSignature()
 
     /**
      * Internal structure to track mask generation parameters for caching.
@@ -66,7 +66,7 @@ open class AlphaMaskUIView: UIView {
         var startOffset: CGFloat = 0
         var cornerRadius: CGFloat = 0
         var fadeWidth: CGFloat = 0
-        var superellipseExponent: CGFloat = 0
+        var exponent: CGFloat = 0
         var inverted: Bool = true
     }
 
@@ -85,22 +85,22 @@ open class AlphaMaskUIView: UIView {
      *   - startOffset: Start position for linear gradients or transition control for shapes (default: 0)
      *   - cornerRadius: Corner radius in points for rounded shapes (default: 16)
      *   - fadeWidth: Width of fade transition in points (default: 30)
-     *   - superellipseExponent: Shape exponent for superellipse masks (default: 5.0)
+     *   - exponent: Shape exponent for superellipse masks (default: 5.0)
      *   - inverted: Whether to invert the mask effect (default: true for destination-out)
      */
     public init(
         maskType: MaskType = .linearTopToBottom,
         startOffset: CGFloat = 0,
-        cornerRadius: CGFloat = 16,
-        fadeWidth: CGFloat = 30,
-        superellipseExponent: CGFloat = 5.0,
+        cornerRadius: CGFloat = UIScreen.displayCornerRadius,
+        fadeWidth: CGFloat = 16,
+        exponent: CGFloat = UICorner.exponent,
         inverted: Bool = true
     ) {
         configuredMaskType = maskType
         configuredStartOffset = startOffset
         configuredCornerRadius = cornerRadius
         configuredFadeWidth = fadeWidth
-        configuredSuperellipseExponent = superellipseExponent
+        configuredExponent = exponent
         configuredInverted = inverted
 
         super.init(frame: .zero)
@@ -133,7 +133,7 @@ open class AlphaMaskUIView: UIView {
      *   - startOffset: Start position for gradients or transition control
      *   - cornerRadius: Corner radius for rounded shapes
      *   - fadeWidth: Fade transition width
-     *   - superellipseExponent: Shape exponent for superellipse
+     *   - exponent: Shape exponent for superellipse
      *   - inverted: Whether to invert the mask
      */
     public func updateConfiguration(
@@ -141,7 +141,7 @@ open class AlphaMaskUIView: UIView {
         startOffset: CGFloat,
         cornerRadius: CGFloat,
         fadeWidth: CGFloat,
-        superellipseExponent: CGFloat,
+        exponent: CGFloat,
         inverted: Bool
     ) {
         // Check if any configuration has actually changed
@@ -149,7 +149,7 @@ open class AlphaMaskUIView: UIView {
             configuredStartOffset != startOffset ||
             configuredCornerRadius != cornerRadius ||
             configuredFadeWidth != fadeWidth ||
-            configuredSuperellipseExponent != superellipseExponent ||
+            configuredExponent != exponent ||
             configuredInverted != inverted
 
         if needsUpdate {
@@ -158,7 +158,7 @@ open class AlphaMaskUIView: UIView {
             configuredStartOffset = startOffset
             configuredCornerRadius = cornerRadius
             configuredFadeWidth = fadeWidth
-            configuredSuperellipseExponent = superellipseExponent
+            configuredExponent = exponent
             configuredInverted = inverted
 
             // Force mask regeneration with new parameters
@@ -190,7 +190,7 @@ open class AlphaMaskUIView: UIView {
             startOffset: configuredStartOffset,
             cornerRadius: configuredCornerRadius,
             fadeWidth: configuredFadeWidth,
-            superellipseExponent: configuredSuperellipseExponent,
+            exponent: configuredExponent,
             inverted: configuredInverted
         )
 
@@ -303,7 +303,7 @@ open class AlphaMaskUIView: UIView {
             let cornerRadiusPx = configuredCornerRadius * scale
             let fadeWidthPx = configuredFadeWidth * scale
             let inverted = configuredInverted ? 1.0 : 0.0
-            let args: [Any] = [wPx, hPx, cornerRadiusPx, fadeWidthPx, configuredSuperellipseExponent, inverted]
+            let args: [Any] = [wPx, hPx, cornerRadiusPx, fadeWidthPx, configuredExponent, inverted]
             maskImage = AlphaMaskCache.generateCGImage(
                 kernel: AlphaMaskCache.superellipseAlphaMask,
                 extent: extent,
@@ -315,7 +315,7 @@ open class AlphaMaskUIView: UIView {
             let cornerRadiusPx = configuredCornerRadius * scale
             let fadeWidthPx = configuredFadeWidth * scale
             let inverted = configuredInverted ? 1.0 : 0.0
-            let args: [Any] = [wPx, hPx, cornerRadiusPx, fadeWidthPx, configuredSuperellipseExponent, inverted]
+            let args: [Any] = [wPx, hPx, cornerRadiusPx, fadeWidthPx, configuredExponent, inverted]
             maskImage = AlphaMaskCache.generateCGImage(
                 kernel: AlphaMaskCache.superellipseEaseAlphaMask,
                 extent: extent,
