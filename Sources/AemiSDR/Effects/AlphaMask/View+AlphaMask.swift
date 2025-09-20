@@ -9,7 +9,7 @@ import SwiftUI
 
 // MARK: - Alpha Mask View Modifiers
 
-public extension View {
+extension View {
     /**
      * Applies an alpha mask effect to the view using the specified parameters.
      *
@@ -27,7 +27,7 @@ public extension View {
      * - Returns: A view with the alpha mask effect applied
      */
     @available(iOS 15.0, *)
-    @ViewBuilder func roundedRectMask(
+    @ViewBuilder public func roundedRectMask(
         _ cornerStyle: RoundedCornerStyle = .continuous,
         cornerRadius: CGFloat = UIScreen.displayCornerRadius,
         fadeWidth: CGFloat = 16,
@@ -64,9 +64,9 @@ public extension View {
      * - Returns: A view with vertical edge mask effects applied
      */
     @available(iOS 15.0, *)
-    @ViewBuilder func verticalEdgeMask(
+    @ViewBuilder public func verticalEdgeMask(
         height: CGFloat = .infinity,
-        edges: VerticalEdgeSet = .all,
+        edges: VerticalEdge.Set = .all,
         transition: TransitionAlgorithm = .eased,
         ignoreSafeArea: Bool = true,
         inverted: Bool = true
@@ -78,7 +78,8 @@ public extension View {
         mask {
             VStack(spacing: 0) {
                 if hasTop {
-                    let topType: MaskType = transition == .linear ? .linearTopToBottom : .easeInTopToBottom
+                    let topType: MaskType =
+                        transition == .linear ? .linearTopToBottom : .easeInTopToBottom
                     AlphaMaskView(
                         type: topType,
                         inverted: inverted
@@ -94,7 +95,8 @@ public extension View {
 
                 // Bottom edge mask
                 if hasBottom {
-                    let bottomType: MaskType = transition == .linear ? .linearBottomToTop : .easeInBottomToTop
+                    let bottomType: MaskType =
+                        transition == .linear ? .linearBottomToTop : .easeInBottomToTop
                     AlphaMaskView(
                         type: bottomType,
                         inverted: inverted
