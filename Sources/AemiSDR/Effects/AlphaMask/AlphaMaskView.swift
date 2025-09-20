@@ -93,7 +93,7 @@ public struct AlphaMaskView: UIViewRepresentable {
      * - Parameters:
      *   - cornerRadius: Effective corner radius in points (default: 16)
      *   - fadeWidth: Width of the fade transition in points (default: 30)
-     *   - superellipseExponent: Shape exponent - higher values create squarer shapes (default: 2)
+     *   - exponent: Shape exponent - higher values create squarer shapes (default: 2)
      *   - inverted: Whether to invert the mask effect (default: true)
      *   - transition: Transformation function type - linear or eased (default: .eased)
      */
