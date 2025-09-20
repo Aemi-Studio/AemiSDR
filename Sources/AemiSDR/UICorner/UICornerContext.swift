@@ -12,7 +12,7 @@ import UIKit
 ///
 /// - Note: On watchOS, only view contexts are meaningful as there's typically one screen.
 /// - Note: On macOS with Mac Catalyst, window and windowScene contexts work normally.
-public enum UICornerContext: Sendable, Equatable, Hashable {
+internal enum UICornerContext: Sendable, Equatable, Hashable {
     /// Context from a UIView - will traverse up to find the containing screen
     case view(UIView)
 
