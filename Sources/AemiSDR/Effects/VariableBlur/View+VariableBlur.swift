@@ -9,7 +9,7 @@ import SwiftUI
 
 // MARK: - Variable Blur View Modifiers
 
-public extension View {
+extension View {
     /**
      * Applies a variable blur effect to the view using rounded rectangle masking.
      *
@@ -27,7 +27,7 @@ public extension View {
      * - Returns: A view with the variable blur effect applied
      */
     @available(iOS 15.0, *)
-    @ViewBuilder func roundedRectBlur(
+    @ViewBuilder public func roundedRectBlur(
         _ cornerStyle: RoundedCornerStyle = .continuous,
         maxBlurRadius: CGFloat = 3,
         cornerRadius: CGFloat = UIScreen.displayCornerRadius,
@@ -63,10 +63,10 @@ public extension View {
      * - Returns: A view with vertical edge blur effects applied
      */
     @available(iOS 15.0, *)
-    @ViewBuilder func verticalEdgeBlur(
+    @ViewBuilder public func verticalEdgeBlur(
         height: CGFloat = .infinity,
         maxBlurRadius: CGFloat = 3,
-        edges: VerticalEdgeSet = .all,
+        edges: VerticalEdge.Set = .all,
         transition: TransitionAlgorithm = .eased,
         ignoreSafeArea: Bool = true
     ) -> some View {
@@ -77,7 +77,8 @@ public extension View {
         overlay {
             VStack(spacing: 0) {
                 if hasTop {
-                    let topType: MaskType = transition == .linear ? .linearTopToBottom : .easeInTopToBottom
+                    let topType: MaskType =
+                        transition == .linear ? .linearTopToBottom : .easeInTopToBottom
                     VariableBlurView(
                         maxBlurRadius: maxBlurRadius,
                         type: topType
@@ -92,7 +93,8 @@ public extension View {
 
                 // Bottom edge blur
                 if hasBottom {
-                    let bottomType: MaskType = transition == .linear ? .linearBottomToTop : .easeInBottomToTop
+                    let bottomType: MaskType =
+                        transition == .linear ? .linearBottomToTop : .easeInBottomToTop
                     VariableBlurView(
                         maxBlurRadius: maxBlurRadius,
                         type: bottomType
