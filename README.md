@@ -10,6 +10,16 @@ AemiSDR is designed to work seamlessly with `ScrollView` and other dynamic conte
 - **Optimized**: Effects are powered by pre-compiled Metal shaders and cache their results to ensure smooth performance.
 
 
+<details>
+
+<summary><h2>Example</h2></summary>
+
+https://github.com/user-attachments/assets/41c106cc-6c1d-4a43-bbaa-09cf44c9bfcc
+
+</details>
+
+
+
 ## Requirements
 
 - iOS 14+
