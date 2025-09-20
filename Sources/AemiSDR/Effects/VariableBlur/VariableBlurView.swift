@@ -41,7 +41,7 @@ import UIKit
  * VariableBlurView(maxBlurRadius: 20, cornerRadius: 16, fadeWidth: 40)
  *
  * // Superellipse squircle blur
- * VariableBlurView(cornerRadius: 20, superellipseExponent: 2, transition: .eased)
+ * VariableBlurView(cornerRadius: 20, exponent: 2, transition: .eased)
  * ```
  */
 public struct VariableBlurView: UIViewRepresentable {
@@ -64,7 +64,7 @@ public struct VariableBlurView: UIViewRepresentable {
     public var fadeWidth: CGFloat = 16
 
     /// Superellipse exponent
-    public var superellipseExponent: CGFloat = UICorner.superellipseExponent
+    public var exponent: CGFloat = UICorner.exponent
 
     // MARK: - Initializers
 
@@ -120,7 +120,7 @@ public struct VariableBlurView: UIViewRepresentable {
         self.startOffset = startOffset
         self.cornerRadius = cornerRadius
         self.fadeWidth = fadeWidth
-        superellipseExponent = exponent
+        self.exponent = exponent
     }
 
     /**
@@ -132,10 +132,10 @@ public struct VariableBlurView: UIViewRepresentable {
      * initializers and provides a cleaner API.
      *
      * - Parameters:
+     *   - cornerStyle: The corner style to apply (default: .continuous)
      *   - maxBlurRadius: Maximum blur radius in points (default: 3)
      *   - cornerRadius: Corner radius in points (default: UIScreen.displayCornerRadius)
      *   - fadeWidth: Width of the fade transition in points (default: 16)
-     *   - cornerStyle: The corner style to apply (default: .continuous)
      *   - startOffset: Transition control parameter (default: 0)
      *   - transition: Transformation function type - linear or eased (default: .eased)
      */
@@ -178,7 +178,7 @@ public struct VariableBlurView: UIViewRepresentable {
             startOffset: startOffset,
             cornerRadius: cornerRadius,
             fadeWidth: fadeWidth,
-            superellipseExponent: superellipseExponent
+            exponent: exponent
         )
     }
 
@@ -201,7 +201,7 @@ public struct VariableBlurView: UIViewRepresentable {
             startOffset: startOffset,
             cornerRadius: cornerRadius,
             fadeWidth: fadeWidth,
-            superellipseExponent: superellipseExponent
+            exponent: exponent
         )
     }
 }

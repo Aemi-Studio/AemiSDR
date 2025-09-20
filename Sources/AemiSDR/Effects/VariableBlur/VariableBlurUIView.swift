@@ -58,7 +58,7 @@ open class VariableBlurUIView: UIVisualEffectView {
     private var configuredFadeWidth: CGFloat
 
     /// Exponent for superellipse shape (typically 4.5-5.2 for optimal squircle appearance)
-    private var configuredSuperellipseExponent: CGFloat
+    private var configuredExponent: CGFloat
 
     // MARK: - Core Animation Integration
 
@@ -82,7 +82,7 @@ open class VariableBlurUIView: UIVisualEffectView {
         var startOffset: CGFloat = 0
         var cornerRadius: CGFloat = 0
         var fadeWidth: CGFloat = 0
-        var superellipseExponent: CGFloat = 0
+        var exponent: CGFloat = 0
     }
 
     /// Current display scale, used for pixel-accurate mask generation
@@ -101,7 +101,7 @@ open class VariableBlurUIView: UIVisualEffectView {
      *   - startOffset: Start position for gradients or transition control (default: 0)
      *   - cornerRadius: Corner radius for rounded shapes (default: 16)
      *   - fadeWidth: Width of fade transition in points (default: 30)
-     *   - superellipseExponent: Shape exponent for superellipse masks (default: 5.0)
+     *   - exponent: Shape exponent for superellipse masks (default: 5.0)
      */
     public init(
         maxBlurRadius: CGFloat = 20,
@@ -109,14 +109,14 @@ open class VariableBlurUIView: UIVisualEffectView {
         startOffset: CGFloat = 0,
         cornerRadius: CGFloat = 16,
         fadeWidth: CGFloat = 30,
-        superellipseExponent: CGFloat = 5.0
+        exponent: CGFloat = 5.0
     ) {
         configuredMaxBlurRadius = maxBlurRadius
         configuredMaskType = maskType
         configuredStartOffset = startOffset
         configuredCornerRadius = cornerRadius
         configuredFadeWidth = fadeWidth
-        configuredSuperellipseExponent = superellipseExponent
+        configuredExponent = exponent
 
         super.init(effect: UIBlurEffect(style: .regular))
 
@@ -150,7 +150,7 @@ open class VariableBlurUIView: UIVisualEffectView {
      *   - startOffset: Start position for gradients or transition control
      *   - cornerRadius: Corner radius for rounded shapes
      *   - fadeWidth: Fade transition width
-     *   - superellipseExponent: Shape exponent for superellipse
+     *   - exponent: Shape exponent for superellipse
      */
     public func updateConfiguration(
         maxBlurRadius: CGFloat,
@@ -158,7 +158,7 @@ open class VariableBlurUIView: UIVisualEffectView {
         startOffset: CGFloat,
         cornerRadius: CGFloat,
         fadeWidth: CGFloat,
-        superellipseExponent: CGFloat
+        exponent: CGFloat
     ) {
         // Check if any configuration has actually changed
         let needsUpdate = configuredMaxBlurRadius != maxBlurRadius ||
@@ -166,7 +166,7 @@ open class VariableBlurUIView: UIVisualEffectView {
             configuredStartOffset != startOffset ||
             configuredCornerRadius != cornerRadius ||
             configuredFadeWidth != fadeWidth ||
-            configuredSuperellipseExponent != superellipseExponent
+            configuredExponent != exponent
 
         if needsUpdate {
             // Update stored configuration
@@ -175,7 +175,7 @@ open class VariableBlurUIView: UIVisualEffectView {
             configuredStartOffset = startOffset
             configuredCornerRadius = cornerRadius
             configuredFadeWidth = fadeWidth
-            configuredSuperellipseExponent = superellipseExponent
+            configuredExponent = exponent
 
             // Update the filter's blur radius
             variableBlurFilter?.setValue(maxBlurRadius, forKey: VariableBlurUIView.radiusKey)
@@ -251,7 +251,7 @@ open class VariableBlurUIView: UIVisualEffectView {
             startOffset: configuredStartOffset,
             cornerRadius: configuredCornerRadius,
             fadeWidth: configuredFadeWidth,
-            superellipseExponent: configuredSuperellipseExponent
+            exponent: configuredExponent
         )
 
         // Skip generation if signature hasn't changed (unless forced)
@@ -353,7 +353,7 @@ open class VariableBlurUIView: UIVisualEffectView {
         case .superellipseSquircle:
             let cornerRadiusPx = configuredCornerRadius * scale
             let fadeWidthPx = configuredFadeWidth * scale
-            let args: [Any] = [widthPx, heightPx, cornerRadiusPx, fadeWidthPx, configuredSuperellipseExponent]
+            let args: [Any] = [widthPx, heightPx, cornerRadiusPx, fadeWidthPx, configuredExponent]
             return VariableBlurCache.generateCGImage(
                 kernel: VariableBlurCache.superellipseMask,
                 extent: extent,
@@ -363,7 +363,7 @@ open class VariableBlurUIView: UIVisualEffectView {
         case .easedSuperellipseSquircle:
             let cornerRadiusPx = configuredCornerRadius * scale
             let fadeWidthPx = configuredFadeWidth * scale
-            let args: [Any] = [widthPx, heightPx, cornerRadiusPx, fadeWidthPx, configuredSuperellipseExponent]
+            let args: [Any] = [widthPx, heightPx, cornerRadiusPx, fadeWidthPx, configuredExponent]
             return VariableBlurCache.generateCGImage(
                 kernel: VariableBlurCache.superellipseEaseMask,
                 extent: extent,

@@ -35,7 +35,7 @@ import UIKit
  * AlphaMaskView(cornerRadius: 20, fadeWidth: 40)
  *
  * // Superellipse squircle mask
- * AlphaMaskView(cornerRadius: 16, superellipseExponent: 4.8, transition: .eased)
+ * AlphaMaskView(cornerRadius: 16, exponent: 2, transition: .eased)
  * ```
  */
 public struct AlphaMaskView: UIViewRepresentable {
@@ -49,13 +49,13 @@ public struct AlphaMaskView: UIViewRepresentable {
     public var startOffset: CGFloat = 0
 
     /// Corner radius in points (for rounded rectangle and squircle masks)
-    public var cornerRadius: CGFloat = 16
+    public var cornerRadius: CGFloat = UIScreen.displayCornerRadius
 
     /// The width of the fade transition, in points
-    public var fadeWidth: CGFloat = 30
+    public var fadeWidth: CGFloat = 16
 
-    /// Superellipse exponent (typically 4.5-5.2 for optimal squircle appearance)
-    public var superellipseExponent: CGFloat = UICorner.superellipseExponent
+    /// Superellipse exponent
+    public var exponent: CGFloat = UICorner.exponent
 
     /// Whether to invert the mask (true = destination-out, false = normal mask)
     public var inverted: Bool = true
@@ -91,15 +91,15 @@ public struct AlphaMaskView: UIViewRepresentable {
      * the "squareness" of the shape.
      *
      * - Parameters:
-     *   - cornerRadius: Effective corner radius in points (default: 16)
-     *   - fadeWidth: Width of the fade transition in points (default: 30)
+     *   - cornerRadius: Effective corner radius in points (default: UIScreen.displayCornerRadius)
+     *   - fadeWidth: Width of the fade transition in points (default: 16)
      *   - exponent: Shape exponent - higher values create squarer shapes (default: 2)
      *   - inverted: Whether to invert the mask effect (default: true)
      *   - transition: Transformation function type - linear or eased (default: .eased)
      */
     public init(
-        cornerRadius: CGFloat = 16,
-        fadeWidth: CGFloat = 30,
+        cornerRadius: CGFloat = UIScreen.displayCornerRadius,
+        fadeWidth: CGFloat = 16,
         exponent: CGFloat,
         inverted: Bool = true,
         transition: TransitionAlgorithm = .eased
@@ -110,7 +110,7 @@ public struct AlphaMaskView: UIViewRepresentable {
         }
         self.cornerRadius = cornerRadius
         self.fadeWidth = fadeWidth
-        superellipseExponent = exponent
+        self.exponent = exponent
         self.inverted = inverted
     }
 
@@ -124,15 +124,15 @@ public struct AlphaMaskView: UIViewRepresentable {
      *
      * - Parameters:
      *   - cornerStyle: The corner style to apply (default: .continuous)
-     *   - cornerRadius: Corner radius in points (default: 16)
-     *   - fadeWidth: Width of the fade transition in points (default: 30)
+     *   - cornerRadius: Corner radius in points (default: UIScreen.displayCornerRadius)
+     *   - fadeWidth: Width of the fade transition in points (default: 16)
      *   - inverted: Whether to invert the mask effect (default: true)
      *   - transition: Transformation function type - linear or eased (default: .eased)
      */
     public init(
         _ cornerStyle: RoundedCornerStyle = .continuous,
-        cornerRadius: CGFloat = 16,
-        fadeWidth: CGFloat = 30,
+        cornerRadius: CGFloat = UIScreen.displayCornerRadius,
+        fadeWidth: CGFloat = 16,
         inverted: Bool = true,
         transition: TransitionAlgorithm = .eased
     ) {
@@ -165,7 +165,7 @@ public struct AlphaMaskView: UIViewRepresentable {
             startOffset: startOffset,
             cornerRadius: cornerRadius,
             fadeWidth: fadeWidth,
-            superellipseExponent: superellipseExponent,
+            exponent: exponent,
             inverted: inverted
         )
     }
@@ -188,7 +188,7 @@ public struct AlphaMaskView: UIViewRepresentable {
             startOffset: startOffset,
             cornerRadius: cornerRadius,
             fadeWidth: fadeWidth,
-            superellipseExponent: superellipseExponent,
+            exponent: exponent,
             inverted: inverted
         )
     }

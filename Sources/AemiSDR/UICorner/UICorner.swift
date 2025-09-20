@@ -10,9 +10,9 @@ import CoreGraphics
 /**
  * Constants and utilities for UI corner calculations and shape generation.
  */
-enum UICorner {
+public enum UICorner {
     /**
      * Standard superellipse exponent for UI corner calculations.
      */
-    static let superellipseExponent: CGFloat = 2
+    public static let exponent: CGFloat = 2
 }
