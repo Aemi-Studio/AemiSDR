@@ -6,7 +6,7 @@
 //
 
 import CoreImage
-import os.log
+import OSLog
 
 /**
  * VariableBlurCache provides cached Core Image kernels for variable blur effects with different mask types.

@@ -25,7 +25,7 @@ import OSLog
  * Subclasses should extend this class to provide specific kernel implementations
  * (e.g., VariableBlurCache, AlphaMaskCache).
  */
-internal class CIKernelCache {
+class CIKernelCache {
     // MARK: - Logging
 
     /**
