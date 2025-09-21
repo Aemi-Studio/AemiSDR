@@ -6,7 +6,7 @@
 //
 
 import CoreImage
-import os.log
+import OSLog
 
 /**
  * AlphaMaskCache provides cached Core Image kernels for alpha mask generation with easing effects.

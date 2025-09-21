@@ -1,175 +1,117 @@
 //
 //  VariableBlurUIView.swift
-//  Stations
+//  AemiSDR
 //
 // Created by Gigi on 20.09.25.
 //
 
-import OSLog
-import UIKit
-
-/**
- * A subclass of UIVisualEffectView that applies variable blur effects using Metal shaders.
- *
- * VariableBlurUIView creates sophisticated blur effects where the blur intensity varies
- * across the view based on a mask image. It leverages Core Animation filters
- * to achieve hardware-accelerated variable blur effects.
- *
- * Key Features:
- * - Variable blur intensity controlled by mask images generated from Metal shaders
- * - Multiple mask types: linear gradients, rounded rectangles, and superellipse squircles
- * - Hardware-accelerated rendering using Core Animation filters
- * - Automatic mask regeneration and caching based on view size changes
- * - Support for both linear and eased (smooth) transition functions
- * - Configurable maximum blur radius and fade parameters
- *
- * The blur effect reads the mask image's alpha values to determine blur intensity:
- * - Alpha 1.0 (white) = maximum blur radius
- * - Alpha 0.0 (black) = no blur (clear)
- * - Intermediate values = proportional blur intensity
- */
-open class VariableBlurUIView: UIVisualEffectView {
-    // MARK: - Logging
+#if os(iOS)
+    import OSLog
+    import UIKit
 
     /**
-     * Logger instance for VariableBlur-related operations.
+     * A subclass of UIVisualEffectView that applies variable blur effects using Metal shaders.
      *
-     * Uses OSLog with a subsystem identifier for the AemiSDR framework
-     * and sets the category to VariableBlurUIView for clear identification
-     * of variable blur related logs.
+     * VariableBlurUIView creates sophisticated blur effects where the blur intensity varies
+     * across the view based on a mask image. It leverages Core Animation filters
+     * to achieve hardware-accelerated variable blur effects.
+     *
+     * Key Features:
+     * - Variable blur intensity controlled by mask images generated from Metal shaders
+     * - Multiple mask types: linear gradients, rounded rectangles, and superellipse squircles
+     * - Hardware-accelerated rendering using Core Animation filters
+     * - Automatic mask regeneration and caching based on view size changes
+     * - Support for both linear and eased (smooth) transition functions
+     * - Configurable maximum blur radius and fade parameters
+     *
+     * The blur effect reads the mask image's alpha values to determine blur intensity:
+     * - Alpha 1.0 (white) = maximum blur radius
+     * - Alpha 0.0 (black) = no blur (clear)
+     * - Intermediate values = proportional blur intensity
      */
-    private let logger = Logger(subsystem: "studio.aemi.AemiSDR", category: "VariableBlurUIView")
+    open class VariableBlurUIView: UIVisualEffectView {
+        // MARK: - Logging
 
-    // MARK: - Configuration Properties
+        /**
+         * Logger instance for VariableBlur-related operations.
+         *
+         * Uses OSLog with a subsystem identifier for the AemiSDR framework
+         * and sets the category to VariableBlurUIView for clear identification
+         * of variable blur related logs.
+         */
+        private let logger = Logger(subsystem: "studio.aemi.AemiSDR", category: "VariableBlurUIView")
 
-    /// Maximum blur radius in points - the strongest blur applied where mask alpha is 1.0
-    private var configuredMaxBlurRadius: CGFloat
+        // MARK: - Configuration Properties
 
-    /// The type of mask shape to generate (linear, rounded rectangle, superellipse, etc.)
-    private var configuredMaskType: MaskType
+        /// Maximum blur radius in points - the strongest blur applied where mask alpha is 1.0
+        private var configuredMaxBlurRadius: CGFloat
 
-    /// Start offset for linear gradients (as fraction) or transition smoothness for shaped masks
-    private var configuredStartOffset: CGFloat
+        /// The type of mask shape to generate (linear, rounded rectangle, superellipse, etc.)
+        private var configuredMaskType: MaskType
 
-    /// Corner radius in points for rounded rectangle and superellipse masks
-    private var configuredCornerRadius: CGFloat
+        /// Start offset for linear gradients (as fraction) or transition smoothness for shaped masks
+        private var configuredStartOffset: CGFloat
 
-    /// Width of the fade transition zone in points
-    private var configuredFadeWidth: CGFloat
+        /// Corner radius in points for rounded rectangle and superellipse masks
+        private var configuredCornerRadius: CGFloat
 
-    /// Exponent for superellipse shape (typically 4.5-5.2 for optimal squircle appearance)
-    private var configuredExponent: CGFloat
+        /// Width of the fade transition zone in points
+        private var configuredFadeWidth: CGFloat
 
-    // MARK: - Core Animation Integration
+        /// Exponent for superellipse shape (typically 4.5-5.2 for optimal squircle appearance)
+        private var configuredExponent: CGFloat
 
-    /// Reference to the filter instance for variable blur
-    private var variableBlurFilter: NSObject?
+        // MARK: - Core Animation Integration
 
-    /// Tracks the last generated mask signature to avoid unnecessary regeneration
-    private var lastMaskSignature: MaskSignature = .init()
+        /// Reference to the filter instance for variable blur
+        private var variableBlurFilter: NSObject?
 
-    /**
-     * Internal structure to track mask generation parameters for caching.
-     *
-     * Used to determine when a mask needs to be regenerated by comparing current
-     * parameters against the last successful generation. This prevents expensive
-     * shader operations when the mask hasn't actually changed.
-     */
-    private struct MaskSignature: Equatable {
-        var size: CGSize = .zero
-        var scale: CGFloat = 0
-        var maskType: MaskType = .linearTopToBottom
-        var startOffset: CGFloat = 0
-        var cornerRadius: CGFloat = 0
-        var fadeWidth: CGFloat = 0
-        var exponent: CGFloat = 0
-    }
+        /// Tracks the last generated mask signature to avoid unnecessary regeneration
+        private var lastMaskSignature: MaskSignature = .init()
 
-    /// Current display scale, used for pixel-accurate mask generation
-    private var currentScale: CGFloat {
-        window?.screen.scale ?? UIScreen.main.scale
-    }
+        /**
+         * Internal structure to track mask generation parameters for caching.
+         *
+         * Used to determine when a mask needs to be regenerated by comparing current
+         * parameters against the last successful generation. This prevents expensive
+         * shader operations when the mask hasn't actually changed.
+         */
+        private struct MaskSignature: Equatable {
+            var size: CGSize = .zero
+            var scale: CGFloat = 0
+            var maskType: MaskType = .linearTopToBottom
+            var startOffset: CGFloat = 0
+            var cornerRadius: CGFloat = 0
+            var fadeWidth: CGFloat = 0
+            var exponent: CGFloat = 0
+        }
 
-    // MARK: - Initialization
+        /// Current display scale, used for pixel-accurate mask generation
+        private var currentScale: CGFloat {
+            window?.screen.scale ?? UIScreen.main.scale
+        }
 
-    /**
-     * Creates a new variable blur view with the specified configuration.
-     *
-     * - Parameters:
-     *   - maxBlurRadius: Maximum blur radius in points (default: 20)
-     *   - maskType: The type of mask to generate (default: linear top-to-bottom)
-     *   - startOffset: Start position for gradients or transition control (default: 0)
-     *   - cornerRadius: Corner radius for rounded shapes (default: 16)
-     *   - fadeWidth: Width of fade transition in points (default: 30)
-     *   - exponent: Shape exponent for superellipse masks (default: 5.0)
-     */
-    public init(
-        maxBlurRadius: CGFloat = 20,
-        maskType: MaskType = .linearTopToBottom,
-        startOffset: CGFloat = 0,
-        cornerRadius: CGFloat = 16,
-        fadeWidth: CGFloat = 30,
-        exponent: CGFloat = 5.0
-    ) {
-        configuredMaxBlurRadius = maxBlurRadius
-        configuredMaskType = maskType
-        configuredStartOffset = startOffset
-        configuredCornerRadius = cornerRadius
-        configuredFadeWidth = fadeWidth
-        configuredExponent = exponent
+        // MARK: - Initialization
 
-        super.init(effect: UIBlurEffect(style: .regular))
-
-        // Disable interaction since this is a visual effect view
-        isUserInteractionEnabled = false
-
-        // Set up the filter for variable blur
-        setupVariableBlurFilter()
-
-        // Generate initial mask
-        updateMask(for: bounds.size, force: true)
-    }
-
-    @available(*, unavailable)
-    public required init?(coder _: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    // MARK: - Configuration Updates
-
-    /**
-     * Updates the blur configuration and regenerates the mask if necessary.
-     *
-     * This method compares the new configuration against the current one and only
-     * triggers a mask regeneration if actual changes are detected. This optimization
-     * prevents unnecessary GPU work during animations or frequent updates.
-     *
-     * - Parameters:
-     *   - maxBlurRadius: Maximum blur radius in points
-     *   - maskType: The type of mask to generate
-     *   - startOffset: Start position for gradients or transition control
-     *   - cornerRadius: Corner radius for rounded shapes
-     *   - fadeWidth: Fade transition width
-     *   - exponent: Shape exponent for superellipse
-     */
-    public func updateConfiguration(
-        maxBlurRadius: CGFloat,
-        maskType: MaskType,
-        startOffset: CGFloat,
-        cornerRadius: CGFloat,
-        fadeWidth: CGFloat,
-        exponent: CGFloat
-    ) {
-        // Check if any configuration has actually changed
-        let needsUpdate = configuredMaxBlurRadius != maxBlurRadius ||
-            configuredMaskType != maskType ||
-            configuredStartOffset != startOffset ||
-            configuredCornerRadius != cornerRadius ||
-            configuredFadeWidth != fadeWidth ||
-            configuredExponent != exponent
-
-        if needsUpdate {
-            // Update stored configuration
+        /**
+         * Creates a new variable blur view with the specified configuration.
+         *
+         * - Parameters:
+         *   - maxBlurRadius: Maximum blur radius in points (default: 20)
+         *   - maskType: The type of mask to generate (default: linear top-to-bottom)
+         *   - startOffset: Start position for gradients or transition control (default: 0)
+         *   - cornerRadius: Corner radius for rounded shapes (default: 16)
+         *   - fadeWidth: Width of fade transition in points (default: 30)
+         *   - exponent: Shape exponent for superellipse masks (default: 5.0)
+         */
+        public init(
+            maxBlurRadius: CGFloat = 20,
+            maskType: MaskType = .linearTopToBottom,
+            startOffset: CGFloat = 0,
+            cornerRadius: CGFloat = 16,
+            fadeWidth: CGFloat = 30,
+            exponent: CGFloat = 5.0
+        ) {
             configuredMaxBlurRadius = maxBlurRadius
             configuredMaskType = maskType
             configuredStartOffset = startOffset
@@ -177,271 +119,331 @@ open class VariableBlurUIView: UIVisualEffectView {
             configuredFadeWidth = fadeWidth
             configuredExponent = exponent
 
-            // Update the filter's blur radius
-            variableBlurFilter?.setValue(maxBlurRadius, forKey: VariableBlurUIView.radiusKey)
+            super.init(effect: UIBlurEffect(style: .regular))
 
-            // Force mask regeneration with new parameters
+            // Disable interaction since this is a visual effect view
+            isUserInteractionEnabled = false
+
+            // Set up the filter for variable blur
+            setupVariableBlurFilter()
+
+            // Generate initial mask
             updateMask(for: bounds.size, force: true)
         }
-    }
 
-    // MARK: - Private Filter Setup
-
-    /**
-     * Sets up the filter for variable blur functionality.
-     *
-     * This method uses runtime reflection to access Core Animation APIs
-     * that enable variable blur effects. The filter is applied to the backdrop
-     * layer and configured with the current blur radius and edge normalization.
-     */
-    private func setupVariableBlurFilter() {
-        // Access the filter class using runtime reflection
-        guard let filterClass = NSClassFromString(VariableBlurUIView.filterClassName) as? NSObject.Type else {
-            logger.error("Failed to locate filter class.")
-            return
+        @available(*, unavailable)
+        public required init?(coder _: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
         }
 
-        // Create a variable blur filter instance
-        guard let variableBlur = unsafe filterClass.perform(
-            NSSelectorFromString(VariableBlurUIView.filterMethodName),
-            with: VariableBlurUIView.filterTypeName
-        ).takeUnretainedValue() as? NSObject else {
-            logger.error("Failed to create variable blur filter instance.")
-            return
+        // MARK: - Configuration Updates
+
+        /**
+         * Updates the blur configuration and regenerates the mask if necessary.
+         *
+         * This method compares the new configuration against the current one and only
+         * triggers a mask regeneration if actual changes are detected. This optimization
+         * prevents unnecessary GPU work during animations or frequent updates.
+         *
+         * - Parameters:
+         *   - maxBlurRadius: Maximum blur radius in points
+         *   - maskType: The type of mask to generate
+         *   - startOffset: Start position for gradients or transition control
+         *   - cornerRadius: Corner radius for rounded shapes
+         *   - fadeWidth: Fade transition width
+         *   - exponent: Shape exponent for superellipse
+         */
+        public func updateConfiguration(
+            maxBlurRadius: CGFloat,
+            maskType: MaskType,
+            startOffset: CGFloat,
+            cornerRadius: CGFloat,
+            fadeWidth: CGFloat,
+            exponent: CGFloat
+        ) {
+            // Check if any configuration has actually changed
+            let needsUpdate = configuredMaxBlurRadius != maxBlurRadius ||
+                configuredMaskType != maskType ||
+                configuredStartOffset != startOffset ||
+                configuredCornerRadius != cornerRadius ||
+                configuredFadeWidth != fadeWidth ||
+                configuredExponent != exponent
+
+            if needsUpdate {
+                // Update stored configuration
+                configuredMaxBlurRadius = maxBlurRadius
+                configuredMaskType = maskType
+                configuredStartOffset = startOffset
+                configuredCornerRadius = cornerRadius
+                configuredFadeWidth = fadeWidth
+                configuredExponent = exponent
+
+                // Update the filter's blur radius
+                variableBlurFilter?.setValue(maxBlurRadius, forKey: VariableBlurUIView.radiusKey)
+
+                // Force mask regeneration with new parameters
+                updateMask(for: bounds.size, force: true)
+            }
         }
 
-        // Configure the filter's static parameters
-        variableBlur.setValue(configuredMaxBlurRadius, forKey: VariableBlurUIView.radiusKey)
-        variableBlur.setValue(true, forKey: VariableBlurUIView.normalizeKey)
+        // MARK: - Private Filter Setup
 
-        // Apply the filter to the backdrop layer (first subview's layer)
-        let backdropLayer = subviews.first?.layer
-        backdropLayer?.filters = [variableBlur]
+        /**
+         * Sets up the filter for variable blur functionality.
+         *
+         * This method uses runtime reflection to access Core Animation APIs
+         * that enable variable blur effects. The filter is applied to the backdrop
+         * layer and configured with the current blur radius and edge normalization.
+         */
+        private func setupVariableBlurFilter() {
+            // Access the filter class using runtime reflection
+            guard let filterClass = NSClassFromString(VariableBlurUIView.filterClassName) as? NSObject.Type else {
+                logger.error("Failed to locate filter class.")
+                return
+            }
 
-        // Remove the default dimming/tint overlay by making additional subviews transparent
-        for subview in subviews.dropFirst() {
-            subview.alpha = 0
+            // Create a variable blur filter instance
+            guard let variableBlur = unsafe filterClass.perform(
+                NSSelectorFromString(VariableBlurUIView.filterMethodName),
+                with: VariableBlurUIView.filterTypeName
+            ).takeUnretainedValue() as? NSObject else {
+                logger.error("Failed to create variable blur filter instance.")
+                return
+            }
+
+            // Configure the filter's static parameters
+            variableBlur.setValue(configuredMaxBlurRadius, forKey: VariableBlurUIView.radiusKey)
+            variableBlur.setValue(true, forKey: VariableBlurUIView.normalizeKey)
+
+            // Apply the filter to the backdrop layer (first subview's layer)
+            let backdropLayer = subviews.first?.layer
+            backdropLayer?.filters = [variableBlur]
+
+            // Remove the default dimming/tint overlay by making additional subviews transparent
+            for subview in subviews.dropFirst() {
+                subview.alpha = 0
+            }
+
+            // Store reference for later mask updates
+            variableBlurFilter = variableBlur
         }
 
-        // Store reference for later mask updates
-        variableBlurFilter = variableBlur
-    }
+        // MARK: - Mask Generation and Caching
 
-    // MARK: - Mask Generation and Caching
+        /**
+         * Updates the blur mask for the specified size, with optional forced regeneration.
+         *
+         * This is the core method that manages mask generation and caching. It compares
+         * the current parameters against the last generation to avoid unnecessary work.
+         *
+         * - Parameters:
+         *   - size: The target size for the mask
+         *   - force: Whether to force regeneration regardless of cache state
+         */
+        private func updateMask(for size: CGSize, force: Bool = false) {
+            // Validate size
+            guard size.width > 0, size.height > 0 else { return }
 
-    /**
-     * Updates the blur mask for the specified size, with optional forced regeneration.
-     *
-     * This is the core method that manages mask generation and caching. It compares
-     * the current parameters against the last generation to avoid unnecessary work.
-     *
-     * - Parameters:
-     *   - size: The target size for the mask
-     *   - force: Whether to force regeneration regardless of cache state
-     */
-    private func updateMask(for size: CGSize, force: Bool = false) {
-        // Validate size
-        guard size.width > 0, size.height > 0 else { return }
+            let scale = currentScale
+            let currentSignature = MaskSignature(
+                size: size,
+                scale: scale,
+                maskType: configuredMaskType,
+                startOffset: configuredStartOffset,
+                cornerRadius: configuredCornerRadius,
+                fadeWidth: configuredFadeWidth,
+                exponent: configuredExponent
+            )
 
-        let scale = currentScale
-        let currentSignature = MaskSignature(
-            size: size,
-            scale: scale,
-            maskType: configuredMaskType,
-            startOffset: configuredStartOffset,
-            cornerRadius: configuredCornerRadius,
-            fadeWidth: configuredFadeWidth,
-            exponent: configuredExponent
-        )
+            // Skip generation if signature hasn't changed (unless forced)
+            if !force, lastMaskSignature == currentSignature { return }
+            lastMaskSignature = currentSignature
 
-        // Skip generation if signature hasn't changed (unless forced)
-        if !force, lastMaskSignature == currentSignature { return }
-        lastMaskSignature = currentSignature
+            // Calculate pixel dimensions for high-resolution rendering
+            let wPx = max(1, ceil(size.width * scale))
+            let hPx = max(1, ceil(size.height * scale))
 
-        // Calculate pixel dimensions for high-resolution rendering
-        let wPx = max(1, ceil(size.width * scale))
-        let hPx = max(1, ceil(size.height * scale))
+            // Generate the mask image using Metal shaders
+            let gradientImage = generateMaskImage(
+                widthPx: wPx,
+                heightPx: hPx,
+                scale: scale
+            )
 
-        // Generate the mask image using Metal shaders
-        let gradientImage = generateMaskImage(
-            widthPx: wPx,
-            heightPx: hPx,
-            scale: scale
-        )
+            guard let gradientImage else {
+                logger.error("Failed to generate mask image")
+                return
+            }
 
-        guard let gradientImage else {
-            logger.error("Failed to generate mask image")
-            return
+            // Apply the generated mask to the variable blur filter
+            variableBlurFilter?.setValue(gradientImage, forKey: VariableBlurUIView.maskKey)
         }
 
-        // Apply the generated mask to the variable blur filter
-        variableBlurFilter?.setValue(gradientImage, forKey: VariableBlurUIView.maskKey)
-    }
+        /**
+         * Generates the actual mask image using Metal shaders.
+         *
+         * This method calls the appropriate shader kernel based on the configured mask type
+         * and returns a CGImage that can be used as a blur mask. All generation happens
+         * on the GPU for optimal performance.
+         *
+         * - Parameters:
+         *   - widthPx: Width in pixels for the mask
+         *   - heightPx: Height in pixels for the mask
+         *   - scale: Display scale for pixel-accurate rendering
+         * - Returns: A CGImage containing the blur mask, or nil if generation fails
+         */
+        private func generateMaskImage(widthPx: CGFloat, heightPx: CGFloat, scale: CGFloat) -> CGImage? {
+            let extent = CGRect(x: 0, y: 0, width: widthPx, height: heightPx)
 
-    /**
-     * Generates the actual mask image using Metal shaders.
-     *
-     * This method calls the appropriate shader kernel based on the configured mask type
-     * and returns a CGImage that can be used as a blur mask. All generation happens
-     * on the GPU for optimal performance.
-     *
-     * - Parameters:
-     *   - widthPx: Width in pixels for the mask
-     *   - heightPx: Height in pixels for the mask
-     *   - scale: Display scale for pixel-accurate rendering
-     * - Returns: A CGImage containing the blur mask, or nil if generation fails
-     */
-    private func generateMaskImage(widthPx: CGFloat, heightPx: CGFloat, scale: CGFloat) -> CGImage? {
-        let extent = CGRect(x: 0, y: 0, width: widthPx, height: heightPx)
+            // Generate appropriate mask based on configured type
+            switch configuredMaskType {
+            case .linearTopToBottom:
+                let args: [Any] = [widthPx, heightPx, configuredStartOffset, 0.0]
+                return VariableBlurCache.generateCGImage(
+                    kernel: VariableBlurCache.linearMask,
+                    extent: extent,
+                    arguments: args
+                )
 
-        // Generate appropriate mask based on configured type
-        switch configuredMaskType {
-        case .linearTopToBottom:
-            let args: [Any] = [widthPx, heightPx, configuredStartOffset, 0.0]
-            return VariableBlurCache.generateCGImage(
-                kernel: VariableBlurCache.linearMask,
-                extent: extent,
-                arguments: args
-            )
+            case .linearBottomToTop:
+                let args: [Any] = [widthPx, heightPx, configuredStartOffset, 1.0]
+                return VariableBlurCache.generateCGImage(
+                    kernel: VariableBlurCache.linearMask,
+                    extent: extent,
+                    arguments: args
+                )
 
-        case .linearBottomToTop:
-            let args: [Any] = [widthPx, heightPx, configuredStartOffset, 1.0]
-            return VariableBlurCache.generateCGImage(
-                kernel: VariableBlurCache.linearMask,
-                extent: extent,
-                arguments: args
-            )
+            case .easeInTopToBottom:
+                // startOffset defines where the easing begins from the top (fraction 0-1)
+                let args: [Any] = [widthPx, heightPx, configuredStartOffset, 0.0]
+                return VariableBlurCache.generateCGImage(
+                    kernel: VariableBlurCache.easeInMask,
+                    extent: extent,
+                    arguments: args
+                )
 
-        case .easeInTopToBottom:
-            // startOffset defines where the easing begins from the top (fraction 0-1)
-            let args: [Any] = [widthPx, heightPx, configuredStartOffset, 0.0]
-            return VariableBlurCache.generateCGImage(
-                kernel: VariableBlurCache.easeInMask,
-                extent: extent,
-                arguments: args
-            )
+            case .easeInBottomToTop:
+                // direction 1.0 flips easing to bottom->top
+                let args: [Any] = [widthPx, heightPx, configuredStartOffset, 1.0]
+                return VariableBlurCache.generateCGImage(
+                    kernel: VariableBlurCache.easeInMask,
+                    extent: extent,
+                    arguments: args
+                )
 
-        case .easeInBottomToTop:
-            // direction 1.0 flips easing to bottom->top
-            let args: [Any] = [widthPx, heightPx, configuredStartOffset, 1.0]
-            return VariableBlurCache.generateCGImage(
-                kernel: VariableBlurCache.easeInMask,
-                extent: extent,
-                arguments: args
-            )
+            case .roundedRectangle:
+                let cornerRadiusPx = configuredCornerRadius * scale
+                let fadeWidthPx = configuredFadeWidth * scale
+                let args: [Any] = [widthPx, heightPx, cornerRadiusPx, fadeWidthPx]
+                return VariableBlurCache.generateCGImage(
+                    kernel: VariableBlurCache.roundedRectMask,
+                    extent: extent,
+                    arguments: args
+                )
 
-        case .roundedRectangle:
-            let cornerRadiusPx = configuredCornerRadius * scale
-            let fadeWidthPx = configuredFadeWidth * scale
-            let args: [Any] = [widthPx, heightPx, cornerRadiusPx, fadeWidthPx]
-            return VariableBlurCache.generateCGImage(
-                kernel: VariableBlurCache.roundedRectMask,
-                extent: extent,
-                arguments: args
-            )
+            case .easedRoundedRectangle:
+                let cornerRadiusPx = configuredCornerRadius * scale
+                let fadeWidthPx = configuredFadeWidth * scale
+                let args: [Any] = [widthPx, heightPx, cornerRadiusPx, fadeWidthPx]
+                return VariableBlurCache.generateCGImage(
+                    kernel: VariableBlurCache.roundedRectEaseMask,
+                    extent: extent,
+                    arguments: args
+                )
 
-        case .easedRoundedRectangle:
-            let cornerRadiusPx = configuredCornerRadius * scale
-            let fadeWidthPx = configuredFadeWidth * scale
-            let args: [Any] = [widthPx, heightPx, cornerRadiusPx, fadeWidthPx]
-            return VariableBlurCache.generateCGImage(
-                kernel: VariableBlurCache.roundedRectEaseMask,
-                extent: extent,
-                arguments: args
-            )
+            case .superellipseSquircle:
+                let cornerRadiusPx = configuredCornerRadius * scale
+                let fadeWidthPx = configuredFadeWidth * scale
+                let args: [Any] = [widthPx, heightPx, cornerRadiusPx, fadeWidthPx, configuredExponent]
+                return VariableBlurCache.generateCGImage(
+                    kernel: VariableBlurCache.superellipseMask,
+                    extent: extent,
+                    arguments: args
+                )
 
-        case .superellipseSquircle:
-            let cornerRadiusPx = configuredCornerRadius * scale
-            let fadeWidthPx = configuredFadeWidth * scale
-            let args: [Any] = [widthPx, heightPx, cornerRadiusPx, fadeWidthPx, configuredExponent]
-            return VariableBlurCache.generateCGImage(
-                kernel: VariableBlurCache.superellipseMask,
-                extent: extent,
-                arguments: args
-            )
-
-        case .easedSuperellipseSquircle:
-            let cornerRadiusPx = configuredCornerRadius * scale
-            let fadeWidthPx = configuredFadeWidth * scale
-            let args: [Any] = [widthPx, heightPx, cornerRadiusPx, fadeWidthPx, configuredExponent]
-            return VariableBlurCache.generateCGImage(
-                kernel: VariableBlurCache.superellipseEaseMask,
-                extent: extent,
-                arguments: args
-            )
+            case .easedSuperellipseSquircle:
+                let cornerRadiusPx = configuredCornerRadius * scale
+                let fadeWidthPx = configuredFadeWidth * scale
+                let args: [Any] = [widthPx, heightPx, cornerRadiusPx, fadeWidthPx, configuredExponent]
+                return VariableBlurCache.generateCGImage(
+                    kernel: VariableBlurCache.superellipseEaseMask,
+                    extent: extent,
+                    arguments: args
+                )
+            }
         }
-    }
 
-    // MARK: - UIView Lifecycle Overrides
+        // MARK: - UIView Lifecycle Overrides
 
-    /**
-     * Responds to window changes by updating the backdrop layer scale and regenerating the mask.
-     *
-     * This ensures the blur effect maintains proper scaling when moved between displays
-     * with different scale factors (e.g., Retina vs. non-Retina displays).
-     */
-    override open func didMoveToWindow() {
-        guard let window, let backdropLayer = subviews.first?.layer else { return }
+        /**
+         * Responds to window changes by updating the backdrop layer scale and regenerating the mask.
+         *
+         * This ensures the blur effect maintains proper scaling when moved between displays
+         * with different scale factors (e.g., Retina vs. non-Retina displays).
+         */
+        override open func didMoveToWindow() {
+            guard let window, let backdropLayer = subviews.first?.layer else { return }
 
-        // Update the backdrop layer's scale to match the new window's screen
-        backdropLayer.setValue(window.screen.scale, forKey: "scale")
+            // Update the backdrop layer's scale to match the new window's screen
+            backdropLayer.setValue(window.screen.scale, forKey: "scale")
 
-        // Regenerate mask for the new display scale
-        updateMask(for: bounds.size, force: true)
-    }
+            // Regenerate mask for the new display scale
+            updateMask(for: bounds.size, force: true)
+        }
 
-    /**
-     * Responds to layout changes by updating the mask if necessary.
-     *
-     * This ensures the blur mask always matches the current view bounds and maintains
-     * pixel-perfect accuracy across different screen sizes and orientations.
-     */
-    override open func layoutSubviews() {
-        super.layoutSubviews()
-        updateMask(for: bounds.size)
-    }
+        /**
+         * Responds to layout changes by updating the mask if necessary.
+         *
+         * This ensures the blur mask always matches the current view bounds and maintains
+         * pixel-perfect accuracy across different screen sizes and orientations.
+         */
+        override open func layoutSubviews() {
+            super.layoutSubviews()
+            updateMask(for: bounds.size)
+        }
 
-    /**
-     * Intentionally empty trait collection change handler.
-     *
-     * Calling super here can cause issues with filter APIs,
-     * so we override to prevent the default behavior.
-     */
-    override open func traitCollectionDidChange(_: UITraitCollection?) {
-        // Intentionally left blank to avoid crashes with filter APIs
-    }
-}
-
-private extension VariableBlurUIView {
-    static func decode(_ base64String: String) -> String! {
-        if let data = Data(base64Encoded: base64String) {
-            String(data: data, encoding: .utf8)
-        } else {
-            nil
+        /**
+         * Intentionally empty trait collection change handler.
+         *
+         * Calling super here can cause issues with filter APIs,
+         * so we override to prevent the default behavior.
+         */
+        override open func traitCollectionDidChange(_: UITraitCollection?) {
+            // Intentionally left blank to avoid crashes with filter APIs
         }
     }
 
-    static var filterClassName: String {
-        decode("Q0FGaWx0ZXI=")
-    }
+    private extension VariableBlurUIView {
+        static func decode(_ base64String: String) -> String! {
+            if let data = Data(base64Encoded: base64String) {
+                String(data: data, encoding: .utf8)
+            } else {
+                nil
+            }
+        }
 
-    static var filterMethodName: String {
-        decode("ZmlsdGVyV2l0aFR5cGU6")
-    }
+        static var filterClassName: String {
+            decode("Q0FGaWx0ZXI=")
+        }
 
-    static var filterTypeName: String {
-        decode("dmFyaWFibGVCbHVy")
-    }
+        static var filterMethodName: String {
+            decode("ZmlsdGVyV2l0aFR5cGU6")
+        }
 
-    static var radiusKey: String {
-        decode("aW5wdXRSYWRpdXM=")
-    }
+        static var filterTypeName: String {
+            decode("dmFyaWFibGVCbHVy")
+        }
 
-    static var normalizeKey: String {
-        decode("aW5wdXROb3JtYWxpemVFZGdlcw==")
-    }
+        static var radiusKey: String {
+            decode("aW5wdXRSYWRpdXM=")
+        }
 
-    static var maskKey: String {
-        decode("aW5wdXRNYXNrSW1hZ2U=")
+        static var normalizeKey: String {
+            decode("aW5wdXROb3JtYWxpemVFZGdlcw==")
+        }
+
+        static var maskKey: String {
+            decode("aW5wdXRNYXNrSW1hZ2U=")
+        }
     }
-}
+#endif
