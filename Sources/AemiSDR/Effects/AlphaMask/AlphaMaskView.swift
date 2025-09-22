@@ -55,9 +55,6 @@
         /// The width of the fade transition, in points
         public var fadeWidth: CGFloat = 16
 
-        /// Superellipse exponent
-        public var exponent: CGFloat = UICorner.exponent
-
         /// Whether to invert the mask (true = destination-out, false = normal mask)
         public var inverted: Bool = true
 
@@ -94,14 +91,12 @@
          * - Parameters:
          *   - cornerRadius: Effective corner radius in points (default: UIScreen.displayCornerRadius)
          *   - fadeWidth: Width of the fade transition in points (default: 16)
-         *   - exponent: Shape exponent - higher values create squarer shapes (default: 2)
          *   - inverted: Whether to invert the mask effect (default: true)
          *   - transition: Transformation function type - linear or eased (default: .eased)
          */
         public init(
             cornerRadius: CGFloat = UIScreen.displayCornerRadius,
             fadeWidth: CGFloat = 16,
-            exponent: CGFloat,
             inverted: Bool = true,
             transition: TransitionAlgorithm = .eased
         ) {
@@ -111,7 +106,6 @@
             }
             self.cornerRadius = cornerRadius
             self.fadeWidth = fadeWidth
-            self.exponent = exponent
             self.inverted = inverted
         }
 
@@ -166,7 +160,6 @@
                 startOffset: startOffset,
                 cornerRadius: cornerRadius,
                 fadeWidth: fadeWidth,
-                exponent: exponent,
                 inverted: inverted
             )
         }
@@ -189,7 +182,6 @@
                 startOffset: startOffset,
                 cornerRadius: cornerRadius,
                 fadeWidth: fadeWidth,
-                exponent: exponent,
                 inverted: inverted
             )
         }
