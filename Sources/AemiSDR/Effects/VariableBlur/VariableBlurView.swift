@@ -64,9 +64,6 @@
         /// The width of the fade from clear (center) to fully blurred (edges), in points
         public var fadeWidth: CGFloat = 16
 
-        /// Superellipse exponent
-        public var exponent: CGFloat = UICorner.exponent
-
         // MARK: - Initializers
 
         /**
@@ -101,7 +98,6 @@
          *   - maxBlurRadius: Maximum blur radius in points (default: 3)
          *   - cornerRadius: Effective corner radius in points (default: UIScreen.displayCornerRadius)
          *   - fadeWidth: Width of the fade transition in points (default: 16)
-         *   - exponent: Shape exponent - higher values create squarer
          *   - startOffset: Transition control parameter (default: 0)
          *   - transition: Transformation function type - linear or eased (default: .eased)
          */
@@ -109,7 +105,6 @@
             maxBlurRadius: CGFloat = 3,
             cornerRadius: CGFloat = UIScreen.displayCornerRadius,
             fadeWidth: CGFloat = 16,
-            exponent: CGFloat,
             startOffset: CGFloat = 0,
             transition: TransitionAlgorithm = .eased
         ) {
@@ -121,7 +116,6 @@
             self.startOffset = startOffset
             self.cornerRadius = cornerRadius
             self.fadeWidth = fadeWidth
-            self.exponent = exponent
         }
 
         /**
@@ -178,8 +172,7 @@
                 maskType: maskType,
                 startOffset: startOffset,
                 cornerRadius: cornerRadius,
-                fadeWidth: fadeWidth,
-                exponent: exponent
+                fadeWidth: fadeWidth
             )
         }
 
@@ -201,8 +194,7 @@
                 maskType: maskType,
                 startOffset: startOffset,
                 cornerRadius: cornerRadius,
-                fadeWidth: fadeWidth,
-                exponent: exponent
+                fadeWidth: fadeWidth
             )
         }
     }
