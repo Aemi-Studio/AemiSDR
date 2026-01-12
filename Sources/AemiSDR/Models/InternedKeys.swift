@@ -1,5 +1,5 @@
 //
-//  PrivateAPIKeys.swift
+//  InternedKeys.swift
 //  AemiSDR
 //
 // Created by Guillaume Coquard on 20.09.25.
@@ -8,22 +8,20 @@
 #if os(iOS)
     import InternedStrings
 
-    // MARK: - Private API Keys
+    // MARK: - Interned Keys
 
     /**
-     * Centralized storage for private API string keys used across the framework.
+     * Centralized storage for interned string keys used across the framework.
      *
      * This enum uses the InternedStrings framework to efficiently manage string keys
-     * that reference private Apple APIs. By centralizing these keys, we:
+     * for runtime operations. By centralizing these keys, we:
      * - Reduce string duplication across the codebase
-     * - Make it easier to update if Apple renames internal classes
      * - Provide compile-time safety for key references
-     *
-     * - Warning: These keys reference private APIs and may break in future iOS versions.
+     * - Enable efficient string comparison via pointer equality
      */
     @InternedStrings
-    package enum PrivateAPIKeys {
-        // MARK: - Core Animation Filter Keys
+    package enum InternedKeys {
+        // MARK: - Filter Keys
 
         /// Class name for Core Animation filters
         @Interned("CAFilter")
@@ -45,7 +43,7 @@
         @Interned("sourceOver")
         static var sourceOver: String
 
-        // MARK: - Filter Input Keys
+        // MARK: - Input Keys
 
         /// Input radius key for blur filters
         @Interned("inputRadius")
@@ -59,17 +57,17 @@
         @Interned("inputMaskImage")
         static var inputMaskImage: String
 
-        // MARK: - UIVisualEffectView Internal Classes
+        // MARK: - Effect View Classes
 
-        /// Private class name for custom blur effect
+        /// Class name for custom blur effect
         @Interned("_UICustomBlurEffect")
         static var customBlurEffectClass: String
 
-        /// Private class name for backdrop view
+        /// Class name for backdrop view
         @Interned("_UIVisualEffectBackdropView")
         static var backdropViewClass: String
 
-        /// Private class name for overlay subview
+        /// Class name for overlay subview
         @Interned("_UIVisualEffectSubview")
         static var overlaySubviewClass: String
 
@@ -115,7 +113,7 @@
         @Interned("blurRadius")
         static var blurRadius: String
 
-        // MARK: - Selector Names
+        // MARK: - Selectors
 
         /// Selector to apply requested effect to a view
         @Interned("applyRequestedEffectToView:")
