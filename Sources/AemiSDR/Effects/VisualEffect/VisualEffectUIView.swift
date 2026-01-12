@@ -45,7 +45,7 @@
 
         // swiftlint:disable force_cast
         /// The underlying blur effect instance.
-        private let blurEffect = (NSClassFromString(PrivateAPIKeys.customBlurEffectClass) as! UIBlurEffect.Type).init()
+        private let blurEffect = (NSClassFromString(InternedKeys.customBlurEffectClass) as! UIBlurEffect.Type).init()
         // swiftlint:enable force_cast
 
         // MARK: - Public Properties
@@ -55,12 +55,12 @@
         /// The default value is `nil`.
         open var colorTint: UIColor? {
             get {
-                sourceOver?.value(forKeyPath: PrivateAPIKeys.color) as? UIColor
+                sourceOver?.value(forKeyPath: InternedKeys.color) as? UIColor
             }
             set {
                 prepareForChanges()
-                sourceOver?.setValue(newValue, forKeyPath: PrivateAPIKeys.color)
-                sourceOver?.perform(Selector(PrivateAPIKeys.applyRequestedEffectToView), with: overlayView)
+                sourceOver?.setValue(newValue, forKeyPath: InternedKeys.color)
+                sourceOver?.perform(Selector(InternedKeys.applyRequestedEffectToView), with: overlayView)
                 applyChanges()
                 overlayView?.backgroundColor = newValue
             }
@@ -80,11 +80,11 @@
         /// The default value is `0.0`.
         open var blurRadius: CGFloat {
             get {
-                gaussianBlur?.requestedValues?[PrivateAPIKeys.inputRadius] as? CGFloat ?? 0
+                gaussianBlur?.requestedValues?[InternedKeys.inputRadius] as? CGFloat ?? 0
             }
             set {
                 prepareForChanges()
-                gaussianBlur?.requestedValues?[PrivateAPIKeys.inputRadius] = newValue
+                gaussianBlur?.requestedValues?[InternedKeys.inputRadius] = newValue
                 applyChanges()
             }
         }
@@ -193,28 +193,28 @@
 
     private extension UIVisualEffectView {
         var backdropView: UIView? {
-            subview(of: NSClassFromString(PrivateAPIKeys.backdropViewClass))
+            subview(of: NSClassFromString(InternedKeys.backdropViewClass))
         }
 
         var overlayView: UIView? {
-            subview(of: NSClassFromString(PrivateAPIKeys.overlaySubviewClass))
+            subview(of: NSClassFromString(InternedKeys.overlaySubviewClass))
         }
 
         var gaussianBlur: NSObject? {
-            backdropView?.value(forKey: PrivateAPIKeys.filters, withFilterType: PrivateAPIKeys.gaussianBlur)
+            backdropView?.value(forKey: InternedKeys.filters, withFilterType: InternedKeys.gaussianBlur)
         }
 
         var sourceOver: NSObject? {
-            overlayView?.value(forKey: PrivateAPIKeys.viewEffects, withFilterType: PrivateAPIKeys.sourceOver)
+            overlayView?.value(forKey: InternedKeys.viewEffects, withFilterType: InternedKeys.sourceOver)
         }
 
         func prepareForChanges() {
             effect = UIBlurEffect(style: .light)
-            gaussianBlur?.setValue(1.0, forKeyPath: PrivateAPIKeys.requestedScaleHint)
+            gaussianBlur?.setValue(1.0, forKeyPath: InternedKeys.requestedScaleHint)
         }
 
         func applyChanges() {
-            backdropView?.perform(Selector(PrivateAPIKeys.applyRequestedFilterEffects))
+            backdropView?.perform(Selector(InternedKeys.applyRequestedFilterEffects))
         }
     }
 
@@ -222,15 +222,15 @@
 
     private extension NSObject {
         var requestedValues: [String: Any]? {
-            get { value(forKeyPath: PrivateAPIKeys.requestedValues) as? [String: Any] }
-            set { setValue(newValue, forKeyPath: PrivateAPIKeys.requestedValues) }
+            get { value(forKeyPath: InternedKeys.requestedValues) as? [String: Any] }
+            set { setValue(newValue, forKeyPath: InternedKeys.requestedValues) }
         }
 
         func value(forKey key: String, withFilterType filterType: String) -> NSObject? {
             guard let objects = value(forKeyPath: key) as? [NSObject] else {
                 return nil
             }
-            return objects.first { $0.value(forKeyPath: PrivateAPIKeys.filterType) as? String == filterType }
+            return objects.first { $0.value(forKeyPath: InternedKeys.filterType) as? String == filterType }
         }
     }
 

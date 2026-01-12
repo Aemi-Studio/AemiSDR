@@ -157,23 +157,23 @@
          */
         private func setupVariableBlurFilter() {
             // Access the filter class using runtime reflection
-            guard let filterClass = NSClassFromString(PrivateAPIKeys.caFilterClass) as? NSObject.Type else {
+            guard let filterClass = NSClassFromString(InternedKeys.caFilterClass) as? NSObject.Type else {
                 logger.error("Failed to locate filter class.")
                 return
             }
 
             // Create a variable blur filter instance
             guard let variableBlur = unsafe filterClass.perform(
-                NSSelectorFromString(PrivateAPIKeys.filterWithType),
-                with: PrivateAPIKeys.variableBlur
+                NSSelectorFromString(InternedKeys.filterWithType),
+                with: InternedKeys.variableBlur
             ).takeUnretainedValue() as? NSObject else {
                 logger.error("Failed to create variable blur filter instance.")
                 return
             }
 
             // Configure the filter's static parameters
-            variableBlur.setValue(configuredMaxBlurRadius, forKey: PrivateAPIKeys.inputRadius)
-            variableBlur.setValue(true, forKey: PrivateAPIKeys.inputNormalizeEdges)
+            variableBlur.setValue(configuredMaxBlurRadius, forKey: InternedKeys.inputRadius)
+            variableBlur.setValue(true, forKey: InternedKeys.inputNormalizeEdges)
 
             // Apply the filter to the backdrop layer (first subview's layer)
             let backdropLayer = subviews.first?.layer
@@ -211,7 +211,7 @@
                 return
             }
 
-            variableBlurFilter?.setValue(gradientImage, forKey: PrivateAPIKeys.inputMaskImage)
+            variableBlurFilter?.setValue(gradientImage, forKey: InternedKeys.inputMaskImage)
         }
 
         /**
