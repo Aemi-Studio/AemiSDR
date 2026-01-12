@@ -157,23 +157,23 @@
          */
         private func setupVariableBlurFilter() {
             // Access the filter class using runtime reflection
-            guard let filterClass = NSClassFromString(VariableBlurUIView.filterClassName) as? NSObject.Type else {
+            guard let filterClass = NSClassFromString(PrivateAPIKeys.caFilterClass) as? NSObject.Type else {
                 logger.error("Failed to locate filter class.")
                 return
             }
 
             // Create a variable blur filter instance
             guard let variableBlur = unsafe filterClass.perform(
-                NSSelectorFromString(VariableBlurUIView.filterMethodName),
-                with: VariableBlurUIView.filterTypeName
+                NSSelectorFromString(PrivateAPIKeys.filterWithType),
+                with: PrivateAPIKeys.variableBlur
             ).takeUnretainedValue() as? NSObject else {
                 logger.error("Failed to create variable blur filter instance.")
                 return
             }
 
             // Configure the filter's static parameters
-            variableBlur.setValue(configuredMaxBlurRadius, forKey: VariableBlurUIView.radiusKey)
-            variableBlur.setValue(true, forKey: VariableBlurUIView.normalizeKey)
+            variableBlur.setValue(configuredMaxBlurRadius, forKey: PrivateAPIKeys.inputRadius)
+            variableBlur.setValue(true, forKey: PrivateAPIKeys.inputNormalizeEdges)
 
             // Apply the filter to the backdrop layer (first subview's layer)
             let backdropLayer = subviews.first?.layer
@@ -211,7 +211,7 @@
                 return
             }
 
-            variableBlurFilter?.setValue(gradientImage, forKey: VariableBlurUIView.maskKey)
+            variableBlurFilter?.setValue(gradientImage, forKey: PrivateAPIKeys.inputMaskImage)
         }
 
         /**
@@ -343,40 +343,6 @@
          */
         override open func traitCollectionDidChange(_: UITraitCollection?) {
             // Intentionally left blank to avoid crashes with filter APIs
-        }
-    }
-
-    private extension VariableBlurUIView {
-        static func decode(_ base64String: String) -> String! {
-            if let data = Data(base64Encoded: base64String) {
-                String(data: data, encoding: .utf8)
-            } else {
-                nil
-            }
-        }
-
-        static var filterClassName: String {
-            decode("Q0FGaWx0ZXI=")
-        }
-
-        static var filterMethodName: String {
-            decode("ZmlsdGVyV2l0aFR5cGU6")
-        }
-
-        static var filterTypeName: String {
-            decode("dmFyaWFibGVCbHVy")
-        }
-
-        static var radiusKey: String {
-            decode("aW5wdXRSYWRpdXM=")
-        }
-
-        static var normalizeKey: String {
-            decode("aW5wdXROb3JtYWxpemVFZGdlcw==")
-        }
-
-        static var maskKey: String {
-            decode("aW5wdXRNYXNrSW1hZ2U=")
         }
     }
 #endif
