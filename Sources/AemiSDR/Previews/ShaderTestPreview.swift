@@ -13,6 +13,7 @@ import SwiftUI
 // MARK: - Individual Mask Test Views
 
 /// Visual test view for a single mask configuration
+@available(iOS 15.0, *)
 private struct MaskTestView: View {
     let title: String
     let color: Color

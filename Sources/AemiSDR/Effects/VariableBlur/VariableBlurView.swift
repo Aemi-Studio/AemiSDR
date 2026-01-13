@@ -42,6 +42,8 @@
     /// ```
     public struct VariableBlurView: UIViewRepresentable {
         // MARK: - Configuration Properties
+        
+        @Environment(\.colorScheme) private var colorScheme
 
         /// The maximum radius of the blur to be applied
         public var maxBlurRadius: CGFloat = 3
