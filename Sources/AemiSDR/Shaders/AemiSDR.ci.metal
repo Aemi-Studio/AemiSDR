@@ -43,16 +43,22 @@ using namespace metal;
 inline float fast_pow(float x, float n) {
     // Guard against invalid operations with negative/zero base and fractional exponents
     if (x <= 0.0f) return 0.0f;
-    
+
+    // Handle 0^0 = 1 (standard convention for graphics)
+    if (x == 0.0f && n == 0.0f) return 1.0f;
+
     // Fast paths for common exponents - avoids pow() overhead
     if (n == 0.0f) return 1.0f;    // x^0 = 1 for all x
     if (n == 1.0f) return x;        // x^1 = x (identity)
     if (n == 2.0f) return x * x;    // x^2 common in distance calculations
-    
+
+    // Clamp exponent to prevent overflow (very large n can produce Inf)
+    float safe_n = clamp(n, 0.0f, 100.0f);
+
     // General case with stability clamping
     // The clamp prevents numerical issues when x is very small (underflow)
     // or very large (overflow) which could produce NaN or Inf
-    return pow(clamp(x, 1e-6f, 1e6f), n);
+    return pow(clamp(x, 1e-6f, 1e6f), safe_n);
 }
 
 /**
@@ -209,6 +215,78 @@ inline float distance_to_alpha(float dist, float fade_width) {
     // This provides C¹ continuity (smooth first derivative)
     // Results in visually smooth anti-aliasing
     return t * t * (3.0f - 2.0f * t);
+}
+
+/**
+ * Converts a signed distance value to an alpha with plateau and smooth falloff.
+ *
+ * This variant adds a "plateau" zone where the alpha remains at 1.0 before
+ * the falloff begins. This creates a solid edge border before the transition
+ * to transparency, useful for more prominent edge effects.
+ *
+ * @param dist Signed distance (negative = inside, positive = outside)
+ * @param plateau_width Width of the solid edge zone in pixels (alpha = 1.0)
+ * @param fade_width Width of the transition zone in pixels (after plateau)
+ * @return Alpha value: 0.0 (transparent inside) to 1.0 (opaque outside/plateau)
+ *
+ * The effect creates three zones (from outside to inside):
+ * 1. Outside (dist > 0): alpha = 1.0 (opaque)
+ * 2. Plateau (dist in [-plateau_width, 0]): alpha = 1.0 (solid edge)
+ * 3. Fade (dist in [-plateau_width - fade_width, -plateau_width]): smooth transition
+ * 4. Deep inside: alpha = 0.0 (transparent)
+ */
+inline float distance_to_alpha_with_plateau(float dist, float plateau_width, float fade_width) {
+    // Handle hard edge case (no transition)
+    if (fade_width <= 0.0f && plateau_width <= 0.0f) {
+        return (dist >= 0.0f) ? 1.0f : 0.0f;
+    }
+
+    // Shift distance by plateau width
+    // This effectively moves the start of the falloff inward
+    float shifted_dist = dist + plateau_width;
+
+    // If still in plateau zone or outside, return fully opaque
+    if (shifted_dist >= 0.0f) {
+        return 1.0f;
+    }
+
+    // Handle zero fade width (hard edge after plateau)
+    if (fade_width <= 0.0f) {
+        return 0.0f;
+    }
+
+    // Normalize distance to [0,1] range across the fade width
+    float t = clamp(1.0f + shifted_dist / fade_width, 0.0f, 1.0f);
+
+    // Apply smoothstep (Hermite) interpolation
+    return t * t * (3.0f - 2.0f * t);
+}
+
+/**
+ * Same as distance_to_alpha_with_plateau but uses quadratic easing.
+ *
+ * @param dist Signed distance
+ * @param plateau_width Solid edge width
+ * @param fade_width Transition width
+ * @return Alpha with quadratic ease falloff
+ */
+inline float distance_to_alpha_with_plateau_ease(float dist, float plateau_width, float fade_width) {
+    if (fade_width <= 0.0f && plateau_width <= 0.0f) {
+        return (dist >= 0.0f) ? 1.0f : 0.0f;
+    }
+
+    float shifted_dist = dist + plateau_width;
+
+    if (shifted_dist >= 0.0f) {
+        return 1.0f;
+    }
+
+    if (fade_width <= 0.0f) {
+        return 0.0f;
+    }
+
+    float t = clamp(1.0f + shifted_dist / fade_width, 0.0f, 1.0f);
+    return t * t; // Quadratic ease-in
 }
 
 //======================================================================
@@ -389,22 +467,24 @@ extern "C" { namespace coreimage {
                             coreimage::destination dest)
     {
         // Calculate center point and half-dimensions
+        // Clamp to minimum of 1.0 for consistency with roundedRect kernels
         float2 center = float2(widthPx * 0.5f, heightPx * 0.5f);
-        float2 half_size = float2(widthPx * 0.5f, heightPx * 0.5f);
-        
+        float2 half_size = max(float2(widthPx * 0.5f, heightPx * 0.5f), float2(1.0f));
+
         // Transform to centered coordinates
         float2 p = dest.coord() - center;
-        
+
         // Default to iOS-style squircle exponent if not specified
         // iOS typically uses n≈5 for system UI elements
-        float n = (exponent > 1.0f) ? exponent : 5.0f;
-        
+        // Clamp to reasonable range [2, 100] to prevent numerical issues
+        float n = (exponent > 1.0f) ? clamp(exponent, 2.0f, 100.0f) : 5.0f;
+
         // Calculate signed distance using simplified squircle SDF
         float dist = simple_squircle_sdf(p, half_size, cornerRadiusPx, n);
-        
+
         // Convert to alpha with smooth falloff
         float alpha = distance_to_alpha(dist, max(fadeInWidthPx, 0.0f));
-        
+
         return float4(alpha);
     }
     
@@ -430,16 +510,16 @@ extern "C" { namespace coreimage {
                                  coreimage::destination dest)
     {
         float2 center = float2(widthPx * 0.5f, heightPx * 0.5f);
-        float2 half_size = float2(widthPx * 0.5f, heightPx * 0.5f);
+        float2 half_size = max(float2(widthPx * 0.5f, heightPx * 0.5f), float2(1.0f));
         float2 p = dest.coord() - center;
-        
-        float n = (exponent > 1.0f) ? exponent : 5.0f;
-        
+
+        float n = (exponent > 1.0f) ? clamp(exponent, 2.0f, 100.0f) : 5.0f;
+
         float dist = simple_squircle_sdf(p, half_size, cornerRadiusPx, n);
         float alpha = distance_to_alpha(dist, max(fadeInWidthPx, 0.0f));
-        
+
         if (inverted > 0.5f) alpha = 1.0f - alpha;
-        
+
         return float4(alpha);
     }
     
@@ -631,14 +711,14 @@ extern "C" { namespace coreimage {
                                 coreimage::destination dest)
     {
         float2 center = float2(widthPx * 0.5f, heightPx * 0.5f);
-        float2 half_size = float2(widthPx * 0.5f, heightPx * 0.5f);
+        float2 half_size = max(float2(widthPx * 0.5f, heightPx * 0.5f), float2(1.0f));
         float2 p = dest.coord() - center;
-        
-        // Default to iOS-style squircle
-        float n = (exponent > 1.0f) ? exponent : 5.0f;
-        
+
+        // Default to iOS-style squircle with clamped range
+        float n = (exponent > 1.0f) ? clamp(exponent, 2.0f, 100.0f) : 5.0f;
+
         float dist = simple_squircle_sdf(p, half_size, cornerRadiusPx, n);
-        
+
         float alpha;
         if (fadeInWidthPx <= 0.0f) {
             // Binary edge
@@ -648,7 +728,7 @@ extern "C" { namespace coreimage {
             float t = clamp(1.0f + dist / fadeInWidthPx, 0.0f, 1.0f);
             alpha = t * t;
         }
-        
+
         return float4(alpha);
     }
     
@@ -678,13 +758,13 @@ extern "C" { namespace coreimage {
                                      coreimage::destination dest)
     {
         float2 center = float2(widthPx * 0.5f, heightPx * 0.5f);
-        float2 half_size = float2(widthPx * 0.5f, heightPx * 0.5f);
+        float2 half_size = max(float2(widthPx * 0.5f, heightPx * 0.5f), float2(1.0f));
         float2 p = dest.coord() - center;
-        
-        float n = (exponent > 1.0f) ? exponent : 5.0f;
-        
+
+        float n = (exponent > 1.0f) ? clamp(exponent, 2.0f, 100.0f) : 5.0f;
+
         float dist = simple_squircle_sdf(p, half_size, cornerRadiusPx, n);
-        
+
         float alpha;
         if (fadeInWidthPx <= 0.0f) {
             alpha = (dist >= 0.0f) ? 1.0f : 0.0f;
@@ -692,11 +772,145 @@ extern "C" { namespace coreimage {
             float t = clamp(1.0f + dist / fadeInWidthPx, 0.0f, 1.0f);
             alpha = t * t;
         }
-        
+
         // Apply inversion for cut-out effect
         if (inverted > 0.5f) alpha = 1.0f - alpha;
-        
+
         return float4(alpha);
     }
     
+    // --------------------------------------------------------------
+    // MARK: Rounded rectangle with plateau (solid edge before falloff)
+    // --------------------------------------------------------------
+    /**
+     * Creates a rounded rectangle mask with a solid plateau before the falloff.
+     *
+     * This variant adds a "plateau" zone where the alpha remains at 1.0 before
+     * the fade begins. This creates a more prominent solid edge border before
+     * transitioning to transparency.
+     *
+     * @param widthPx Rectangle width in pixels
+     * @param heightPx Rectangle height in pixels
+     * @param cornerRadiusPx Corner radius in pixels
+     * @param plateauWidthPx Width of solid edge zone (alpha=1) before fade starts
+     * @param fadeInWidthPx Width of the fade zone after the plateau
+     * @param dest Pixel coordinates
+     * @return RGBA grayscale mask
+     *
+     * Effect zones (from outside to inside):
+     * 1. Outside shape: alpha = 1.0
+     * 2. Plateau zone: alpha = 1.0 (solid border)
+     * 3. Fade zone: smooth transition to 0.0
+     * 4. Deep inside: alpha = 0.0
+     */
+    float4 roundedRectPlateauMask(float widthPx,
+                                   float heightPx,
+                                   float cornerRadiusPx,
+                                   float plateauWidthPx,
+                                   float fadeInWidthPx,
+                                   coreimage::destination dest)
+    {
+        float2 half_size = max(float2(widthPx, heightPx) * 0.5f, float2(1.0f));
+        float2 p = dest.coord() - float2(widthPx * 0.5f, heightPx * 0.5f);
+
+        float dist = rounded_rect_sdf(p, half_size, max(cornerRadiusPx, 0.0f));
+        float alpha = distance_to_alpha_with_plateau(dist,
+                                                      max(plateauWidthPx, 0.0f),
+                                                      max(fadeInWidthPx, 0.0f));
+
+        return float4(alpha);
+    }
+
+    // --------------------------------------------------------------
+    // MARK: Superellipse with plateau
+    // --------------------------------------------------------------
+    /**
+     * Creates a superellipse mask with a solid plateau before the falloff.
+     *
+     * Combines iOS-style continuous curvature corners with a solid edge
+     * zone before the fade begins.
+     *
+     * @param widthPx Shape width
+     * @param heightPx Shape height
+     * @param cornerRadiusPx Corner region size
+     * @param plateauWidthPx Width of solid edge zone
+     * @param fadeInWidthPx Width of fade zone after plateau
+     * @param exponent Superellipse exponent (default 5.0 for iOS style)
+     * @param dest Pixel coordinates
+     * @return RGBA grayscale mask
+     */
+    float4 superellipsePlateauMask(float widthPx,
+                                    float heightPx,
+                                    float cornerRadiusPx,
+                                    float plateauWidthPx,
+                                    float fadeInWidthPx,
+                                    float exponent,
+                                    coreimage::destination dest)
+    {
+        float2 center = float2(widthPx * 0.5f, heightPx * 0.5f);
+        float2 half_size = max(float2(widthPx * 0.5f, heightPx * 0.5f), float2(1.0f));
+        float2 p = dest.coord() - center;
+
+        float n = (exponent > 1.0f) ? clamp(exponent, 2.0f, 100.0f) : 5.0f;
+
+        float dist = simple_squircle_sdf(p, half_size, cornerRadiusPx, n);
+        float alpha = distance_to_alpha_with_plateau(dist,
+                                                      max(plateauWidthPx, 0.0f),
+                                                      max(fadeInWidthPx, 0.0f));
+
+        return float4(alpha);
+    }
+
+    // --------------------------------------------------------------
+    // MARK: Rounded rectangle plateau with quadratic ease
+    // --------------------------------------------------------------
+    /**
+     * Rounded rectangle with plateau and quadratic ease falloff.
+     */
+    float4 roundedRectPlateauEaseMask(float widthPx,
+                                       float heightPx,
+                                       float cornerRadiusPx,
+                                       float plateauWidthPx,
+                                       float fadeInWidthPx,
+                                       coreimage::destination dest)
+    {
+        float2 half_size = max(float2(widthPx, heightPx) * 0.5f, float2(1.0f));
+        float2 p = dest.coord() - float2(widthPx * 0.5f, heightPx * 0.5f);
+
+        float dist = rounded_rect_sdf(p, half_size, max(cornerRadiusPx, 0.0f));
+        float alpha = distance_to_alpha_with_plateau_ease(dist,
+                                                           max(plateauWidthPx, 0.0f),
+                                                           max(fadeInWidthPx, 0.0f));
+
+        return float4(alpha);
+    }
+
+    // --------------------------------------------------------------
+    // MARK: Superellipse plateau with quadratic ease
+    // --------------------------------------------------------------
+    /**
+     * Superellipse with plateau and quadratic ease falloff.
+     */
+    float4 superellipsePlateauEaseMask(float widthPx,
+                                        float heightPx,
+                                        float cornerRadiusPx,
+                                        float plateauWidthPx,
+                                        float fadeInWidthPx,
+                                        float exponent,
+                                        coreimage::destination dest)
+    {
+        float2 center = float2(widthPx * 0.5f, heightPx * 0.5f);
+        float2 half_size = max(float2(widthPx * 0.5f, heightPx * 0.5f), float2(1.0f));
+        float2 p = dest.coord() - center;
+
+        float n = (exponent > 1.0f) ? clamp(exponent, 2.0f, 100.0f) : 5.0f;
+
+        float dist = simple_squircle_sdf(p, half_size, cornerRadiusPx, n);
+        float alpha = distance_to_alpha_with_plateau_ease(dist,
+                                                           max(plateauWidthPx, 0.0f),
+                                                           max(fadeInWidthPx, 0.0f));
+
+        return float4(alpha);
+    }
+
 }} // extern "C" namespace coreimage
