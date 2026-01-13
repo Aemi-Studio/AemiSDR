@@ -11,7 +11,7 @@ private struct AemiSDRPreview: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             LazyVStack(spacing: paddingAndSpacing) {
-                ForEach(1 ... 6, id: \.self) { index in
+                ForEach(1...6, id: \.self) { index in
                     Image("Image_\(index)", bundle: .module)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
@@ -48,8 +48,8 @@ private struct AemiSDRPreview: View {
     }
 }
 
-private extension View {
-    @ViewBuilder func fancyBlur() -> some View {
+extension View {
+    @ViewBuilder fileprivate func fancyBlur() -> some View {
         #if os(iOS)
             if #available(iOS 15.0, *) {
                 roundedRectMask()
@@ -64,7 +64,7 @@ private extension View {
         #endif
     }
 
-    @ViewBuilder func glass(_ shape: some Shape) -> some View {
+    @ViewBuilder fileprivate func glass(_ shape: some Shape) -> some View {
         if #available(iOS 26.0, macOS 26.0, *) {
             glassEffect(.regular, in: shape)
         } else {
