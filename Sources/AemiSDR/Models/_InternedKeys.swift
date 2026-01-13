@@ -13,85 +13,43 @@
     /// - Reduce string duplication across the codebase
     /// - Provide compile-time safety for key references
     /// - Enable efficient string comparison via pointer equality
-    @InternedStrings
     package enum _InternedKeys {
         // MARK: - Filter Keys
 
-        @Interned("CAFilter")
-        static var caFilterClass: String
-
-        @Interned("filterWithType:")
-        static var filterWithType: String
-
-        @Interned("variableBlur")
-        static var variableBlur: String
-
-        @Interned("gaussianBlur")
-        static var gaussianBlur: String
-
-        @Interned("sourceOver")
-        static var sourceOver: String
+        @Interned static var caFilterClass = "CAFilter"
+        @Interned static var filterWithType = "filterWithType:"
+        @Interned static var variableBlur = "variableBlur"
+        @Interned static var gaussianBlur = "gaussianBlur"
+        @Interned static var sourceOver = "sourceOver"
 
         // MARK: - Input Keys
 
-        @Interned("inputRadius")
-        static var inputRadius: String
-
-        @Interned("inputNormalizeEdges")
-        static var inputNormalizeEdges: String
-
-        @Interned("inputMaskImage")
-        static var inputMaskImage: String
+        @Interned static var inputRadius = "inputRadius"
+        @Interned static var inputNormalizeEdges = "inputNormalizeEdges"
+        @Interned static var inputMaskImage = "inputMaskImage"
 
         // MARK: - Effect View Classes
 
-        @Interned("_UICustomBlurEffect")
-        static var customBlurEffectClass: String
-
-        @Interned("_UIVisualEffectBackdropView")
-        static var backdropViewClass: String
-
-        @Interned("_UIVisualEffectSubview")
-        static var overlaySubviewClass: String
+        @Interned static var customBlurEffectClass = "_UICustomBlurEffect"
+        @Interned static var backdropViewClass = "_UIVisualEffectBackdropView"
+        @Interned static var overlaySubviewClass = "_UIVisualEffectSubview"
 
         // MARK: - Key Paths
 
-        @Interned("filters")
-        static var filters: String
-
-        @Interned("viewEffects")
-        static var viewEffects: String
-
-        @Interned("filterType")
-        static var filterType: String
-
-        @Interned("requestedValues")
-        static var requestedValues: String
-
-        @Interned("requestedScaleHint")
-        static var requestedScaleHint: String
-
-        @Interned("color")
-        static var color: String
-
-        @Interned("scale")
-        static var scale: String
-
-        @Interned("colorTint")
-        static var colorTint: String
-
-        @Interned("colorTintAlpha")
-        static var colorTintAlpha: String
-
-        @Interned("blurRadius")
-        static var blurRadius: String
+        @Interned static var filters = "filters"
+        @Interned static var viewEffects = "viewEffects"
+        @Interned static var filterType = "filterType"
+        @Interned static var requestedValues = "requestedValues"
+        @Interned static var requestedScaleHint = "requestedScaleHint"
+        @Interned static var color = "color"
+        @Interned static var scale = "scale"
+        @Interned static var colorTint = "colorTint"
+        @Interned static var colorTintAlpha = "colorTintAlpha"
+        @Interned static var blurRadius = "blurRadius"
 
         // MARK: - Selectors
 
-        @Interned("applyRequestedEffectToView:")
-        static var applyRequestedEffectToView: String
-
-        @Interned("applyRequestedFilterEffects")
-        static var applyRequestedFilterEffects: String
+        @Interned static var applyRequestedEffectToView = "applyRequestedEffectToView:"
+        @Interned static var applyRequestedFilterEffects = "applyRequestedFilterEffects"
     }
 #endif

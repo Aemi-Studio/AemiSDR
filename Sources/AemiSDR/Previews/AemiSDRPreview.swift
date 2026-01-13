@@ -52,10 +52,10 @@ extension View {
     @ViewBuilder fileprivate func fancyBlur() -> some View {
         #if os(iOS)
             if #available(iOS 15.0, *) {
-                roundedRectMask()
-                    .verticalEdgeMask(height: 32)
-                    .roundedRectBlur()
-                    .verticalEdgeBlur(height: 48, maxBlurRadius: 5)
+                roundedRectMask(fadeWidth: 32)
+                .verticalEdgeMask(height: 32)
+                .roundedRectBlur(fadeWidth: 32)
+                    .verticalEdgeBlur(height: 32, maxBlurRadius: 5)
             } else {
                 self
             }
