@@ -26,6 +26,11 @@ private let package = Package(
             exclude: ["Shaders/"],
             resources: [.copy("Resources/AemiSDR.metallib")],
             swiftSettings: swiftSettings
+        ),
+        .testTarget(
+            name: "AemiSDRTests",
+            dependencies: ["AemiSDR"],
+            swiftSettings: swiftSettings
         )
     ]
 )

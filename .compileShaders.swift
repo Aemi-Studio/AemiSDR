@@ -69,7 +69,7 @@ extension CompilationError: LocalizedError {
 // MARK: - Main Compilation Function
 
 func compileMetalShaders() throws {
-    print("🔨 Compiling Metal CI kernels for AemiSDR...")
+    print("Compiling Metal CI kernels for AemiSDR...")
 
     // Verify source file exists
     let metalFilePath = "\(shadersPath)/\(metalFileName)"
@@ -77,18 +77,18 @@ func compileMetalShaders() throws {
         throw CompilationError.fileNotFound(metalFilePath)
     }
 
-    print("✓ Found Metal source: \(metalFilePath)")
+    print("[OK] Found Metal source: \(metalFilePath)")
 
     // Create resources directory if it doesn't exist
     try createDirectoryIfNeeded(at: resourcesPath)
-    print("✓ Resources directory ready: \(resourcesPath)")
+    print("[OK] Resources directory ready: \(resourcesPath)")
 
     // Define temporary and output paths
     let tempAirFile = "AemiSDR.ci.air"
     let outputMetalLibPath = "\(resourcesPath)/\(outputLibraryName)"
 
     // Step 1: Compile .ci.metal to .ci.air
-    print("📝 Compiling Metal source to AIR...")
+    print("Compiling Metal source to AIR...")
 
     let metalArgs = [
         "-c",
@@ -103,7 +103,7 @@ func compileMetalShaders() throws {
         if !metalOutput.isEmpty {
             print("Metal compiler output: \(metalOutput)")
         }
-        print("✓ Generated AIR file: \(tempAirFile)")
+        print("[OK] Generated AIR file: \(tempAirFile)")
     } catch {
         // Clean up on failure
         try? FileManager.default.removeItem(atPath: tempAirFile)
@@ -111,7 +111,7 @@ func compileMetalShaders() throws {
     }
 
     // Step 2: Create .ci.metallib from .ci.air
-    print("📚 Creating Metal library...")
+    print("Creating Metal library...")
 
     let metallibArgs = [
         "-cikernel",
@@ -125,7 +125,7 @@ func compileMetalShaders() throws {
         if !metallibOutput.isEmpty {
             print("MetalLib output: \(metallibOutput)")
         }
-        print("✓ Generated Metal library: \(outputMetalLibPath)")
+        print("[OK] Generated Metal library: \(outputMetalLibPath)")
     } catch {
         // Clean up on failure
         try? FileManager.default.removeItem(atPath: tempAirFile)
@@ -135,13 +135,13 @@ func compileMetalShaders() throws {
     // Step 3: Clean up temporary AIR file
     do {
         try FileManager.default.removeItem(atPath: tempAirFile)
-        print("✓ Cleaned up temporary file: \(tempAirFile)")
+        print("[OK] Cleaned up temporary file: \(tempAirFile)")
     } catch {
-        print("⚠️  Warning: Could not remove temporary file \(tempAirFile): \(error)")
+        print("[WARN] Could not remove temporary file \(tempAirFile): \(error)")
     }
 
-    print("🎉 Metal shader compilation completed successfully!")
-    print("📁 Output: \(outputMetalLibPath)")
+    print("Metal shader compilation completed successfully!")
+    print("Output: \(outputMetalLibPath)")
 }
 
 // MARK: - Script Entry Point
@@ -149,6 +149,6 @@ func compileMetalShaders() throws {
 do {
     try compileMetalShaders()
 } catch {
-    print("❌ Compilation failed: \(error)")
+    print("[ERROR] Compilation failed: \(error)")
     exit(1)
 }
