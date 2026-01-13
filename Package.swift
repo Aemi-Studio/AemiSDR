@@ -6,27 +6,27 @@ private let package = Package(
     name: "AemiSDR",
     platforms: [
         .iOS(.v14),
-        .macOS(.v11)
+        .macOS(.v11),
     ],
     products: [
         .library(
             name: "AemiSDR",
             targets: ["AemiSDR"]
-        ),
+        )
     ],
     dependencies: [
-        .package(url: "https://github.com/g-cqd/InternedStrings.git", branch: "main"),
+        .package(url: "https://github.com/g-cqd/InternedStrings.git", branch: "main")
     ],
     targets: [
         .target(
             name: "AemiSDR",
             dependencies: [
-                .product(name: "InternedStrings", package: "InternedStrings"),
+                .product(name: "InternedStrings", package: "InternedStrings")
             ],
             exclude: ["Shaders/"],
             resources: [.copy("Resources/AemiSDR.metallib")],
             swiftSettings: swiftSettings
-        ),
+        )
     ]
 )
 
