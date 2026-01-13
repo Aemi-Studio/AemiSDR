@@ -1,5 +1,5 @@
 {
-  "originHash" : "965c06860a2034691e75b949c3d88b1978b0979790dd0fc034f76e9625c5a306",
+  "originHash" : "2cbe4ac61bbdd2220f293d3b909004ff166c53131ca8dbf899193b773c10125b",
   "pins" : [
     {
       "identity" : "internedstrings",
@@ -7,7 +7,7 @@
       "location" : "https://github.com/g-cqd/InternedStrings.git",
       "state" : {
         "branch" : "main",
-        "revision" : "66811982b3176e906728549d1d58a86577f6827d"
+        "revision" : "7213b1ccb93b05d6c92e25c013fbbd574296f0a1"
       }
     },
     {
