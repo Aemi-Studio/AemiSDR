@@ -55,20 +55,35 @@ class CIKernelCache {
 
     // MARK: - Metal Library Loading
 
+    /// Platform-specific Metal library resource name.
+    ///
+    /// Returns the appropriate Metal library filename based on the current platform.
+    /// - iOS/tvOS/watchOS/visionOS: Uses the iOS-compiled library
+    /// - macOS: Uses the macOS-compiled library
+    private static var platformLibraryName: String {
+        #if os(macOS)
+        return "AemiSDR.macOS"
+        #else
+        return "AemiSDR.iOS"
+        #endif
+    }
+
     /// Lazily loaded Metal library data containing compiled shader functions.
     ///
-    /// Attempts to load the "default.metallib" file from the main bundle, which should
-    /// contain all compiled Metal shaders for the application. The library is loaded
-    /// once and cached for subsequent kernel creation operations.
+    /// Attempts to load the platform-specific Metal library from the module bundle.
+    /// The library is loaded once and cached for subsequent kernel creation operations.
     ///
-    /// **Important**: This expects a Metal library named "default.metallib" to be
-    /// present in the app bundle. If the library is missing or corrupted, all kernel
-    /// creation will fail gracefully with appropriate error logging.
+    /// **Platform Support**:
+    /// - iOS, tvOS, watchOS, visionOS: Loads `AemiSDR.iOS.metallib` (compiled with iOS 14.0+ target)
+    /// - macOS: Loads `AemiSDR.macOS.metallib` (compiled with macOS 11.0+ target)
+    ///
+    /// This platform-specific loading ensures Metal library compatibility across all
+    /// supported deployment targets.
     ///
     /// - Returns: Data containing the Metal library, or `nil` if loading fails
     static let libraryData: Data? = {
-        guard let url = Bundle.module.url(forResource: "AemiSDR", withExtension: "metallib") else {
-            logger.error("Failed to locate metallib in bundle.")
+        guard let url = Bundle.module.url(forResource: platformLibraryName, withExtension: "metallib") else {
+            logger.error("Failed to locate \(platformLibraryName).metallib in bundle.")
             return nil
         }
 
