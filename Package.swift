@@ -30,9 +30,6 @@ private let package = Package(
             dependencies: [
                 .product(name: "InternedStrings", package: "InternedStrings")
             ],
-            exclude: [
-                "Resources/",  // Empty after plugin migration
-            ],
             resources: [
                 .process("Previews/Assets.xcassets"),
             ],
