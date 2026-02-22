@@ -27,6 +27,12 @@ import SwiftUI
     ///     .frame(width: 200, height: 100)
     /// ```
     ///
+    /// Or use a full configuration with system presets:
+    /// ```swift
+    /// VisualEffectView(configuration: .light)
+    /// VisualEffectView(configuration: .ultraThinMaterial)
+    /// ```
+    ///
     /// - Warning: This implementation uses private APIs and may break in future iOS versions.
     public struct VisualEffectView: UIViewRepresentable {
         // MARK: - Configuration Properties
@@ -42,6 +48,9 @@ import SwiftUI
 
         /// Scale factor for the effect
         public let scale: CGFloat
+
+        /// Full configuration, when using the configuration-based API
+        private let configuration: VisualEffectConfiguration?
 
         // MARK: - Initialization
 
@@ -62,6 +71,18 @@ import SwiftUI
             self.colorTintAlpha = colorTintAlpha
             self.blurRadius = blurRadius
             self.scale = scale
+            self.configuration = nil
+        }
+
+        /// Creates a visual effect view from a full configuration.
+        ///
+        /// - Parameter configuration: The configuration specifying all effect properties.
+        public init(configuration: VisualEffectConfiguration) {
+            self.configuration = configuration
+            self.colorTint = configuration.colorTint
+            self.colorTintAlpha = configuration.colorTintAlpha
+            self.blurRadius = configuration.blurRadius
+            self.scale = configuration.scale
         }
 
         // MARK: - UIViewRepresentable Implementation
@@ -71,12 +92,17 @@ import SwiftUI
         /// - Parameter context: The representable context provided by SwiftUI
         /// - Returns: A configured VisualEffectUIView instance
         public func makeUIView(context _: Context) -> VisualEffectUIView {
-            let view = VisualEffectUIView(
-                colorTint: colorTint.map { UIColor($0) },
-                colorTintAlpha: colorTintAlpha,
-                blurRadius: blurRadius,
-                scale: scale
-            )
+            let view: VisualEffectUIView
+            if let configuration {
+                view = VisualEffectUIView(configuration: configuration)
+            } else {
+                view = VisualEffectUIView(
+                    colorTint: colorTint.map { UIColor($0) },
+                    colorTintAlpha: colorTintAlpha,
+                    blurRadius: blurRadius,
+                    scale: scale
+                )
+            }
             view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             return view
         }
@@ -87,12 +113,16 @@ import SwiftUI
         ///   - uiView: The existing VisualEffectUIView instance to update
         ///   - context: The representable context provided by SwiftUI
         public func updateUIView(_ uiView: VisualEffectUIView, context _: Context) {
-            uiView.updateConfiguration(
-                colorTint: colorTint.map { UIColor($0) },
-                colorTintAlpha: colorTintAlpha,
-                blurRadius: blurRadius,
-                scale: scale
-            )
+            if let configuration {
+                uiView.updateConfiguration(configuration)
+            } else {
+                uiView.updateConfiguration(
+                    colorTint: colorTint.map { UIColor($0) },
+                    colorTintAlpha: colorTintAlpha,
+                    blurRadius: blurRadius,
+                    scale: scale
+                )
+            }
         }
     }
 
@@ -120,6 +150,9 @@ import SwiftUI
         /// Scale factor (unused on macOS)
         public let scale: CGFloat
 
+        /// Full configuration (new properties are no-ops on macOS)
+        private let configuration: VisualEffectConfiguration?
+
         // MARK: - Initialization
 
         /// Creates a visual effect view with customizable blur properties.
@@ -139,6 +172,21 @@ import SwiftUI
             self.colorTintAlpha = colorTintAlpha
             self.blurRadius = blurRadius
             self.scale = scale
+            self.configuration = nil
+        }
+
+        /// Creates a visual effect view from a full configuration.
+        ///
+        /// On macOS, the extended blur properties are no-ops.
+        /// Only `blurRadius` is used (to select a material).
+        ///
+        /// - Parameter configuration: The configuration specifying all effect properties.
+        public init(configuration: VisualEffectConfiguration) {
+            self.configuration = configuration
+            self.colorTint = configuration.colorTint
+            self.colorTintAlpha = configuration.colorTintAlpha
+            self.blurRadius = configuration.blurRadius
+            self.scale = configuration.scale
         }
 
         // MARK: - NSViewRepresentable Implementation

@@ -8,6 +8,40 @@ import SwiftUI
 // MARK: - Visual Effect View Modifiers
 
 extension View {
+    /// Applies a visual effect configuration as a background to the view.
+    ///
+    /// - Parameters:
+    ///   - configuration: The visual effect configuration to apply.
+    ///   - ignoreSafeArea: Whether to ignore safe area for the blur effect (default: true)
+    /// - Returns: A view with the blur effect applied as background
+    @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
+    @ViewBuilder public func visualEffectBackground(
+        _ configuration: VisualEffectConfiguration,
+        ignoreSafeArea: Bool = true
+    ) -> some View {
+        background {
+            VisualEffectView(configuration: configuration)
+                .conditionalIgnoreSafeArea(ignoreSafeArea)
+        }
+    }
+
+    /// Applies a visual effect configuration as an overlay to the view.
+    ///
+    /// - Parameters:
+    ///   - configuration: The visual effect configuration to apply.
+    ///   - ignoreSafeArea: Whether to ignore safe area for the blur effect (default: true)
+    /// - Returns: A view with the blur effect applied as overlay
+    @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
+    @ViewBuilder public func visualEffectOverlay(
+        _ configuration: VisualEffectConfiguration,
+        ignoreSafeArea: Bool = true
+    ) -> some View {
+        overlay {
+            VisualEffectView(configuration: configuration)
+                .conditionalIgnoreSafeArea(ignoreSafeArea)
+        }
+    }
+
     /// Applies a customizable blur effect as a background to the view.
     ///
     /// This modifier creates a blur effect behind the view content with

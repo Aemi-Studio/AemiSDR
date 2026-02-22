@@ -87,6 +87,83 @@
             set { setBlurEffectValue(newValue, forKey: .scale) }
         }
 
+        /// Multiplier for the saturation of the backdrop content.
+        /// The default value is `0.0`.
+        open var saturationDeltaFactor: CGFloat {
+            get { blurEffectValue(forKey: .saturationDeltaFactor) ?? 0.0 }
+            set { setBlurEffectValue(newValue, forKey: .saturationDeltaFactor) }
+        }
+
+        /// Intensity of the grayscale tint layer.
+        /// The default value is `0.0`.
+        open var grayscaleTintLevel: CGFloat {
+            get { blurEffectValue(forKey: .grayscaleTintLevel) ?? 0.0 }
+            set { setBlurEffectValue(newValue, forKey: .grayscaleTintLevel) }
+        }
+
+        /// Alpha of the grayscale tint layer.
+        /// The default value is `0.0`.
+        open var grayscaleTintAlpha: CGFloat {
+            get { blurEffectValue(forKey: .grayscaleTintAlpha) ?? 0.0 }
+            set { setBlurEffectValue(newValue, forKey: .grayscaleTintAlpha) }
+        }
+
+        /// Intensity of the color burn tint layer.
+        /// The default value is `0.0`.
+        open var colorBurnTintLevel: CGFloat {
+            get { blurEffectValue(forKey: .colorBurnTintLevel) ?? 0.0 }
+            set { setBlurEffectValue(newValue, forKey: .colorBurnTintLevel) }
+        }
+
+        /// Alpha of the color burn tint layer.
+        /// The default value is `0.0`.
+        open var colorBurnTintAlpha: CGFloat {
+            get { blurEffectValue(forKey: .colorBurnTintAlpha) ?? 0.0 }
+            set { setBlurEffectValue(newValue, forKey: .colorBurnTintAlpha) }
+        }
+
+        /// Alpha of the darkening tint.
+        /// The default value is `0.0`.
+        open var darkeningTintAlpha: CGFloat {
+            get { blurEffectValue(forKey: .darkeningTintAlpha) ?? 0.0 }
+            set { setBlurEffectValue(newValue, forKey: .darkeningTintAlpha) }
+        }
+
+        /// Hue of the darkening tint.
+        /// The default value is `0.0`.
+        open var darkeningTintHue: CGFloat {
+            get { blurEffectValue(forKey: .darkeningTintHue) ?? 0.0 }
+            set { setBlurEffectValue(newValue, forKey: .darkeningTintHue) }
+        }
+
+        /// Saturation of the darkening tint.
+        /// The default value is `0.0`.
+        open var darkeningTintSaturation: CGFloat {
+            get { blurEffectValue(forKey: .darkeningTintSaturation) ?? 0.0 }
+            set { setBlurEffectValue(newValue, forKey: .darkeningTintSaturation) }
+        }
+
+        /// Zoom level applied to the backdrop.
+        /// The default value is `0.0`.
+        open var zoom: CGFloat {
+            get { blurEffectValue(forKey: .zoom) ?? 0.0 }
+            set { setBlurEffectValue(newValue, forKey: .zoom) }
+        }
+
+        /// Whether to lighten using grayscale with source-over compositing.
+        /// The default value is `false`.
+        open var lightenGrayscaleWithSourceOver: Bool {
+            get { blurEffectValue(forKey: .lightenGrayscaleWithSourceOver) ?? false }
+            set { setBlurEffectValue(newValue, forKey: .lightenGrayscaleWithSourceOver) }
+        }
+
+        /// Whether to darken using source-over compositing.
+        /// The default value is `false`.
+        open var darkenWithSourceOver: Bool {
+            get { blurEffectValue(forKey: .darkenWithSourceOver) ?? false }
+            set { setBlurEffectValue(newValue, forKey: .darkenWithSourceOver) }
+        }
+
         // MARK: - Initialization
 
         /// Creates a new visual effect view with default configuration.
@@ -153,6 +230,89 @@
                 self.colorTint = nil
             }
         }
+
+        /// Creates a visual effect view from a full configuration.
+        ///
+        /// - Parameter configuration: The configuration specifying all effect properties.
+        public convenience init(configuration: VisualEffectConfiguration) {
+            self.init(effect: nil)
+            applyConfiguration(configuration)
+        }
+
+        /// Updates the visual effect with a full configuration.
+        ///
+        /// This method compares each property against its current value
+        /// and only applies changes where differences are detected.
+        ///
+        /// - Parameter configuration: The configuration specifying all effect properties.
+        public func updateConfiguration(_ configuration: VisualEffectConfiguration) {
+            if self.blurRadius != configuration.blurRadius {
+                self.blurRadius = configuration.blurRadius
+            }
+            if self.scale != configuration.scale {
+                self.scale = configuration.scale
+            }
+            if self.saturationDeltaFactor != configuration.saturationDeltaFactor {
+                self.saturationDeltaFactor = configuration.saturationDeltaFactor
+            }
+            if self.grayscaleTintLevel != configuration.grayscaleTintLevel {
+                self.grayscaleTintLevel = configuration.grayscaleTintLevel
+            }
+            if self.grayscaleTintAlpha != configuration.grayscaleTintAlpha {
+                self.grayscaleTintAlpha = configuration.grayscaleTintAlpha
+            }
+            if self.colorBurnTintLevel != configuration.colorBurnTintLevel {
+                self.colorBurnTintLevel = configuration.colorBurnTintLevel
+            }
+            if self.colorBurnTintAlpha != configuration.colorBurnTintAlpha {
+                self.colorBurnTintAlpha = configuration.colorBurnTintAlpha
+            }
+            if self.darkeningTintAlpha != configuration.darkeningTintAlpha {
+                self.darkeningTintAlpha = configuration.darkeningTintAlpha
+            }
+            if self.darkeningTintHue != configuration.darkeningTintHue {
+                self.darkeningTintHue = configuration.darkeningTintHue
+            }
+            if self.darkeningTintSaturation != configuration.darkeningTintSaturation {
+                self.darkeningTintSaturation = configuration.darkeningTintSaturation
+            }
+            if self.zoom != configuration.zoom {
+                self.zoom = configuration.zoom
+            }
+            if self.lightenGrayscaleWithSourceOver != configuration.lightenGrayscaleWithSourceOver {
+                self.lightenGrayscaleWithSourceOver = configuration.lightenGrayscaleWithSourceOver
+            }
+            if self.darkenWithSourceOver != configuration.darkenWithSourceOver {
+                self.darkenWithSourceOver = configuration.darkenWithSourceOver
+            }
+
+            if let tint = configuration.colorTint {
+                self.colorTint = UIColor(tint).withAlphaComponent(configuration.colorTintAlpha)
+            } else if self.colorTint != nil {
+                self.colorTint = nil
+            }
+        }
+
+        // MARK: - Private Helpers
+
+        private func applyConfiguration(_ configuration: VisualEffectConfiguration) {
+            self.scale = configuration.scale
+            self.blurRadius = configuration.blurRadius
+            self.saturationDeltaFactor = configuration.saturationDeltaFactor
+            self.grayscaleTintLevel = configuration.grayscaleTintLevel
+            self.grayscaleTintAlpha = configuration.grayscaleTintAlpha
+            self.colorBurnTintLevel = configuration.colorBurnTintLevel
+            self.colorBurnTintAlpha = configuration.colorBurnTintAlpha
+            self.darkeningTintAlpha = configuration.darkeningTintAlpha
+            self.darkeningTintHue = configuration.darkeningTintHue
+            self.darkeningTintSaturation = configuration.darkeningTintSaturation
+            self.zoom = configuration.zoom
+            self.lightenGrayscaleWithSourceOver = configuration.lightenGrayscaleWithSourceOver
+            self.darkenWithSourceOver = configuration.darkenWithSourceOver
+            if let tint = configuration.colorTint {
+                self.colorTint = UIColor(tint).withAlphaComponent(configuration.colorTintAlpha)
+            }
+        }
     }
 
     // MARK: - Blur Effect Value Access
@@ -163,6 +323,17 @@
             case colorTintAlpha
             case blurRadius
             case scale
+            case saturationDeltaFactor
+            case grayscaleTintLevel
+            case grayscaleTintAlpha
+            case colorBurnTintLevel
+            case colorBurnTintAlpha
+            case darkeningTintAlpha
+            case darkeningTintHue
+            case darkeningTintSaturation
+            case zoom
+            case lightenGrayscaleWithSourceOver
+            case darkenWithSourceOver
         }
 
         fileprivate func blurEffectValue<T>(forKey key: BlurEffectKey) -> T? {

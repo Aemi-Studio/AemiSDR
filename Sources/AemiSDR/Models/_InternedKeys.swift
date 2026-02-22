@@ -46,6 +46,25 @@
         @Interned static var colorTint = "colorTint"
         @Interned static var colorTintAlpha = "colorTintAlpha"
         @Interned static var blurRadius = "blurRadius"
+        @Interned static var saturationDeltaFactor = "saturationDeltaFactor"
+        @Interned static var grayscaleTintLevel = "grayscaleTintLevel"
+        @Interned static var grayscaleTintAlpha = "grayscaleTintAlpha"
+        @Interned static var colorBurnTintLevel = "colorBurnTintLevel"
+        @Interned static var colorBurnTintAlpha = "colorBurnTintAlpha"
+        @Interned static var darkeningTintAlpha = "darkeningTintAlpha"
+        @Interned static var darkeningTintHue = "darkeningTintHue"
+        @Interned static var darkeningTintSaturation = "darkeningTintSaturation"
+        @Interned static var zoom = "zoom"
+        @Interned static var lightenGrayscaleWithSourceOver = "lightenGrayscaleWithSourceOver"
+        @Interned static var darkenWithSourceOver = "darkenWithSourceOver"
+
+        // MARK: - Backdrop Settings
+
+        @Interned static var backdropViewSettingsClass = "_UIBackdropViewSettings"
+        @Interned static var settingsForStyle = "settingsForStyle:"
+        @Interned static var usesGrayscaleTintView = "usesGrayscaleTintView"
+        @Interned static var usesColorTintView = "usesColorTintView"
+        @Interned static var usesColorBurnTintView = "usesColorBurnTintView"
 
         // MARK: - Selectors
 
