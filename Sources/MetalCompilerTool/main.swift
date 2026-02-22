@@ -32,6 +32,13 @@ enum CompilerError: Error, LocalizedError {
     }
 }
 
+// MARK: - Compilation Mode
+
+enum CompilationMode: String {
+    case ci
+    case standard
+}
+
 // MARK: - Platform Configuration
 
 struct PlatformConfig {
@@ -40,6 +47,7 @@ struct PlatformConfig {
     let minVersionFlag: String
     let minVersion: String
     let outputPath: String
+    let mode: CompilationMode
 }
 
 // MARK: - Command Execution
@@ -106,13 +114,17 @@ func compilePlatform(inputPath: String, config: PlatformConfig) throws {
         try? fileManager.removeItem(atPath: airPath)
     }
 
-    // Step 1: Compile .ci.metal to .air
-    print("[\(config.name)] Compiling to AIR...")
-    let metalArgs = [
+    // Step 1: Compile .metal to .air
+    print("[\(config.name)] Compiling to AIR (\(config.mode) mode)...")
+    var metalArgs = [
         "--sdk", config.sdk,
         "metal",
         "-c",
-        "-fcikernel",
+    ]
+    if config.mode == .ci {
+        metalArgs.append("-fcikernel")
+    }
+    metalArgs += [
         "-fmodules=none",  // Required for Xcode Cloud compatibility
         config.minVersionFlag + config.minVersion,
         inputPath,
@@ -131,10 +143,14 @@ func compilePlatform(inputPath: String, config: PlatformConfig) throws {
 
     // Step 2: Link .air to .metallib
     print("[\(config.name)] Linking to metallib...")
-    let metallibArgs = [
+    var metallibArgs = [
         "--sdk", config.sdk,
         "metallib",
-        "-cikernel",
+    ]
+    if config.mode == .ci {
+        metallibArgs.append("-cikernel")
+    }
+    metallibArgs += [
         airPath,
         "-o", config.outputPath,
     ]
@@ -159,7 +175,8 @@ func parseArguments() throws -> (
     iosOutput: String,
     macosOutput: String,
     iosMinVersion: String,
-    macosMinVersion: String
+    macosMinVersion: String,
+    mode: CompilationMode
 ) {
     let args = CommandLine.arguments
 
@@ -184,16 +201,17 @@ func parseArguments() throws -> (
 
     let iosMinVersion = getArg("--ios-min-version") ?? "14.0"
     let macosMinVersion = getArg("--macos-min-version") ?? "11.0"
+    let mode = CompilationMode(rawValue: getArg("--mode") ?? "ci") ?? .ci
 
-    return (inputPath, iosOutput, macosOutput, iosMinVersion, macosMinVersion)
+    return (inputPath, iosOutput, macosOutput, iosMinVersion, macosMinVersion, mode)
 }
 
 // MARK: - Main Entry Point
 
 do {
-    let (inputPath, iosOutput, macosOutput, iosMinVersion, macosMinVersion) = try parseArguments()
+    let (inputPath, iosOutput, macosOutput, iosMinVersion, macosMinVersion, mode) = try parseArguments()
 
-    print("AemiSDR Metal Compiler")
+    print("AemiSDR Metal Compiler (\(mode) mode)")
     print("Input: \(inputPath)")
     print("iOS Output: \(iosOutput)")
     print("macOS Output: \(macosOutput)")
@@ -205,14 +223,16 @@ do {
             sdk: "iphoneos",
             minVersionFlag: "-mios-version-min=",
             minVersion: iosMinVersion,
-            outputPath: iosOutput
+            outputPath: iosOutput,
+            mode: mode
         ),
         PlatformConfig(
             name: "macOS",
             sdk: "macosx",
             minVersionFlag: "-mmacos-version-min=",
             minVersion: macosMinVersion,
-            outputPath: macosOutput
+            outputPath: macosOutput,
+            mode: mode
         ),
     ]
 

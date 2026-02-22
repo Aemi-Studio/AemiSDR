@@ -331,18 +331,18 @@ extern "C" { namespace coreimage {
     {
         // Get current pixel's Y coordinate
         float y = dest.coord().y;
-        
+
         // Convert fractional offset to pixel coordinates
         // Guard against zero height to prevent division issues
         float h  = max(heightPx, 1.0f);
-        
+
         // Allow offsets outside [0,1] for partial gradients but clamp to reasonable range
         float y0 = clamp(startOffset, -1.0f, 1.0f) * h;
-        
+
         // Calculate effective gradient height (remaining space after offset)
         // This ensures we don't divide by zero even with extreme offsets
         float effective_h = max(h - abs(y0), 1.0f);
-        
+
         float alpha;
         if (inverted > 0.5f) {
             // Bottom-to-top gradient: opaque at bottom (y=h), transparent at top (y=0)
@@ -352,7 +352,7 @@ extern "C" { namespace coreimage {
             // Top-to-bottom gradient: transparent at top (y=0), opaque at bottom (y=h)
             alpha = clamp((y - y0) / effective_h, 0.0f, 1.0f);
         }
-        
+
         // Return as RGBA with all channels set to alpha value (grayscale)
         return float4(alpha);
     }
@@ -593,18 +593,18 @@ extern "C" { namespace coreimage {
     {
         float h     = max(heightPx, 1.0f);
         float yNorm = dest.coord().y / h;
-        
+
         if (direction > 0.5f) yNorm = 1.0f - yNorm;
-        
+
         float s = clamp(startOffset, 0.0f, 0.999f);
         float t = clamp((yNorm - s) / (1.0f - s), 0.0f, 1.0f);
         float eased = t * t;
-        
+
         half a = half(eased);
-        
+
         // Apply inversion if requested
         if (inverted > 0.5f) a = half(1.0f) - a;
-        
+
         return half4(a, a, a, a);
     }
     
