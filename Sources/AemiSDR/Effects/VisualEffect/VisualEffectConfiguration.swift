@@ -145,7 +145,7 @@ public struct VisualEffectConfiguration: Sendable, Equatable {
             guard
                 let settingsClass = NSClassFromString(_InternedKeys.backdropViewSettingsClass) as? NSObject.Type,
                 let settings = unsafe settingsClass.perform(
-                    Selector(_InternedKeys.settingsForStyle),
+                    Selector(_InternedKeys.settingsCreationSelector),
                     with: style.rawValue
                 )?.takeUnretainedValue() as? NSObject
             else {
@@ -154,52 +154,52 @@ public struct VisualEffectConfiguration: Sendable, Equatable {
 
             var config = VisualEffectConfiguration()
 
-            if let value = settings.value(forKey: _InternedKeys.blurRadius) as? CGFloat {
+            if let value = settings.value(forKey: _InternedKeys.radiusValueKey) as? CGFloat {
                 config.blurRadius = value
             }
-            if let value = settings.value(forKey: _InternedKeys.scale) as? CGFloat {
+            if let value = settings.value(forKey: _InternedKeys.scaleFactorKey) as? CGFloat {
                 config.scale = value
             }
-            if let value = settings.value(forKey: _InternedKeys.saturationDeltaFactor) as? CGFloat {
+            if let value = settings.value(forKey: _InternedKeys.saturationKey) as? CGFloat {
                 config.saturationDeltaFactor = value
             }
-            if let value = settings.value(forKey: _InternedKeys.grayscaleTintLevel) as? CGFloat {
+            if let value = settings.value(forKey: _InternedKeys.grayLevelKey) as? CGFloat {
                 config.grayscaleTintLevel = value
             }
-            if let value = settings.value(forKey: _InternedKeys.grayscaleTintAlpha) as? CGFloat {
+            if let value = settings.value(forKey: _InternedKeys.grayAlphaKey) as? CGFloat {
                 config.grayscaleTintAlpha = value
             }
-            if let value = settings.value(forKey: _InternedKeys.colorBurnTintLevel) as? CGFloat {
+            if let value = settings.value(forKey: _InternedKeys.burnLevelKey) as? CGFloat {
                 config.colorBurnTintLevel = value
             }
-            if let value = settings.value(forKey: _InternedKeys.colorBurnTintAlpha) as? CGFloat {
+            if let value = settings.value(forKey: _InternedKeys.burnAlphaKey) as? CGFloat {
                 config.colorBurnTintAlpha = value
             }
-            if let value = settings.value(forKey: _InternedKeys.darkeningTintAlpha) as? CGFloat {
+            if let value = settings.value(forKey: _InternedKeys.darkAlphaKey) as? CGFloat {
                 config.darkeningTintAlpha = value
             }
-            if let value = settings.value(forKey: _InternedKeys.darkeningTintHue) as? CGFloat {
+            if let value = settings.value(forKey: _InternedKeys.darkHueKey) as? CGFloat {
                 config.darkeningTintHue = value
             }
-            if let value = settings.value(forKey: _InternedKeys.darkeningTintSaturation) as? CGFloat {
+            if let value = settings.value(forKey: _InternedKeys.darkSatKey) as? CGFloat {
                 config.darkeningTintSaturation = value
             }
-            if let value = settings.value(forKey: _InternedKeys.zoom) as? CGFloat {
+            if let value = settings.value(forKey: _InternedKeys.zoomKey) as? CGFloat {
                 config.zoom = value
             }
-            if settings.value(forKey: _InternedKeys.usesGrayscaleTintView) as? Bool == true {
+            if settings.value(forKey: _InternedKeys.grayTintEnabledKey) as? Bool == true {
                 config.lightenGrayscaleWithSourceOver = true
             }
-            if settings.value(forKey: _InternedKeys.usesColorBurnTintView) as? Bool == true {
+            if settings.value(forKey: _InternedKeys.burnTintEnabledKey) as? Bool == true {
                 config.darkenWithSourceOver = true
             }
 
             // Extract color tint if the style uses one
-            if settings.value(forKey: _InternedKeys.usesColorTintView) as? Bool == true,
-               let color = settings.value(forKey: _InternedKeys.colorTint) as? UIColor
+            if settings.value(forKey: _InternedKeys.tintEnabledKey) as? Bool == true,
+               let color = settings.value(forKey: _InternedKeys.tintColorKey) as? UIColor
             {
                 config.colorTint = Color(color)
-                config.colorTintAlpha = settings.value(forKey: _InternedKeys.colorTintAlpha) as? CGFloat ?? 0
+                config.colorTintAlpha = settings.value(forKey: _InternedKeys.tintAlphaKey) as? CGFloat ?? 0
             }
 
             return config
@@ -297,21 +297,21 @@ public struct VisualEffectConfiguration: Sendable, Equatable {
 
             // Read gaussianBlur inputRadius -> blurRadius
             if let blur = view.gaussianBlurFilter,
-               let radius = blur.value(forKeyPath: _InternedKeys.inputRadius) as? CGFloat
+               let radius = blur.value(forKeyPath: _InternedKeys.radiusParam) as? CGFloat
             {
                 config.blurRadius = radius
             }
 
             // Read colorSaturate inputAmount -> saturationDeltaFactor
             if let saturate = view.colorSaturateFilter,
-               let amount = saturate.value(forKeyPath: _InternedKeys.inputAmount) as? CGFloat
+               let amount = saturate.value(forKeyPath: _InternedKeys.amountParam) as? CGFloat
             {
                 config.saturationDeltaFactor = amount
             }
 
             // Read colorBrightness inputAmount -> grayscaleTintLevel or darkeningTintAlpha
             if let brightness = view.colorBrightnessFilter,
-               let amount = brightness.value(forKeyPath: _InternedKeys.inputAmount) as? CGFloat
+               let amount = brightness.value(forKeyPath: _InternedKeys.amountParam) as? CGFloat
             {
                 if amount >= 0 {
                     config.grayscaleTintLevel = amount + 1.0
@@ -322,7 +322,7 @@ public struct VisualEffectConfiguration: Sendable, Equatable {
 
             // Read backdrop scale
             if let backdrop = view.backdropLayer,
-               let scale = backdrop.value(forKeyPath: _InternedKeys.scale) as? CGFloat
+               let scale = backdrop.value(forKeyPath: _InternedKeys.scaleFactorKey) as? CGFloat
             {
                 config.scale = scale
             }

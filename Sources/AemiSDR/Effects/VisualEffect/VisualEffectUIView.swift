@@ -46,12 +46,12 @@
         /// The default value is `nil`.
         open var colorTint: UIColor? {
             get {
-                sourceOver?.value(forKeyPath: _InternedKeys.color) as? UIColor
+                sourceOver?.value(forKeyPath: _InternedKeys.colorKey) as? UIColor
             }
             set {
                 prepareForChanges()
-                sourceOver?.setValue(newValue, forKeyPath: _InternedKeys.color)
-                _ = unsafe sourceOver?.perform(Selector(_InternedKeys.applyRequestedEffectToView), with: overlayView)
+                sourceOver?.setValue(newValue, forKeyPath: _InternedKeys.colorKey)
+                _ = unsafe sourceOver?.perform(Selector(_InternedKeys.applyEffectSelector), with: overlayView)
                 applyChanges()
                 overlayView?.backgroundColor = newValue
             }
@@ -71,11 +71,11 @@
         /// The default value is `0.0`.
         open var blurRadius: CGFloat {
             get {
-                gaussianBlur?.requestedValues?[_InternedKeys.inputRadius] as? CGFloat ?? 0
+                gaussianBlur?.requestedValues?[_InternedKeys.radiusParam] as? CGFloat ?? 0
             }
             set {
                 prepareForChanges()
-                gaussianBlur?.requestedValues?[_InternedKeys.inputRadius] = newValue
+                gaussianBlur?.requestedValues?[_InternedKeys.radiusParam] = newValue
                 applyChanges()
             }
         }
@@ -94,13 +94,13 @@
         /// The default value is `1.0`.
         open var saturationDeltaFactor: CGFloat {
             get {
-                colorSaturate?.requestedValues?[_InternedKeys.inputAmount] as? CGFloat
+                colorSaturate?.requestedValues?[_InternedKeys.amountParam] as? CGFloat
                     ?? blurEffectValue(forKey: .saturationDeltaFactor) ?? 1.0
             }
             set {
                 blurEffect?.setValue(newValue, forKeyPath: BlurEffectKey.saturationDeltaFactor.rawValue)
                 prepareForChanges()
-                colorSaturate?.requestedValues?[_InternedKeys.inputAmount] = newValue
+                colorSaturate?.requestedValues?[_InternedKeys.amountParam] = newValue
                 applyChanges()
             }
         }
@@ -266,14 +266,14 @@
             prepareForChanges()
 
             // Override blur and saturation via direct filter manipulation
-            gaussianBlur?.requestedValues?[_InternedKeys.inputRadius] = configuration.blurRadius
-            colorSaturate?.requestedValues?[_InternedKeys.inputAmount] = configuration.saturationDeltaFactor
+            gaussianBlur?.requestedValues?[_InternedKeys.radiusParam] = configuration.blurRadius
+            colorSaturate?.requestedValues?[_InternedKeys.amountParam] = configuration.saturationDeltaFactor
 
             // Color tint via overlay mechanism
             if let tint = configuration.colorTint {
                 let uiColor = UIColor(tint).withAlphaComponent(configuration.colorTintAlpha)
-                sourceOver?.setValue(uiColor, forKeyPath: _InternedKeys.color)
-                _ = unsafe sourceOver?.perform(Selector(_InternedKeys.applyRequestedEffectToView), with: overlayView)
+                sourceOver?.setValue(uiColor, forKeyPath: _InternedKeys.colorKey)
+                _ = unsafe sourceOver?.perform(Selector(_InternedKeys.applyEffectSelector), with: overlayView)
                 overlayView?.backgroundColor = uiColor
             }
 
