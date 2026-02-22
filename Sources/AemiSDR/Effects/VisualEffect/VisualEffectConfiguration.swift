@@ -11,8 +11,9 @@ import SwiftUI
 
 /// A complete configuration for a custom visual blur effect.
 ///
-/// This struct exposes all 15 private `_UICustomBlurEffect` properties,
-/// enabling full control over the blur rendering pipeline.
+/// On iOS this drives the private `_UICustomBlurEffect` properties; on macOS
+/// it drives `CABackdropLayer` filter values.  Both paths give continuous
+/// control over the blur rendering pipeline.
 ///
 /// Use the static presets to get system-matching configurations:
 /// ```swift
@@ -143,7 +144,7 @@ public struct VisualEffectConfiguration: Sendable, Equatable {
         public static func systemStyle(_ style: UIBlurEffect.Style) -> VisualEffectConfiguration {
             guard
                 let settingsClass = NSClassFromString(_InternedKeys.backdropViewSettingsClass) as? NSObject.Type,
-                let settings = settingsClass.perform(
+                let settings = unsafe settingsClass.perform(
                     Selector(_InternedKeys.settingsForStyle),
                     with: style.rawValue
                 )?.takeUnretainedValue() as? NSObject
@@ -234,6 +235,7 @@ public struct VisualEffectConfiguration: Sendable, Equatable {
 #elseif os(macOS)
     import AppKit
 
+    @MainActor
     extension VisualEffectConfiguration {
         /// Creates a configuration by introspecting the internal CABackdropLayer
         /// of an `NSVisualEffectView` configured with the given material.
@@ -284,6 +286,7 @@ public struct VisualEffectConfiguration: Sendable, Equatable {
             view.material = material
             view.blendingMode = .behindWindow
             view.state = .active
+            view.wantsLayer = true
             if let appearance { view.appearance = appearance }
 
             // Force layout so the backdrop layer hierarchy is created
@@ -304,6 +307,17 @@ public struct VisualEffectConfiguration: Sendable, Equatable {
                let amount = saturate.value(forKeyPath: _InternedKeys.inputAmount) as? CGFloat
             {
                 config.saturationDeltaFactor = amount
+            }
+
+            // Read colorBrightness inputAmount -> grayscaleTintLevel or darkeningTintAlpha
+            if let brightness = view.colorBrightnessFilter,
+               let amount = brightness.value(forKeyPath: _InternedKeys.inputAmount) as? CGFloat
+            {
+                if amount >= 0 {
+                    config.grayscaleTintLevel = amount + 1.0
+                } else {
+                    config.darkeningTintAlpha = -amount
+                }
             }
 
             // Read backdrop scale
