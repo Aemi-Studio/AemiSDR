@@ -125,7 +125,11 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
     ///   - scale: Display scale factor (points → pixels). Pass `contentsScale` from `CAMetalLayer`.
     /// - Returns: A `LiquidLensUniforms` ready to be passed to the GPU.
     public func toUniforms(textureSize: SIMD2<Float>, scale: Float = 1.0) -> LiquidLensUniforms {
-        LiquidLensUniforms(
+        assert(
+            MemoryLayout<LiquidLensUniforms>.stride == 64,
+            "LiquidLensUniforms layout mismatch — Metal expects 64-byte stride, got \(MemoryLayout<LiquidLensUniforms>.stride)"
+        )
+        return LiquidLensUniforms(
             center: center * scale,
             textureSize: textureSize,
             halfSize: halfSize * scale,
@@ -141,4 +145,16 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
             overlayMode: overlayMode ? 1 : 0
         )
     }
+}
+
+// MARK: - Layout Verification
+
+extension LiquidLensUniforms {
+    /// Compile-time sanity check — Metal shader expects exactly 64 bytes.
+    @usableFromInline
+    static let _stride: Int = {
+        let s = MemoryLayout<LiquidLensUniforms>.stride
+        assert(s == 64, "LiquidLensUniforms stride changed to \(s) — update Metal struct to match")
+        return s
+    }()
 }
