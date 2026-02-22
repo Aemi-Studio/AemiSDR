@@ -18,7 +18,7 @@
     ///
     /// ## Usage
     /// ```swift
-    /// let view = LiquidLensUIView(configuration: .init(radius: 200, strength: 1.5))
+    /// let view = LiquidLensUIView(configuration: .init(halfSize: SIMD2(200, 200), strength: 1.5))
     /// view.setSourceImage(someImage)
     /// ```
     open class LiquidLensUIView: UIView {

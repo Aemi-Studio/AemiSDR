@@ -27,10 +27,10 @@
         @ViewBuilder
         public func liquidLens(
             center: SIMD2<Float> = .zero,
-            radius: Float = 150,
+            halfSize: SIMD2<Float> = SIMD2(150, 150),
             strength: Float = 1.0,
             lensCurvature: Float = 0.5,
-            cornerRadius: Float = 0,
+            cornerRadius: LiquidLensCornerRadius = .points(0),
             falloff: LiquidLensFalloff = .easeInOut,
             falloffLength: Float = 1.0,
             falloffIntensity: Float = 0.5,
@@ -46,7 +46,7 @@
                 _LiquidLensOverlay(
                     configuration: LiquidLensConfiguration(
                         center: center,
-                        radius: radius,
+                        halfSize: halfSize,
                         strength: strength,
                         lensCurvature: lensCurvature,
                         cornerRadius: cornerRadius,
@@ -72,10 +72,10 @@
         @ViewBuilder
         public func liquidLens<S: Shape>(
             center: SIMD2<Float> = .zero,
-            radius: Float = 150,
+            halfSize: SIMD2<Float> = SIMD2(150, 150),
             strength: Float = 1.0,
             lensCurvature: Float = 0.5,
-            cornerRadius: Float = 0,
+            cornerRadius: LiquidLensCornerRadius = .points(0),
             falloff: LiquidLensFalloff = .easeInOut,
             falloffLength: Float = 1.0,
             falloffIntensity: Float = 0.5,
@@ -89,7 +89,7 @@
         ) -> some View {
             liquidLens(
                 center: center,
-                radius: radius,
+                halfSize: halfSize,
                 strength: strength,
                 lensCurvature: lensCurvature,
                 cornerRadius: cornerRadius,
@@ -117,10 +117,10 @@
         public func liquidLens(
             image: UIImage,
             center: SIMD2<Float> = .zero,
-            radius: Float = 150,
+            halfSize: SIMD2<Float> = SIMD2(150, 150),
             strength: Float = 1.0,
             lensCurvature: Float = 0.5,
-            cornerRadius: Float = 0,
+            cornerRadius: LiquidLensCornerRadius = .points(0),
             falloff: LiquidLensFalloff = .easeInOut,
             falloffLength: Float = 1.0,
             falloffIntensity: Float = 0.5,
@@ -134,7 +134,7 @@
                     image: image,
                     configuration: LiquidLensConfiguration(
                         center: center,
-                        radius: radius,
+                        halfSize: halfSize,
                         strength: strength,
                         lensCurvature: lensCurvature,
                         cornerRadius: cornerRadius,
@@ -157,10 +157,10 @@
         public func liquidLens<S: Shape>(
             image: UIImage,
             center: SIMD2<Float> = .zero,
-            radius: Float = 150,
+            halfSize: SIMD2<Float> = SIMD2(150, 150),
             strength: Float = 1.0,
             lensCurvature: Float = 0.5,
-            cornerRadius: Float = 0,
+            cornerRadius: LiquidLensCornerRadius = .points(0),
             falloff: LiquidLensFalloff = .easeInOut,
             falloffLength: Float = 1.0,
             falloffIntensity: Float = 0.5,
@@ -172,7 +172,7 @@
             liquidLens(
                 image: image,
                 center: center,
-                radius: radius,
+                halfSize: halfSize,
                 strength: strength,
                 lensCurvature: lensCurvature,
                 cornerRadius: cornerRadius,
