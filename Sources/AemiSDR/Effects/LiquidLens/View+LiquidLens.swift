@@ -8,21 +8,65 @@
 
     extension View {
 
-        // MARK: - Auto-capture (continuous)
+        // MARK: - Configuration-based (primary implementations)
+
+        /// Applies a liquid lens distortion overlay with auto-capture using a configuration object.
+        @available(iOS 15.0, *)
+        @ViewBuilder
+        public func liquidLens(
+            configuration: LiquidLensConfiguration,
+            clipShape: ShapePathProvider? = nil,
+            continuousCapture: Bool = true,
+            refreshRate: Int = 30,
+            captureScale: CGFloat = 1.0
+        ) -> some View {
+            overlay {
+                _LiquidLensOverlay(
+                    configuration: LiquidLensConfiguration(
+                        center: configuration.center,
+                        halfSize: configuration.halfSize,
+                        strength: configuration.strength,
+                        lensCurvature: configuration.lensCurvature,
+                        cornerRadius: configuration.cornerRadius,
+                        falloff: configuration.falloff,
+                        falloffLength: configuration.falloffLength,
+                        falloffIntensity: configuration.falloffIntensity,
+                        chromaticAmount: configuration.chromaticAmount,
+                        material: configuration.material,
+                        useRadialDirection: configuration.useRadialDirection,
+                        overlayMode: true
+                    ),
+                    clipShapePath: clipShape,
+                    continuousCapture: continuousCapture,
+                    refreshRate: max(1, min(refreshRate, 120)),
+                    captureScale: max(0.25, min(captureScale, 3.0))
+                )
+                .allowsHitTesting(false)
+            }
+        }
+
+        /// Applies a liquid lens distortion overlay using an explicit source image and a configuration object.
+        @available(iOS 15.0, *)
+        @ViewBuilder
+        public func liquidLens(
+            image: UIImage,
+            configuration: LiquidLensConfiguration,
+            clipShape: ShapePathProvider? = nil
+        ) -> some View {
+            overlay {
+                LiquidLensView(
+                    image: image,
+                    configuration: configuration,
+                    clipShapePath: clipShape
+                )
+                .allowsHitTesting(false)
+            }
+        }
+
+        // MARK: - Auto-capture (parameter-list wrappers)
 
         /// Applies a physics-based liquid lens distortion effect that automatically
         /// captures the view's content as the source texture.
-        ///
-        /// Uses a UIKit view-hierarchy snapshot to capture the content and renders
-        /// the distorted version as a transparent overlay. When `continuousCapture`
-        /// is `true` (the default), a `CADisplayLink` re-captures at `refreshRate` fps,
-        /// keeping the lens in sync with background changes.
-        ///
-        /// - Parameters:
-        ///   - clipShape: Optional shape path provider to mask the overlay to match the
-        ///     parent view's clip shape. Use ``LiquidLensClipShape`` helpers or pass a closure.
-        ///   - continuousCapture: When `true`, continuously re-snapshots the background.
-        ///   - refreshRate: Target frames per second for continuous capture (1–120, default 30).
         @available(iOS 15.0, *)
         @ViewBuilder
         public func liquidLens(
@@ -42,29 +86,25 @@
             refreshRate: Int = 30,
             captureScale: CGFloat = 1.0
         ) -> some View {
-            overlay {
-                _LiquidLensOverlay(
-                    configuration: LiquidLensConfiguration(
-                        center: center,
-                        halfSize: halfSize,
-                        strength: strength,
-                        lensCurvature: lensCurvature,
-                        cornerRadius: cornerRadius,
-                        falloff: falloff,
-                        falloffLength: falloffLength,
-                        falloffIntensity: falloffIntensity,
-                        chromaticAmount: chromaticAmount,
-                        material: material,
-                        useRadialDirection: useRadialDirection,
-                        overlayMode: true
-                    ),
-                    clipShapePath: clipShape,
-                    continuousCapture: continuousCapture,
-                    refreshRate: max(1, min(refreshRate, 120)),
-                    captureScale: max(0.25, min(captureScale, 3.0))
-                )
-                .allowsHitTesting(false)
-            }
+            liquidLens(
+                configuration: LiquidLensConfiguration(
+                    center: center,
+                    halfSize: halfSize,
+                    strength: strength,
+                    lensCurvature: lensCurvature,
+                    cornerRadius: cornerRadius,
+                    falloff: falloff,
+                    falloffLength: falloffLength,
+                    falloffIntensity: falloffIntensity,
+                    chromaticAmount: chromaticAmount,
+                    material: material,
+                    useRadialDirection: useRadialDirection
+                ),
+                clipShape: clipShape,
+                continuousCapture: continuousCapture,
+                refreshRate: refreshRate,
+                captureScale: captureScale
+            )
         }
 
         /// Auto-capture overload that accepts a SwiftUI `Shape` for clip masking.
@@ -106,12 +146,9 @@
             )
         }
 
-        // MARK: - Explicit image
+        // MARK: - Explicit image (parameter-list wrappers)
 
         /// Applies a physics-based liquid lens distortion effect using an explicit source image.
-        ///
-        /// Use this overload when you have a pre-rendered image to distort, or when
-        /// you want manual control over the source texture.
         @available(iOS 15.0, *)
         @ViewBuilder
         public func liquidLens(
@@ -129,26 +166,23 @@
             useRadialDirection: Bool = true,
             clipShape: ShapePathProvider? = nil
         ) -> some View {
-            overlay {
-                LiquidLensView(
-                    image: image,
-                    configuration: LiquidLensConfiguration(
-                        center: center,
-                        halfSize: halfSize,
-                        strength: strength,
-                        lensCurvature: lensCurvature,
-                        cornerRadius: cornerRadius,
-                        falloff: falloff,
-                        falloffLength: falloffLength,
-                        falloffIntensity: falloffIntensity,
-                        chromaticAmount: chromaticAmount,
-                        material: material,
-                        useRadialDirection: useRadialDirection
-                    ),
-                    clipShapePath: clipShape
-                )
-                .allowsHitTesting(false)
-            }
+            liquidLens(
+                image: image,
+                configuration: LiquidLensConfiguration(
+                    center: center,
+                    halfSize: halfSize,
+                    strength: strength,
+                    lensCurvature: lensCurvature,
+                    cornerRadius: cornerRadius,
+                    falloff: falloff,
+                    falloffLength: falloffLength,
+                    falloffIntensity: falloffIntensity,
+                    chromaticAmount: chromaticAmount,
+                    material: material,
+                    useRadialDirection: useRadialDirection
+                ),
+                clipShape: clipShape
+            )
         }
 
         /// Explicit image overload that accepts a SwiftUI `Shape` for clip masking.
