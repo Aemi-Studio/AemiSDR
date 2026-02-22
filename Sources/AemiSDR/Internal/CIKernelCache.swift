@@ -30,7 +30,7 @@ class CIKernelCache {
     /// and dynamically sets the category based on the actual class name.
     /// This provides clear, filterable logging for debugging kernel issues.
     static var logger: Logger {
-        Logger(subsystem: "studio.aemi.AemiShader", category: "\(Self.self)")
+        Logger(subsystem: "studio.aemi.AemiSDR", category: "\(Self.self)")
     }
 
     // MARK: - Core Image Context

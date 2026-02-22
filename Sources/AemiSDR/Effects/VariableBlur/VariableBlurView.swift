@@ -33,11 +33,11 @@
     /// // Linear gradient blur
     /// VariableBlurView(maxBlurRadius: 25, type: .linearTopToBottom, startOffset: 0.3)
     ///
-    /// // Rounded rectangle blur
+    /// // Superellipse squircle blur with eased transition
     /// VariableBlurView(maxBlurRadius: 20, cornerRadius: 16, fadeWidth: 40)
     ///
-    /// // Superellipse squircle blur
-    /// VariableBlurView(cornerRadius: 20, exponent: 2, transition: .eased)
+    /// // Rounded rectangle blur with continuous corners
+    /// VariableBlurView(.continuous, maxBlurRadius: 5, cornerRadius: 20, fadeWidth: 24)
     /// ```
     public struct VariableBlurView: UIViewRepresentable {
         // MARK: - Configuration Properties

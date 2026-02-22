@@ -19,7 +19,6 @@
         /// 3. Main screen as ultimate fallback
         ///
         /// - Returns: The most contextually relevant screen, or main screen if unavailable
-        /// - Note: On watchOS, always returns the main screen since multi-screen isn't supported
         @available(iOS 13.0, tvOS 13.0, *)
         public static var activeScreen: UIScreen? {
             // Find the most active window scene and use its screen
@@ -44,8 +43,7 @@
         /// This property uses a private UIKit API to retrieve the actual corner radius
         /// of the device's display. Returns 0 if the value cannot be determined.
         ///
-        /// - Note: On watchOS, this typically returns the Apple Watch's corner radius.
-        /// - Note: On macOS, this returns 0 unless running on a device with rounded display corners.
+        /// - Note: Returns 0 on devices without rounded display corners (e.g. Mac Catalyst).
         public var displayCornerRadius: CGFloat {
             value(forKey: "_displayCornerRadius") as? CGFloat ?? 0
         }
@@ -90,7 +88,6 @@
         ///
         /// Uses device characteristics to provide reasonable fallback values.
         /// These values are approximations based on common device corner radii.
-        /// For watchOS, it uses the active screen's dimensions for more accurate sizing.
         ///
         /// - Returns: Estimated corner radius in points based on device type
         private static func estimatedCornerRadius() -> CGFloat {
@@ -124,8 +121,6 @@
         ///
         /// Traverses the view hierarchy to find the containing window and screen.
         /// Returns 0 if no screen context can be determined.
-        ///
-        /// - Note: On watchOS, this uses the main screen directly.
         var screenCornerRadius: CGFloat {
             UIScreen.getDisplayCornerRadius(from: .view(self))
         }

@@ -11,7 +11,7 @@
     /// Provides a consistent interface for getting corner radius information
     /// across different UIKit types (views, view controllers, windows).
     ///
-    /// - Note: Available across iOS, tvOS, watchOS, and macOS (Mac Catalyst)
+    /// - Note: iOS only. Also works under Mac Catalyst.
     @MainActor
     protocol UICornerDiscoverable {
         /// The corner radius of the screen containing this UI element
