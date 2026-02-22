@@ -24,44 +24,48 @@ struct AemiSDRShaderPlugin: BuildToolPlugin {
         }
 
         let compilerTool = try context.tool(named: "MetalCompilerTool")
-        var commands: [Command] = []
-
-        for metalFile in metalFiles {
-            let inputURL = metalFile.url
-            let isCIKernel = inputURL.lastPathComponent.contains(".ci.")
-            let mode = isCIKernel ? "ci" : "standard"
-
-            let baseName = inputURL.deletingPathExtension().lastPathComponent
-                .replacingOccurrences(of: ".ci", with: "")
-
-            let iosOutputURL = context.pluginWorkDirectoryURL
-                .appending(path: "\(baseName).iOS.metallib")
-            let macosOutputURL = context.pluginWorkDirectoryURL
-                .appending(path: "\(baseName).macOS.metallib")
-
-            let displayName = isCIKernel
-                ? "Compiling CI Metal Kernel: \(inputURL.lastPathComponent)"
-                : "Compiling Metal Shader: \(inputURL.lastPathComponent)"
-
-            commands.append(
-                .buildCommand(
-                    displayName: displayName,
-                    executable: compilerTool.url,
-                    arguments: [
-                        "--input", inputURL.path(percentEncoded: false),
-                        "--ios-output", iosOutputURL.path(percentEncoded: false),
-                        "--macos-output", macosOutputURL.path(percentEncoded: false),
-                        "--ios-min-version", "14.0",
-                        "--macos-min-version", "11.0",
-                        "--mode", mode,
-                    ],
-                    inputFiles: [inputURL],
-                    outputFiles: [iosOutputURL, macosOutputURL]
-                )
-            )
+        return metalFiles.map { file in
+            buildCommand(for: file.url, compilerTool: compilerTool.url, workDirectory: context.pluginWorkDirectoryURL)
         }
+    }
+}
 
-        return commands
+// MARK: - Shared Logic
+
+extension AemiSDRShaderPlugin {
+    /// Creates a build command for a single Metal file, handling both CI kernel and standard modes.
+    static func buildCommand(for inputURL: URL, compilerTool: URL, workDirectory: URL) -> Command {
+        let isCIKernel = inputURL.lastPathComponent.hasSuffix(".ci.metal")
+        let mode = isCIKernel ? "ci" : "standard"
+
+        let baseName = inputURL.deletingPathExtension().lastPathComponent
+            .replacingOccurrences(of: ".ci", with: "")
+
+        let iosOutputURL = workDirectory.appending(path: "\(baseName).iOS.metallib")
+        let macosOutputURL = workDirectory.appending(path: "\(baseName).macOS.metallib")
+
+        let displayName = isCIKernel
+            ? "Compiling CI Metal Kernel: \(inputURL.lastPathComponent)"
+            : "Compiling Metal Shader: \(inputURL.lastPathComponent)"
+
+        return .buildCommand(
+            displayName: displayName,
+            executable: compilerTool,
+            arguments: [
+                "--input", inputURL.path(percentEncoded: false),
+                "--ios-output", iosOutputURL.path(percentEncoded: false),
+                "--macos-output", macosOutputURL.path(percentEncoded: false),
+                "--ios-min-version", "14.0",
+                "--macos-min-version", "11.0",
+                "--mode", mode,
+            ],
+            inputFiles: [inputURL],
+            outputFiles: [iosOutputURL, macosOutputURL]
+        )
+    }
+
+    func buildCommand(for inputURL: URL, compilerTool: URL, workDirectory: URL) -> Command {
+        Self.buildCommand(for: inputURL, compilerTool: compilerTool, workDirectory: workDirectory)
     }
 }
 
@@ -80,44 +84,9 @@ extension AemiSDRShaderPlugin: XcodeBuildToolPlugin {
         }
 
         let compilerTool = try context.tool(named: "MetalCompilerTool")
-        var commands: [Command] = []
-
-        for metalFile in metalFiles {
-            let inputURL = metalFile.url
-            let isCIKernel = inputURL.lastPathComponent.contains(".ci.")
-            let mode = isCIKernel ? "ci" : "standard"
-
-            let baseName = inputURL.deletingPathExtension().lastPathComponent
-                .replacingOccurrences(of: ".ci", with: "")
-
-            let iosOutputURL = context.pluginWorkDirectoryURL
-                .appending(path: "\(baseName).iOS.metallib")
-            let macosOutputURL = context.pluginWorkDirectoryURL
-                .appending(path: "\(baseName).macOS.metallib")
-
-            let displayName = isCIKernel
-                ? "Compiling CI Metal Kernel: \(inputURL.lastPathComponent)"
-                : "Compiling Metal Shader: \(inputURL.lastPathComponent)"
-
-            commands.append(
-                .buildCommand(
-                    displayName: displayName,
-                    executable: compilerTool.url,
-                    arguments: [
-                        "--input", inputURL.path(percentEncoded: false),
-                        "--ios-output", iosOutputURL.path(percentEncoded: false),
-                        "--macos-output", macosOutputURL.path(percentEncoded: false),
-                        "--ios-min-version", "14.0",
-                        "--macos-min-version", "11.0",
-                        "--mode", mode,
-                    ],
-                    inputFiles: [inputURL],
-                    outputFiles: [iosOutputURL, macosOutputURL]
-                )
-            )
+        return metalFiles.map { file in
+            buildCommand(for: file.url, compilerTool: compilerTool.url, workDirectory: context.pluginWorkDirectoryURL)
         }
-
-        return commands
     }
 }
 #endif
