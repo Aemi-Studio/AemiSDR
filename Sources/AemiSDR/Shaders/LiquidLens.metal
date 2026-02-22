@@ -363,6 +363,13 @@ fragment half4 liquidLensFragment(
     float displacementScale = minHalf * absStrength * effectIntensity * 2.0f;
 
     float dispGreen = deviationGreen * displacementScale * signFactor;
+
+    // Fast path: when chromatic aberration is zero, all channels share the same displacement
+    if (clampedChromatic < 0.0001f) {
+        float2 uv = (position + outwardDir * dispGreen) / uniforms.textureSize;
+        return sourceTexture.sample(texSampler, uv);
+    }
+
     float dispRed   = mix(dispGreen, deviationRed * displacementScale * signFactor, clampedChromatic);
     float dispBlue  = mix(dispGreen, deviationBlue * displacementScale * signFactor, clampedChromatic);
 

@@ -144,6 +144,15 @@
             encoder.endEncoding()
 
             commandBuffer.present(drawable)
+
+            #if DEBUG
+            commandBuffer.addCompletedHandler { buffer in
+                if let error = buffer.error {
+                    Self.logger.error("GPU command buffer error: \(error.localizedDescription)")
+                }
+            }
+            #endif
+
             commandBuffer.commit()
         }
 
