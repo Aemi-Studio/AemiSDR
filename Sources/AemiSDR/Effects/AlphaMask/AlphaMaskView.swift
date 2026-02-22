@@ -28,11 +28,11 @@
     /// // Linear gradient mask
     /// AlphaMaskView(type: .linearTopToBottom, startOffset: 0.2)
     ///
-    /// // Rounded rectangle mask
+    /// // Superellipse squircle mask with eased transition
     /// AlphaMaskView(cornerRadius: 20, fadeWidth: 40)
     ///
-    /// // Superellipse squircle mask
-    /// AlphaMaskView(cornerRadius: 16, exponent: 2, transition: .eased)
+    /// // Rounded rectangle mask with continuous corners
+    /// AlphaMaskView(.continuous, cornerRadius: 16, fadeWidth: 24)
     /// ```
     public struct AlphaMaskView: UIViewRepresentable {
         // MARK: - Configuration Properties
