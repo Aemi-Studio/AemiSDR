@@ -1,13 +1,15 @@
 # AemiSDR
 
-A lightweight, App Store-safe library for adding dynamic, GPU-accelerated blurs and masks to your SwiftUI views.
+A lightweight, App Store-safe SwiftUI library for GPU-accelerated blurs, masks, visual effects, and physics-based lens distortion.
 
-AemiSDR is designed to work seamlessly with `ScrollView` and other dynamic content, providing high-performance effects with a simple, modifier-based API.
+AemiSDR works seamlessly with `ScrollView` and dynamic content, providing high-performance effects through a modifier-based API.
 
-- **Variable Blur**: Apply blurs as a gradient.
-- **Alpha Masks**: Fade view content with alpha masks.
-- **Advanced Shapes**: Use standard rounded rectangles or iOS-style superellipses (squircles).
-- **Optimized**: Effects are powered by Metal shaders (compiled automatically via build plugin) and cache their results to ensure smooth performance.
+- **Variable Blur**: Gradient-driven blur with rounded rectangle and superellipse shapes (iOS)
+- **Alpha Masks**: Fade content edges with configurable mask shapes (iOS)
+- **Visual Effect**: Customizable backdrop blur with tint, saturation, and system material presets (iOS + macOS)
+- **Liquid Lens**: Physics-based refraction with chromatic aberration and Sellmeier dispersion (iOS)
+- **Display Corner Radius**: Retrieve the device's actual screen corner radius (iOS)
+- **Optimized**: Metal shaders compiled automatically via SPM build plugin, with result caching and zero-copy texture bridging
 
 
 <details>
@@ -22,7 +24,7 @@ https://github.com/user-attachments/assets/41c106cc-6c1d-4a43-bbaa-09cf44c9bfcc
 
 ## Requirements
 
-- iOS 14+
+- iOS 14+ / macOS 11+
 - Swift 6.2 Toolchain
 - SwiftUI
 
@@ -37,59 +39,156 @@ Add the package in Xcode (`File` → `Add Package Dependencies…`) using the re
 ]
 ```
 
-## Example
+## Usage
 
-Apply blurs and masks directly to your views. The library is perfect for fading the edges of a `ScrollView`, as shown in the project's preview:
+### Scroll View Edge Fade
+
+Combine blurs and masks to fade the edges of a `ScrollView`:
 
 ```swift
 import SwiftUI
 import AemiSDR
 
-struct AemiSDRPreview: View {
+struct ContentView: View {
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            LazyVStack(spacing: 16) {
-                ForEach(1 ... 6, id: \.self) { index in
-                    Image("Image_\(index)", bundle: .module)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .clipShape(clippingShape)
-                }
-            }
-            .padding(.horizontal)
+        ScrollView {
+            // your content
         }
-        .fancyBlur()
-    }
-
-    private var clippingShape: some Shape {
-        .rect(cornerRadius: UIScreen.displayCornerRadius - 16)
-    }
-}
-
-private extension View {
-    @ViewBuilder func fancyBlur() -> some View {
-        if #available(iOS 15.0, *) {
-            roundedRectMask()
-                .verticalEdgeMask(height: 32)
-                .roundedRectBlur()
-                .verticalEdgeBlur(height: 48, maxBlurRadius: 5)
-        } else {
-            self
-        }
+        .roundedRectMask()
+        .verticalEdgeMask(height: 32)
+        .roundedRectBlur()
+        .verticalEdgeBlur(height: 48, maxBlurRadius: 5)
     }
 }
 ```
 
+### Frosted Glass Background
+
+```swift
+Text("Hello")
+    .padding()
+    .frostedGlassBackground(blurRadius: 20, tintOpacity: 0.15)
+```
+
+### System Material Blur
+
+```swift
+// Use a system material preset
+VisualEffectView(configuration: .ultraThinMaterial)
+
+// Or customize fully
+Text("Overlay")
+    .padding()
+    .visualEffectBackground(blurRadius: 25, colorTint: .blue, colorTintAlpha: 0.1)
+```
+
+### Liquid Lens Distortion
+
+```swift
+Image("photo")
+    .resizable()
+    .aspectRatio(contentMode: .fit)
+    .liquidLens(
+        center: SIMD2(200, 300),
+        halfSize: SIMD2(150, 150),
+        material: .flintGlass,
+        clipShape: Circle()
+    )
+```
+
+Or use auto-capture mode to distort live content (e.g. a scroll view underneath):
+
+```swift
+ScrollView {
+    // content
+}
+.liquidLens(
+    center: SIMD2(Float(position.x), Float(position.y)),
+    halfSize: SIMD2(120, 120),
+    strength: 1.5,
+    material: .diamond,
+    continuousCapture: true,
+    refreshRate: 30
+)
+```
+
+
 ## API
 
-The library provides four main SwiftUI modifiers (iOS 15+):
+### Variable Blur (iOS 15+)
 
-- `roundedRectBlur(...)`: An overlay blur shaped like a rounded rectangle or superellipse.
-- `verticalEdgeBlur(...)`: A blur applied only to the top and bottom edges of a view.
-- `roundedRectMask(...)`: An alpha mask to fade content, shaped as a rounded rectangle or superellipse.
-- `verticalEdgeMask(...)`: An alpha mask for the top and bottom edges, perfect for scroll views.
+| Modifier | Description |
+|---|---|
+| `roundedRectBlur(...)` | Overlay blur shaped as a rounded rectangle or superellipse |
+| `verticalEdgeBlur(...)` | Blur applied to the top and/or bottom edges of a view |
+
+### Alpha Mask (iOS 15+)
+
+| Modifier | Description |
+|---|---|
+| `roundedRectMask(...)` | Alpha mask shaped as a rounded rectangle or superellipse |
+| `verticalEdgeMask(...)` | Alpha mask for vertical edges, ideal for scroll views |
+
+### Visual Effect (iOS 15+ / macOS 12+)
+
+| Modifier | Description |
+|---|---|
+| `visualEffectBackground(...)` | Customizable blur as a background layer |
+| `visualEffectOverlay(...)` | Customizable blur as an overlay layer |
+| `frostedGlassBackground(...)` | Convenience frosted glass effect |
+| `tintedBlurBackground(...)` | Colored blur background |
+
+Configuration-based API with system presets:
+
+```swift
+// System presets (iOS): .light, .dark, .extraLight, .ultraThinMaterial,
+//                       .thinMaterial, .material, .thickMaterial, .chromeMaterial
+VisualEffectView(configuration: .material)
+
+// Custom configuration
+var config = VisualEffectConfiguration()
+config.blurRadius = 20
+config.saturationDeltaFactor = 1.8
+config.colorTint = .blue
+config.colorTintAlpha = 0.1
+VisualEffectView(configuration: config)
+```
+
+### Liquid Lens (iOS 15+)
+
+| Modifier | Description |
+|---|---|
+| `liquidLens(configuration:...)` | Lens distortion from a `LiquidLensConfiguration` |
+| `liquidLens(center:halfSize:...)` | Lens distortion with inline parameters |
+| `liquidLens(image:...)` | Lens distortion using an explicit source image |
+
+Key configuration options:
+
+- **Materials**: `.crownGlass`, `.flintGlass`, `.water`, `.acrylic`, `.diamond` — each with physically-based Sellmeier dispersion coefficients
+- **Falloff curves**: `.linear`, `.easeIn`, `.easeOut`, `.easeInOut`, `.cubic`, `.exponential`
+- **Corner radius**: `.proportional(Float)` or `.points(Float)`
+- **Clip shapes**: Any SwiftUI `Shape` (iOS 16+), or use `LiquidLensClipShape.circle`, `.capsule`, `.roundedRect(cornerRadius:)`
+
+### Display Corner Radius (iOS)
+
+```swift
+// Static accessor
+let radius = UIScreen.displayCornerRadius
+
+// From a specific view context
+let radius = myView.screenCornerRadius
+```
 
 All modifiers come with sensible defaults and can be customized for corner style, transition smoothness, and more.
+
+## Demo App
+
+A full demo app is included in `Examples/AemiSDRDemo/` with tabbed views showcasing each effect:
+
+- **Blur**: Variable blur configurations
+- **Mask**: Alpha mask examples
+- **Glass**: Visual effect presets and custom blurs
+- **Lens**: Interactive liquid lens with drag gesture
 
 
 ## Development
