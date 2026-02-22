@@ -98,9 +98,8 @@
         /// Captures the given view's rendered content and uses it as the source texture.
         public func captureContent(of view: UIView) {
             guard bounds.width > 0, bounds.height > 0 else { return }
-            let scale = window?.screen.scale ?? UIScreen.main.scale
             let format = UIGraphicsImageRendererFormat()
-            format.scale = scale
+            format.scale = displayScale
             format.opaque = false
             let renderer = UIGraphicsImageRenderer(bounds: view.bounds, format: format)
             let image = renderer.image { _ in
@@ -120,11 +119,10 @@
 
         override open func layoutSubviews() {
             super.layoutSubviews()
-            let scale = window?.screen.scale ?? UIScreen.main.scale
-            metalLayer.contentsScale = scale
+            metalLayer.contentsScale = displayScale
             metalLayer.drawableSize = CGSize(
-                width: bounds.width * scale,
-                height: bounds.height * scale
+                width: bounds.width * displayScale,
+                height: bounds.height * displayScale
             )
             updateClipMask()
             renderIfNeeded()
@@ -133,11 +131,10 @@
         override open func didMoveToWindow() {
             super.didMoveToWindow()
             guard window != nil else { return }
-            let scale = window?.screen.scale ?? UIScreen.main.scale
-            metalLayer.contentsScale = scale
+            metalLayer.contentsScale = displayScale
             metalLayer.drawableSize = CGSize(
-                width: bounds.width * scale,
-                height: bounds.height * scale
+                width: bounds.width * displayScale,
+                height: bounds.height * displayScale
             )
             renderIfNeeded()
         }

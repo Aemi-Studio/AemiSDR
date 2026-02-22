@@ -5,6 +5,19 @@
 
 import SwiftUI
 
+#if os(iOS)
+    import UIKit
+
+    // MARK: - UIView Display Scale
+
+    extension UIView {
+        /// The current display scale factor, falling back to the main screen scale.
+        var displayScale: CGFloat {
+            window?.screen.scale ?? UIScreen.main.scale
+        }
+    }
+#endif
+
 // MARK: - Internal View Extensions
 
 extension View {

@@ -43,9 +43,7 @@
         private var configuredInverted: Bool
 
         /// Current display scale, used for pixel-accurate mask generation
-        private var currentScale: CGFloat {
-            window?.screen.scale ?? UIScreen.main.scale
-        }
+        private var currentScale: CGFloat { displayScale }
 
         // MARK: - Initialization
 
@@ -152,107 +150,16 @@
             backgroundColor = .white
         }
 
-        /// Generates the actual alpha mask image using Metal shaders.
-        ///
-        /// This method calls the appropriate shader kernel based on the configured mask type
-        /// and returns a CGImage that can be used as a layer mask. All generation happens
-        /// on the GPU for optimal performance.
-        ///
-        /// - Parameters:
-        ///   - size: The size in points for the mask
-        ///   - scale: The display scale for pixel-accurate rendering
-        /// - Returns: A CGImage containing the alpha mask, or nil if generation fails
         private func generateAlphaMask(size: CGSize, scale: CGFloat) -> CGImage? {
-            // Calculate pixel dimensions
             let scaledWidth = max(1, ceil(size.width * scale))
             let scaledHeight = max(1, ceil(size.height * scale))
             let extent = CGRect(x: 0, y: 0, width: scaledWidth, height: scaledHeight)
-
-            // Generate appropriate mask based on type
-            switch configuredMaskType {
-            case .linearTopToBottom:
-                let inverted = configuredInverted ? 1.0 : 0.0
-                let args: [Any] = [scaledWidth, scaledHeight, configuredStartOffset, inverted]
-                return AlphaMaskCache.generateCGImage(
-                    kernel: AlphaMaskCache.linearMask,
-                    extent: extent,
-                    arguments: args
-                )
-
-            case .linearBottomToTop:
-                // Flip logic for bottom-to-top direction
-                let inverted = configuredInverted ? 0.0 : 1.0
-                let args: [Any] = [scaledWidth, scaledHeight, configuredStartOffset, inverted]
-                return AlphaMaskCache.generateCGImage(
-                    kernel: AlphaMaskCache.linearMask,
-                    extent: extent,
-                    arguments: args
-                )
-
-            case .easeInTopToBottom:
-                // Ease-in gradient from top, startOffset defines easing start point
-                let inverted = configuredInverted ? 1.0 : 0.0
-                let args: [Any] = [scaledWidth, scaledHeight, configuredStartOffset, 0.0, inverted]
-                return AlphaMaskCache.generateCGImage(
-                    kernel: AlphaMaskCache.easeInAlphaMask,
-                    extent: extent,
-                    arguments: args
-                )
-
-            case .easeInBottomToTop:
-                let inverted = configuredInverted ? 1.0 : 0.0
-                let args: [Any] = [scaledWidth, scaledHeight, configuredStartOffset, 1.0, inverted]
-                return AlphaMaskCache.generateCGImage(
-                    kernel: AlphaMaskCache.easeInAlphaMask,
-                    extent: extent,
-                    arguments: args
-                )
-
-            case .roundedRectangle:
-                // Standard rounded rectangle with linear falloff
-                let scaledCornerRadius = configuredCornerRadius * scale
-                let scaledFadeWidth = configuredFadeWidth * scale
-                let inverted = configuredInverted ? 1.0 : 0.0
-                let args: [Any] = [scaledWidth, scaledHeight, scaledCornerRadius, scaledFadeWidth, inverted]
-                return AlphaMaskCache.generateCGImage(
-                    kernel: AlphaMaskCache.roundedRectAlphaMask,
-                    extent: extent,
-                    arguments: args
-                )
-
-            case .easedRoundedRectangle:
-                let scaledCornerRadius = configuredCornerRadius * scale
-                let scaledFadeWidth = configuredFadeWidth * scale
-                let inverted = configuredInverted ? 1.0 : 0.0
-                let args: [Any] = [scaledWidth, scaledHeight, scaledCornerRadius, scaledFadeWidth, inverted]
-                return AlphaMaskCache.generateCGImage(
-                    kernel: AlphaMaskCache.roundedRectEaseAlphaMask,
-                    extent: extent,
-                    arguments: args
-                )
-
-            case .superellipseSquircle:
-                let scaledCornerRadius = configuredCornerRadius * scale
-                let scaledFadeWidth = configuredFadeWidth * scale
-                let inverted = configuredInverted ? 1.0 : 0.0
-                let args: [Any] = [scaledWidth, scaledHeight, scaledCornerRadius, scaledFadeWidth, 2, inverted]
-                return AlphaMaskCache.generateCGImage(
-                    kernel: AlphaMaskCache.superellipseAlphaMask,
-                    extent: extent,
-                    arguments: args
-                )
-
-            case .easedSuperellipseSquircle:
-                let scaledCornerRadius = configuredCornerRadius * scale
-                let scaledFadeWidth = configuredFadeWidth * scale
-                let inverted = configuredInverted ? 1.0 : 0.0
-                let args: [Any] = [scaledWidth, scaledHeight, scaledCornerRadius, scaledFadeWidth, 2, inverted]
-                return AlphaMaskCache.generateCGImage(
-                    kernel: AlphaMaskCache.superellipseEaseAlphaMask,
-                    extent: extent,
-                    arguments: args
-                )
-            }
+            let descriptor = configuredMaskType.kernelDescriptor(
+                size: size, scale: scale, startOffset: configuredStartOffset,
+                cornerRadius: configuredCornerRadius, fadeWidth: configuredFadeWidth,
+                inverted: configuredInverted
+            )
+            return CIKernelCache.generateCGImage(kernel: descriptor.kernel, extent: extent, arguments: descriptor.arguments)
         }
 
         // MARK: - UIView Overrides

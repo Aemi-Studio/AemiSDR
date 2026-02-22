@@ -40,9 +40,7 @@
         private var configuredFadeWidth: CGFloat
         private var variableBlurFilter: NSObject?
 
-        private var currentScale: CGFloat {
-            window?.screen.scale ?? UIScreen.main.scale
-        }
+        private var currentScale: CGFloat { displayScale }
 
         // MARK: - Initialization
 
@@ -185,72 +183,11 @@
             let scaledWidth = max(1, ceil(size.width * scale))
             let scaledHeight = max(1, ceil(size.height * scale))
             let extent = CGRect(x: 0, y: 0, width: scaledWidth, height: scaledHeight)
-
-            switch configuredMaskType {
-            case .linearTopToBottom:
-                return VariableBlurCache.generateCGImage(
-                    kernel: VariableBlurCache.linearMask,
-                    extent: extent,
-                    arguments: [scaledWidth, scaledHeight, configuredStartOffset, 0.0]
-                )
-
-            case .linearBottomToTop:
-                return VariableBlurCache.generateCGImage(
-                    kernel: VariableBlurCache.linearMask,
-                    extent: extent,
-                    arguments: [scaledWidth, scaledHeight, configuredStartOffset, 1.0]
-                )
-
-            case .easeInTopToBottom:
-                return VariableBlurCache.generateCGImage(
-                    kernel: VariableBlurCache.easeInMask,
-                    extent: extent,
-                    arguments: [scaledWidth, scaledHeight, configuredStartOffset, 0.0]
-                )
-
-            case .easeInBottomToTop:
-                return VariableBlurCache.generateCGImage(
-                    kernel: VariableBlurCache.easeInMask,
-                    extent: extent,
-                    arguments: [scaledWidth, scaledHeight, configuredStartOffset, 1.0]
-                )
-
-            case .roundedRectangle:
-                let scaledCornerRadius = configuredCornerRadius * scale
-                let scaledFadeWidth = configuredFadeWidth * scale
-                return VariableBlurCache.generateCGImage(
-                    kernel: VariableBlurCache.roundedRectMask,
-                    extent: extent,
-                    arguments: [scaledWidth, scaledHeight, scaledCornerRadius, scaledFadeWidth]
-                )
-
-            case .easedRoundedRectangle:
-                let scaledCornerRadius = configuredCornerRadius * scale
-                let scaledFadeWidth = configuredFadeWidth * scale
-                return VariableBlurCache.generateCGImage(
-                    kernel: VariableBlurCache.roundedRectEaseMask,
-                    extent: extent,
-                    arguments: [scaledWidth, scaledHeight, scaledCornerRadius, scaledFadeWidth]
-                )
-
-            case .superellipseSquircle:
-                let scaledCornerRadius = configuredCornerRadius * scale
-                let scaledFadeWidth = configuredFadeWidth * scale
-                return VariableBlurCache.generateCGImage(
-                    kernel: VariableBlurCache.superellipseMask,
-                    extent: extent,
-                    arguments: [scaledWidth, scaledHeight, scaledCornerRadius, scaledFadeWidth, 2]
-                )
-
-            case .easedSuperellipseSquircle:
-                let scaledCornerRadius = configuredCornerRadius * scale
-                let scaledFadeWidth = configuredFadeWidth * scale
-                return VariableBlurCache.generateCGImage(
-                    kernel: VariableBlurCache.superellipseEaseMask,
-                    extent: extent,
-                    arguments: [scaledWidth, scaledHeight, scaledCornerRadius, scaledFadeWidth, 2]
-                )
-            }
+            let descriptor = configuredMaskType.kernelDescriptor(
+                size: size, scale: scale, startOffset: configuredStartOffset,
+                cornerRadius: configuredCornerRadius, fadeWidth: configuredFadeWidth, inverted: false
+            )
+            return CIKernelCache.generateCGImage(kernel: descriptor.kernel, extent: extent, arguments: descriptor.arguments)
         }
     }
 #endif
