@@ -1,0 +1,344 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		249C00A56C14F857B23D529C /* AemiSDRDemoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 352B53E6DE749E61A7E27116 /* AemiSDRDemoApp.swift */; };
+		96F19E49E674989A5C816474 /* AemiSDR in Frameworks */ = {isa = PBXBuildFile; productRef = CEA8847E49EFA98FAB92469D /* AemiSDR */; };
+		9DB1CD53D86B7214935637AE /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D86803916D55CF62A3F4C5E /* ContentView.swift */; };
+		E282175F68C72EBEC2A3CFD1 /* LiquidLensDemoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E04ABA3304FE60909C3AAF8 /* LiquidLensDemoView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		2E04ABA3304FE60909C3AAF8 /* LiquidLensDemoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidLensDemoView.swift; sourceTree = "<group>"; };
+		352B53E6DE749E61A7E27116 /* AemiSDRDemoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AemiSDRDemoApp.swift; sourceTree = "<group>"; };
+		3D86803916D55CF62A3F4C5E /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		933E9578A57834EE9CCC63D3 /* AemiSDR */ = {isa = PBXFileReference; lastKnownFileType = folder; name = AemiSDR; path = ../..; sourceTree = SOURCE_ROOT; };
+		D64C8E2AC38905CDDF32F2A6 /* AemiSDRDemo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AemiSDRDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		3FCDDE71C2DFC43E9D9A3687 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				96F19E49E674989A5C816474 /* AemiSDR in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		278EEB55A1DA249E0AE79348 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				933E9578A57834EE9CCC63D3 /* AemiSDR */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		2A5AD1E4719A638D70E5B493 /* AemiSDRDemo */ = {
+			isa = PBXGroup;
+			children = (
+				352B53E6DE749E61A7E27116 /* AemiSDRDemoApp.swift */,
+				3D86803916D55CF62A3F4C5E /* ContentView.swift */,
+				2E04ABA3304FE60909C3AAF8 /* LiquidLensDemoView.swift */,
+			);
+			name = AemiSDRDemo;
+			path = Sources/AemiSDRDemo;
+			sourceTree = "<group>";
+		};
+		92FEBBD6AA2BCD2C5CF88249 = {
+			isa = PBXGroup;
+			children = (
+				2A5AD1E4719A638D70E5B493 /* AemiSDRDemo */,
+				278EEB55A1DA249E0AE79348 /* Packages */,
+				E23D89620AEC4054D6DE2FCB /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		E23D89620AEC4054D6DE2FCB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D64C8E2AC38905CDDF32F2A6 /* AemiSDRDemo.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		C60B804238C1CD616B0DEDDD /* AemiSDRDemo */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 334E9C3BE22A82AEE5D93AB7 /* Build configuration list for PBXNativeTarget "AemiSDRDemo" */;
+			buildPhases = (
+				608F98C2CCF2C1496A89BC11 /* Sources */,
+				3FCDDE71C2DFC43E9D9A3687 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AemiSDRDemo;
+			packageProductDependencies = (
+				CEA8847E49EFA98FAB92469D /* AemiSDR */,
+			);
+			productName = AemiSDRDemo;
+			productReference = D64C8E2AC38905CDDF32F2A6 /* AemiSDRDemo.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		B5016D1D1C02097A6D1E2A78 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					C60B804238C1CD616B0DEDDD = {
+						DevelopmentTeam = NP94WB3P75;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = E34154F69762CFA7AD4B5AFC /* Build configuration list for PBXProject "AemiSDRDemo" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 92FEBBD6AA2BCD2C5CF88249;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				E277BA374F5EAF00B451AB79 /* XCLocalSwiftPackageReference "../.." */,
+			);
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				C60B804238C1CD616B0DEDDD /* AemiSDRDemo */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		608F98C2CCF2C1496A89BC11 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				249C00A56C14F857B23D529C /* AemiSDRDemoApp.swift in Sources */,
+				9DB1CD53D86B7214935637AE /* ContentView.swift in Sources */,
+				E282175F68C72EBEC2A3CFD1 /* LiquidLensDemoView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		268EEB4D1401A22E65E2DAF2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		57101B86F9CD5D7D418C1525 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = NP94WB3P75;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = studio.aemi.AemiSDRDemo;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		5FC5270DD3D1020F54F9D49F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = NP94WB3P75;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = studio.aemi.AemiSDRDemo;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B895AC5A8566E0A8A9BCCEA0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		334E9C3BE22A82AEE5D93AB7 /* Build configuration list for PBXNativeTarget "AemiSDRDemo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5FC5270DD3D1020F54F9D49F /* Debug */,
+				57101B86F9CD5D7D418C1525 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		E34154F69762CFA7AD4B5AFC /* Build configuration list for PBXProject "AemiSDRDemo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B895AC5A8566E0A8A9BCCEA0 /* Debug */,
+				268EEB4D1401A22E65E2DAF2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		E277BA374F5EAF00B451AB79 /* XCLocalSwiftPackageReference "../.." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		CEA8847E49EFA98FAB92469D /* AemiSDR */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AemiSDR;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = B5016D1D1C02097A6D1E2A78 /* Project object */;
+}

@@ -20,28 +20,23 @@
         ///
         /// - Returns: The most contextually relevant screen, or main screen if unavailable
         /// - Note: On watchOS, always returns the main screen since multi-screen isn't supported
-        @available(iOS 13.0, tvOS 13.0, watchOS 6.0, *)
+        @available(iOS 13.0, tvOS 13.0, *)
         public static var activeScreen: UIScreen? {
-            #if os(watchOS)
-                // watchOS always uses the main (and only) screen
-                UIScreen.main
-            #else
-                // Find the most active window scene and use its screen
-                UIApplication.shared.connectedScenes
-                    .compactMap { $0 as? UIWindowScene }
-                    .filter { $0.activationState != .unattached }
-                    .sorted { lhs, rhs in
-                        // Prioritize foreground active over background active
-                        if lhs.activationState == .foregroundActive, rhs.activationState != .foregroundActive {
-                            return true
-                        } else if rhs.activationState == .foregroundActive, lhs.activationState != .foregroundActive {
-                            return false
-                        }
-                        return lhs.activationState.rawValue < rhs.activationState.rawValue
+            // Find the most active window scene and use its screen
+            UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .filter { $0.activationState != .unattached }
+                .sorted { lhs, rhs in
+                    // Prioritize foreground active over background active
+                    if lhs.activationState == .foregroundActive, rhs.activationState != .foregroundActive {
+                        return true
+                    } else if rhs.activationState == .foregroundActive, lhs.activationState != .foregroundActive {
+                        return false
                     }
-                    .first?
-                    .screen ?? UIScreen.main
-            #endif
+                    return lhs.activationState.rawValue < rhs.activationState.rawValue
+                }
+                .first?
+                .screen ?? UIScreen.main
         }
 
         /// The display corner radius for this screen instance.
@@ -59,7 +54,7 @@
         ///
         /// This is a convenience method that attempts to find an appropriate screen
         /// context and retrieve its corner radius with intelligent fallbacks.
-        @available(iOS 13.0, tvOS 13.0, watchOS 6.0, *)
+        @available(iOS 13.0, tvOS 13.0, *)
         public static var displayCornerRadius: CGFloat {
             getDisplayCornerRadius()
         }
@@ -74,28 +69,16 @@
         ///
         /// - Parameter context: Optional context to determine which screen to use
         /// - Returns: The corner radius in points, or an estimated value if unavailable
-        @available(iOS 13.0, tvOS 13.0, watchOS 6.0, *)
+        @available(iOS 13.0, tvOS 13.0, *)
         internal static func getDisplayCornerRadius(from context: UICornerContext? = nil) -> CGFloat {
             let screen: UIScreen? =
                 switch context {
                 case .view(let view):
-                    // Traverse view hierarchy to find the containing screen
-                    #if os(watchOS)
-                        // On watchOS, there's typically only one screen
-                        activeScreen
-                    #else
-                        view.window?.windowScene?.screen
-                    #endif
-
-                #if !os(watchOS)
-                    case .window(let window):
-                        // Direct access to window's screen
-                        window.windowScene?.screen
-                    case .windowScene(let windowScene):
-                        // Direct access to scene's screen
-                        windowScene.screen
-                #endif
-
+                    view.window?.windowScene?.screen
+                case .window(let window):
+                    window.windowScene?.screen
+                case .windowScene(let windowScene):
+                    windowScene.screen
                 case .none:
                     activeScreen
                 }
@@ -115,48 +98,21 @@
 
             switch idiom {
             case .phone:
-                // Modern iPhones typically have ~42pt corner radius
                 return 42.0
             case .pad:
-                // iPads have smaller relative corner radius
                 return 20.0
             case .tv:
-                // Apple TV interfaces typically don't have rounded corners
                 return 0.0
-            #if !os(watchOS)
-                case .carPlay:
-                    // CarPlay displays vary, use conservative estimate
-                    return 8.0
-                case .mac:
-                    // Mac displays typically don't have rounded corners in UIKit apps
-                    return 0.0
-                case .vision:
-                    // Vision Pro apps may have rounded corners
-                    return 16.0
-            #endif
-            #if os(watchOS)
-                case .watch:
-                    // Apple Watch has significant corner radius
-                    // Values vary by watch size: 38mm/40mm/41mm ≈ 8pt, 42mm/44mm/45mm/49mm ≈ 10pt
-                    // Use activeScreen for better accuracy in case of future multi-screen watch support
-                    let screenSize = (activeScreen ?? UIScreen.main).bounds.size
-                    let maxDimension = max(screenSize.width, screenSize.height)
-                    return maxDimension > 200 ? 10.0 : 8.0
-            #endif
+            case .carPlay:
+                return 8.0
+            case .mac:
+                return 0.0
+            case .vision:
+                return 16.0
             case .unspecified:
-                // Unspecified device type - use conservative fallback
-                #if os(watchOS)
-                    return 8.0  // Assume watch-like behavior for unknown watchOS devices
-                #else
-                    return 0.0  // Conservative for other platforms
-                #endif
+                return 0.0
             @unknown default:
-                // Conservative fallback for future device types
-                #if os(watchOS)
-                    return 8.0  // Assume watch-like behavior for unknown watchOS devices
-                #else
-                    return 0.0  // Conservative for other platforms
-                #endif
+                return 0.0
             }
         }
     }
@@ -185,19 +141,12 @@
         }
     }
 
-    #if !os(watchOS)
-        extension UICornerDiscoverable where Self: UIWindow {
-            /// Get the corner radius for this window's screen.
-            ///
-            /// Directly accesses the window's associated screen.
-            /// Returns 0 if no screen context can be determined.
-            ///
-            /// - Note: Not available on watchOS as UIWindow doesn't conform to UICornerDiscoverable there.
-            var screenCornerRadius: CGFloat {
-                UIScreen.getDisplayCornerRadius(from: .window(self))
-            }
+    extension UICornerDiscoverable where Self: UIWindow {
+        /// Get the corner radius for this window's screen.
+        var screenCornerRadius: CGFloat {
+            UIScreen.getDisplayCornerRadius(from: .window(self))
         }
-    #endif
+    }
 
     // MARK: - Default Conformances
 

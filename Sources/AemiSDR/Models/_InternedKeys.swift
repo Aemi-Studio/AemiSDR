@@ -81,6 +81,5 @@ package enum _InternedKeys {
 
     #if os(macOS)
         @Interned static var _backdropLayer = "_backdropLayer"
-        @Interned static var backgroundFilters = "backgroundFilters"
     #endif
 }
