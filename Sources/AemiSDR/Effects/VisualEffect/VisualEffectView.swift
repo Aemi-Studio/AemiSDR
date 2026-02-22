@@ -196,7 +196,9 @@ import SwiftUI
         public func makeNSView(context _: Context) -> NSVisualEffectView {
             let view = NSVisualEffectView()
             view.autoresizingMask = [.width, .height]
-            configureView(view)
+            view.blendingMode = .behindWindow
+            view.state = .active
+            view.material = .popover
             return view
         }
 
@@ -212,11 +214,6 @@ import SwiftUI
         // MARK: - Private Helpers
 
         private func configureView(_ view: NSVisualEffectView) {
-            // Set a base material to initialize the layer hierarchy
-            view.blendingMode = .behindWindow
-            view.state = .active
-            view.material = .popover
-
             let config = configuration ?? VisualEffectConfiguration(
                 blurRadius: blurRadius,
                 scale: scale,
@@ -224,40 +221,45 @@ import SwiftUI
                 colorTintAlpha: colorTintAlpha
             )
 
-            // Force layout so the backdrop layer hierarchy is created
-            view.layoutSubtreeIfNeeded()
+            // Defer filter application to avoid re-entrant constraint updates.
+            // SwiftUI calls updateNSView during layout passes; modifying the
+            // layer tree at that point crashes on macOS 26+.
+            DispatchQueue.main.async { [config] in
+                // If the backdrop layer isn't available yet (view not in
+                // a window), skip — the material's default blur is fine
+                // and we'll apply on the next updateNSView cycle.
+                guard view.backdropLayer != nil else { return }
 
-            // Override filter values on the internal backdrop layer
-            if let backdrop = view.backdropLayer {
-                // gaussianBlur.inputRadius -> blurRadius
-                if let blur = view.gaussianBlurFilter {
-                    blur.setValue(config.blurRadius, forKey: _InternedKeys.inputRadius)
-                }
-
-                // colorSaturate.inputAmount -> saturationDeltaFactor
-                if let saturate = view.colorSaturateFilter {
-                    let amount = config.saturationDeltaFactor > 0 ? config.saturationDeltaFactor : 1.0
-                    saturate.setValue(amount, forKey: _InternedKeys.inputAmount)
-                }
-
-                // colorBrightness.inputAmount -> derived from grayscale/darkening
-                if let brightness = view.colorBrightnessFilter {
-                    let brightnessAmount = config.grayscaleTintLevel > 0
-                        ? config.grayscaleTintLevel - 1.0
-                        : -config.darkeningTintAlpha
-                    brightness.setValue(brightnessAmount, forKey: _InternedKeys.inputAmount)
-                }
-
-                // backdropLayer.scale
-                backdrop.setValue(config.scale, forKey: _InternedKeys.scale)
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                Self.applyFilterValues(config, to: view)
+                Self.applyTintLayer(config, to: view)
+                CATransaction.commit()
             }
-
-            // Manage tint sublayer
-            configureTintLayer(on: view, with: config)
         }
 
-        private func configureTintLayer(on view: NSVisualEffectView, with config: VisualEffectConfiguration) {
-            // Find or create the tint sublayer
+        private static func applyFilterValues(
+            _ config: VisualEffectConfiguration,
+            to view: NSVisualEffectView
+        ) {
+            guard let backdrop = view.backdropLayer else { return }
+
+            if let blur = view.gaussianBlurFilter {
+                blur.setValue(config.blurRadius, forKey: _InternedKeys.inputRadius)
+            }
+
+            if let saturate = view.colorSaturateFilter {
+                let amount = config.saturationDeltaFactor > 0 ? config.saturationDeltaFactor : 1.0
+                saturate.setValue(amount, forKey: _InternedKeys.inputAmount)
+            }
+
+            backdrop.setValue(config.scale, forKey: _InternedKeys.scale)
+        }
+
+        private static func applyTintLayer(
+            _ config: VisualEffectConfiguration,
+            to view: NSVisualEffectView
+        ) {
             let existingTint = view.layer?.sublayers?.first { $0.name == "AemiSDR.tint" }
 
             guard let tintColor = config.colorTint, config.colorTintAlpha > 0 else {
@@ -272,13 +274,6 @@ import SwiftUI
             tintLayer.backgroundColor = nsColor.cgColor
             tintLayer.frame = view.bounds
             tintLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
-
-            // Apply compositing filter via CIFilter name
-            if config.darkenWithSourceOver {
-                tintLayer.compositingFilter = CIFilter(name: "CIMultiplyBlendMode")
-            } else {
-                tintLayer.compositingFilter = CIFilter(name: "CISourceOverCompositing")
-            }
 
             if existingTint == nil {
                 view.layer?.addSublayer(tintLayer)

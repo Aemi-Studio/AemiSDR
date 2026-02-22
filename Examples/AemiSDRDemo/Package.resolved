@@ -1,0 +1,24 @@
+{
+  "originHash" : "bb533f08beee38aab3b1ba58dea7feb0442513cfd9568cbc5db577c9ac3db9d2",
+  "pins" : [
+    {
+      "identity" : "internedstrings",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/g-cqd/InternedStrings.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "8aa92bfa4bb342af4bf494b43009c757878f344e"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax.git",
+      "state" : {
+        "revision" : "4799286537280063c85a32f09884cfbca301b1a1",
+        "version" : "602.0.0"
+      }
+    }
+  ],
+  "version" : 3
+}

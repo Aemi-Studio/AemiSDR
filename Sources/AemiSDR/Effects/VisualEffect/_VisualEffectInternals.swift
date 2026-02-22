@@ -3,6 +3,32 @@
 //  AemiSDR
 //
 
+// MARK: - Shared Filter Value Access
+
+extension NSObject {
+    /// Finds a filter object by its type within a KVC-accessible array.
+    ///
+    /// Used on both platforms to traverse private `CAFilter` / view-effect arrays.
+    /// Checks `filterType` (iOS / older macOS), then `type` and `name` (macOS 26+)
+    /// where CAFilter changed its key layout.
+    func _filterValue(forKey key: String, filterType: String) -> NSObject? {
+        guard let objects = value(forKeyPath: key) as? [NSObject] else {
+            return nil
+        }
+        return objects.first { filter in
+            for lookupKey in [_InternedKeys.filterType, "type", "name"] {
+                if filter.responds(to: NSSelectorFromString(lookupKey)),
+                   let value = filter.value(forKeyPath: lookupKey) as? String,
+                   value == filterType
+                {
+                    return true
+                }
+            }
+            return false
+        }
+    }
+}
+
 #if os(iOS)
     import UIKit
 
@@ -21,6 +47,10 @@
             backdropView?._filterValue(forKey: _InternedKeys.filters, filterType: _InternedKeys.gaussianBlur)
         }
 
+        var colorSaturate: NSObject? {
+            backdropView?._filterValue(forKey: _InternedKeys.filters, filterType: _InternedKeys.colorSaturate)
+        }
+
         var sourceOver: NSObject? {
             overlayView?._filterValue(forKey: _InternedKeys.viewEffects, filterType: _InternedKeys.sourceOver)
         }
@@ -31,23 +61,16 @@
         }
 
         func applyChanges() {
-            backdropView?.perform(Selector(_InternedKeys.applyRequestedFilterEffects))
+            _ = unsafe backdropView?.perform(Selector(_InternedKeys.applyRequestedFilterEffects))
         }
     }
 
-    // MARK: - NSObject Filter Value Access
+    // MARK: - NSObject Requested Values (iOS)
 
     extension NSObject {
         var requestedValues: [String: Any]? {
             get { value(forKeyPath: _InternedKeys.requestedValues) as? [String: Any] }
             set { setValue(newValue, forKeyPath: _InternedKeys.requestedValues) }
-        }
-
-        func _filterValue(forKey key: String, filterType: String) -> NSObject? {
-            guard let objects = value(forKeyPath: key) as? [NSObject] else {
-                return nil
-            }
-            return objects.first { $0.value(forKeyPath: _InternedKeys.filterType) as? String == filterType }
         }
     }
 
@@ -65,35 +88,37 @@
     // MARK: - NSVisualEffectView Internal Access
 
     extension NSVisualEffectView {
-        /// Access the internal CABackdropLayer via KVC.
+        /// Access the internal `CABackdropLayer` from the layer tree.
+        ///
+        /// On macOS < 26 this tries the `_backdropLayer` KVC property first.
+        /// On macOS 26+ that property was removed, so we fall back to
+        /// traversing the layer hierarchy to find the `CABackdropLayer`.
         var backdropLayer: CALayer? {
-            value(forKey: _InternedKeys._backdropLayer) as? CALayer
+            if responds(to: NSSelectorFromString(_InternedKeys._backdropLayer)),
+               let layer = value(forKey: _InternedKeys._backdropLayer) as? CALayer
+            {
+                return layer
+            }
+            func find(in layer: CALayer) -> CALayer? {
+                if NSStringFromClass(type(of: layer)) == "CABackdropLayer" { return layer }
+                return layer.sublayers?.lazy.compactMap { find(in: $0) }.first
+            }
+            return layer.flatMap { find(in: $0) }
         }
 
-        /// Read the gaussianBlur CAFilter from the backdrop layer's filters array.
+        /// The `gaussianBlur` CAFilter from the backdrop layer's filters array.
         var gaussianBlurFilter: NSObject? {
             backdropLayer?._filterValue(forKey: _InternedKeys.filters, filterType: _InternedKeys.gaussianBlur)
         }
 
-        /// Read the colorSaturate CAFilter from the backdrop layer's filters array.
+        /// The `colorSaturate` CAFilter from the backdrop layer's filters array.
         var colorSaturateFilter: NSObject? {
             backdropLayer?._filterValue(forKey: _InternedKeys.filters, filterType: _InternedKeys.colorSaturate)
         }
 
-        /// Read the colorBrightness CAFilter from the backdrop layer's filters array.
+        /// The `colorBrightness` CAFilter from the backdrop layer's filters array.
         var colorBrightnessFilter: NSObject? {
             backdropLayer?._filterValue(forKey: _InternedKeys.filters, filterType: _InternedKeys.colorBrightness)
-        }
-    }
-
-    // MARK: - NSObject Filter Value Access
-
-    extension NSObject {
-        func _filterValue(forKey key: String, filterType: String) -> NSObject? {
-            guard let objects = value(forKeyPath: key) as? [NSObject] else {
-                return nil
-            }
-            return objects.first { $0.value(forKeyPath: _InternedKeys.filterType) as? String == filterType }
         }
     }
 #endif
