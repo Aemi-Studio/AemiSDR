@@ -5,6 +5,28 @@
 
 import simd
 
+/// How corner radius is specified for the liquid lens shape.
+public enum LiquidLensCornerRadius: Sendable, Equatable, Hashable {
+    /// A fraction of the longer half-size dimension (0 = square, 1 = fully rounded).
+    ///
+    /// At 1.0, the corner radius equals `max(halfSize.x, halfSize.y)`,
+    /// which the shader clamps to `min(halfSize.x, halfSize.y)` producing a capsule or circle.
+    case proportional(Float)
+
+    /// An explicit value in points.
+    case points(Float)
+
+    /// Resolves to a corner radius in points for the given half-size.
+    internal func resolve(halfSize: SIMD2<Float>) -> Float {
+        switch self {
+        case .proportional(let fraction):
+            return fraction * max(halfSize.x, halfSize.y)
+        case .points(let pts):
+            return pts
+        }
+    }
+}
+
 /// Uniform buffer matching the Metal `LiquidLensUniforms` struct layout.
 ///
 /// This struct must remain byte-identical to the Metal-side definition.
@@ -12,7 +34,7 @@ import simd
 public struct LiquidLensUniforms: Sendable, Equatable {
     public var center: SIMD2<Float>
     public var textureSize: SIMD2<Float>
-    public var radius: Float
+    public var halfSize: SIMD2<Float>
     public var strength: Float
     public var lensCurvature: Float
     public var cornerRadius: Float
@@ -27,15 +49,15 @@ public struct LiquidLensUniforms: Sendable, Equatable {
 
 /// Configuration for the liquid lens distortion effect.
 ///
-/// All spatial values (center, radius, cornerRadius) are in points and will be
+/// All spatial values (center, halfSize, cornerRadius) are in points and will be
 /// converted to pixel coordinates by `toUniforms(textureSize:)`.
 public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
 
     /// Center of the lens effect in points.
     public var center: SIMD2<Float>
 
-    /// Half-size of the lens region in points.
-    public var radius: Float
+    /// Half-size of the lens region in points (width/2, height/2).
+    public var halfSize: SIMD2<Float>
 
     /// Overall effect strength multiplier. Negative values invert the lens.
     public var strength: Float
@@ -43,13 +65,13 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
     /// Lens surface curvature (0 = flat, 1 = hemisphere).
     public var lensCurvature: Float
 
-    /// Corner rounding for the lens shape (0 = square, radius = circle).
-    public var cornerRadius: Float
+    /// Corner rounding for the lens shape.
+    public var cornerRadius: LiquidLensCornerRadius
 
     /// Falloff transition curve.
     public var falloff: LiquidLensFalloff
 
-    /// Distance from edge where falloff reaches zero (0–1, fraction of radius).
+    /// Distance from edge where falloff reaches zero (0–1, fraction of min(halfSize)).
     public var falloffLength: Float
 
     /// Falloff strength multiplier (0 = no falloff, 1 = full).
@@ -70,10 +92,10 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
 
     public init(
         center: SIMD2<Float> = .zero,
-        radius: Float = 150,
+        halfSize: SIMD2<Float> = SIMD2(150, 150),
         strength: Float = 1.0,
         lensCurvature: Float = 0.5,
-        cornerRadius: Float = 0,
+        cornerRadius: LiquidLensCornerRadius = .points(0),
         falloff: LiquidLensFalloff = .easeInOut,
         falloffLength: Float = 1.0,
         falloffIntensity: Float = 0.5,
@@ -83,7 +105,7 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
         overlayMode: Bool = false
     ) {
         self.center = center
-        self.radius = radius
+        self.halfSize = halfSize
         self.strength = strength
         self.lensCurvature = lensCurvature
         self.cornerRadius = cornerRadius
@@ -106,10 +128,10 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
         LiquidLensUniforms(
             center: center * scale,
             textureSize: textureSize,
-            radius: radius * scale,
+            halfSize: halfSize * scale,
             strength: strength,
             lensCurvature: lensCurvature,
-            cornerRadius: cornerRadius * scale,
+            cornerRadius: cornerRadius.resolve(halfSize: halfSize) * scale,
             falloffType: Int32(falloff.rawValue),
             falloffLength: falloffLength,
             falloffIntensity: falloffIntensity,
