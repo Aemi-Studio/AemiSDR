@@ -360,7 +360,7 @@
             }
 
             private func performCapture(lensView: LiquidLensUIView, contentView: UIView) {
-                let screenScale = lensView.window?.screen.scale ?? UIScreen.main.scale
+                let screenScale = lensView.displayScale
                 let scale = screenScale * captureScale
                 let frameInContent = lensView.convert(lensView.bounds, to: contentView)
 
