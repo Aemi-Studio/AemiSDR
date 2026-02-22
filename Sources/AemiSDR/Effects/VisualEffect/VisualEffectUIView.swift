@@ -18,7 +18,7 @@
     /// ## Features
     /// - Customizable blur radius without predefined blur styles
     /// - Optional color tint overlay with adjustable alpha
-    /// - Scale factor control for effect intensity
+    /// - Saturation and scale factor control
     /// - Seamless integration with UIVisualEffectView hierarchy
     @objcMembers
     open class VisualEffectUIView: UIVisualEffectView {
@@ -29,6 +29,9 @@
             category: String(describing: VisualEffectUIView.self)
         )
 
+        /// The `_UICustomBlurEffect` instance used to store KVC property values.
+        /// Properties like grayscale/darkening are set here; blur and saturation
+        /// are overridden via direct filter manipulation for reliability.
         private let blurEffect: UIBlurEffect? = {
             guard let effectClass = NSClassFromString(_InternedKeys.customBlurEffectClass) as? UIBlurEffect.Type else {
                 return nil
@@ -48,7 +51,7 @@
             set {
                 prepareForChanges()
                 sourceOver?.setValue(newValue, forKeyPath: _InternedKeys.color)
-                sourceOver?.perform(Selector(_InternedKeys.applyRequestedEffectToView), with: overlayView)
+                _ = unsafe sourceOver?.perform(Selector(_InternedKeys.applyRequestedEffectToView), with: overlayView)
                 applyChanges()
                 overlayView?.backgroundColor = newValue
             }
@@ -79,8 +82,6 @@
 
         /// The scale factor for the effect.
         ///
-        /// Determines how content is mapped from logical coordinates (points)
-        /// to device coordinates (pixels).
         /// The default value is `1.0`.
         open var scale: CGFloat {
             get { blurEffectValue(forKey: .scale) ?? 1.0 }
@@ -88,10 +89,20 @@
         }
 
         /// Multiplier for the saturation of the backdrop content.
-        /// The default value is `0.0`.
+        ///
+        /// Values above 1.0 increase saturation, below 1.0 decrease it.
+        /// The default value is `1.0`.
         open var saturationDeltaFactor: CGFloat {
-            get { blurEffectValue(forKey: .saturationDeltaFactor) ?? 0.0 }
-            set { setBlurEffectValue(newValue, forKey: .saturationDeltaFactor) }
+            get {
+                colorSaturate?.requestedValues?[_InternedKeys.inputAmount] as? CGFloat
+                    ?? blurEffectValue(forKey: .saturationDeltaFactor) ?? 1.0
+            }
+            set {
+                blurEffect?.setValue(newValue, forKeyPath: BlurEffectKey.saturationDeltaFactor.rawValue)
+                prepareForChanges()
+                colorSaturate?.requestedValues?[_InternedKeys.inputAmount] = newValue
+                applyChanges()
+            }
         }
 
         /// Intensity of the grayscale tint layer.
@@ -204,9 +215,6 @@
 
         /// Updates the visual effect configuration.
         ///
-        /// This method compares the new configuration against the current one
-        /// and only applies changes if actual differences are detected.
-        ///
         /// - Parameters:
         ///   - colorTint: Optional tint color applied over the blur.
         ///   - colorTintAlpha: Alpha value for the tint color.
@@ -241,77 +249,35 @@
 
         /// Updates the visual effect with a full configuration.
         ///
-        /// This method compares each property against its current value
-        /// and only applies changes where differences are detected.
+        /// This method applies all configuration properties in a single batch
+        /// with one `prepareForChanges` / `applyChanges` cycle.
         ///
         /// - Parameter configuration: The configuration specifying all effect properties.
         public func updateConfiguration(_ configuration: VisualEffectConfiguration) {
-            if self.blurRadius != configuration.blurRadius {
-                self.blurRadius = configuration.blurRadius
-            }
-            if self.scale != configuration.scale {
-                self.scale = configuration.scale
-            }
-            if self.saturationDeltaFactor != configuration.saturationDeltaFactor {
-                self.saturationDeltaFactor = configuration.saturationDeltaFactor
-            }
-            if self.grayscaleTintLevel != configuration.grayscaleTintLevel {
-                self.grayscaleTintLevel = configuration.grayscaleTintLevel
-            }
-            if self.grayscaleTintAlpha != configuration.grayscaleTintAlpha {
-                self.grayscaleTintAlpha = configuration.grayscaleTintAlpha
-            }
-            if self.colorBurnTintLevel != configuration.colorBurnTintLevel {
-                self.colorBurnTintLevel = configuration.colorBurnTintLevel
-            }
-            if self.colorBurnTintAlpha != configuration.colorBurnTintAlpha {
-                self.colorBurnTintAlpha = configuration.colorBurnTintAlpha
-            }
-            if self.darkeningTintAlpha != configuration.darkeningTintAlpha {
-                self.darkeningTintAlpha = configuration.darkeningTintAlpha
-            }
-            if self.darkeningTintHue != configuration.darkeningTintHue {
-                self.darkeningTintHue = configuration.darkeningTintHue
-            }
-            if self.darkeningTintSaturation != configuration.darkeningTintSaturation {
-                self.darkeningTintSaturation = configuration.darkeningTintSaturation
-            }
-            if self.zoom != configuration.zoom {
-                self.zoom = configuration.zoom
-            }
-            if self.lightenGrayscaleWithSourceOver != configuration.lightenGrayscaleWithSourceOver {
-                self.lightenGrayscaleWithSourceOver = configuration.lightenGrayscaleWithSourceOver
-            }
-            if self.darkenWithSourceOver != configuration.darkenWithSourceOver {
-                self.darkenWithSourceOver = configuration.darkenWithSourceOver
-            }
-
-            if let tint = configuration.colorTint {
-                self.colorTint = UIColor(tint).withAlphaComponent(configuration.colorTintAlpha)
-            } else if self.colorTint != nil {
-                self.colorTint = nil
-            }
+            applyConfiguration(configuration)
         }
 
         // MARK: - Private Helpers
 
         private func applyConfiguration(_ configuration: VisualEffectConfiguration) {
-            self.scale = configuration.scale
-            self.blurRadius = configuration.blurRadius
-            self.saturationDeltaFactor = configuration.saturationDeltaFactor
-            self.grayscaleTintLevel = configuration.grayscaleTintLevel
-            self.grayscaleTintAlpha = configuration.grayscaleTintAlpha
-            self.colorBurnTintLevel = configuration.colorBurnTintLevel
-            self.colorBurnTintAlpha = configuration.colorBurnTintAlpha
-            self.darkeningTintAlpha = configuration.darkeningTintAlpha
-            self.darkeningTintHue = configuration.darkeningTintHue
-            self.darkeningTintSaturation = configuration.darkeningTintSaturation
-            self.zoom = configuration.zoom
-            self.lightenGrayscaleWithSourceOver = configuration.lightenGrayscaleWithSourceOver
-            self.darkenWithSourceOver = configuration.darkenWithSourceOver
+            // Use prepareForChanges() to create the system backdrop hierarchy.
+            // UIBlurEffect(style: .light) properly initializes the gaussianBlur
+            // and colorSaturate filters with writable requestedValues dicts.
+            prepareForChanges()
+
+            // Override blur and saturation via direct filter manipulation
+            gaussianBlur?.requestedValues?[_InternedKeys.inputRadius] = configuration.blurRadius
+            colorSaturate?.requestedValues?[_InternedKeys.inputAmount] = configuration.saturationDeltaFactor
+
+            // Color tint via overlay mechanism
             if let tint = configuration.colorTint {
-                self.colorTint = UIColor(tint).withAlphaComponent(configuration.colorTintAlpha)
+                let uiColor = UIColor(tint).withAlphaComponent(configuration.colorTintAlpha)
+                sourceOver?.setValue(uiColor, forKeyPath: _InternedKeys.color)
+                _ = unsafe sourceOver?.perform(Selector(_InternedKeys.applyRequestedEffectToView), with: overlayView)
+                overlayView?.backgroundColor = uiColor
             }
+
+            applyChanges()
         }
     }
 
@@ -340,8 +306,11 @@
             blurEffect?.value(forKeyPath: key.rawValue) as? T
         }
 
+        /// Sets a KVC value on the `_UICustomBlurEffect` and rebuilds.
         fileprivate func setBlurEffectValue(_ value: (some Any)?, forKey key: BlurEffectKey) {
             blurEffect?.setValue(value, forKeyPath: key.rawValue)
+            prepareForChanges()
+            applyChanges()
         }
     }
 #endif
