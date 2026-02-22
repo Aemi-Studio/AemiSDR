@@ -160,7 +160,7 @@ import SwiftUI
             if let eff = vfxView3.effect as NSObject? {
                 log("  Actual effect KVC values:")
                 for key in ["blurRadius", "scale", "saturationDeltaFactor", "grayscaleTintLevel", "darkeningTintAlpha"] {
-                    if let val = try? eff.value(forKey: key) {
+                    if let val = eff.value(forKey: key) {
                         log("    \(key) = \(val)")
                     } else {
                         log("    \(key) = <not KVC-compliant>")
@@ -202,10 +202,11 @@ import SwiftUI
             log("")
             log("=== TEST 6: _UIBackdropViewSettings for .light ===")
             if let settingsClass = NSClassFromString("_UIBackdropViewSettings") as? NSObject.Type {
-                if let settings = unsafe settingsClass.perform(
-                    Selector("settingsForStyle:"),
-                    with: UIBlurEffect.Style.light.rawValue
-                )?.takeUnretainedValue() as? NSObject {
+                let sel = NSSelectorFromString("settingsForStyle:")
+                if settingsClass.responds(to: sel),
+                   let settings = unsafe settingsClass.perform(sel, with: UIBlurEffect.Style.light.rawValue)?
+                    .takeUnretainedValue() as? NSObject
+                {
                     let keys = [
                         "blurRadius", "scale", "saturationDeltaFactor",
                         "grayscaleTintLevel", "grayscaleTintAlpha",
@@ -215,7 +216,7 @@ import SwiftUI
                         "lightenGrayscaleWithSourceOver", "darkenWithSourceOver",
                     ]
                     for key in keys {
-                        if let val = try? settings.value(forKey: key) {
+                        if let val = settings.value(forKey: key) {
                             log("  \(key) = \(val)")
                         }
                     }
@@ -250,7 +251,7 @@ import SwiftUI
                             }
                             // Try common input keys
                             for inputKey in ["inputRadius", "inputAmount", "inputNormalizeEdges", "inputMaskImage"] {
-                                if let val = try? filter.value(forKey: inputKey) {
+                                if let val = filter.value(forKey: inputKey) {
                                     log("  \(inputKey) = \(val)")
                                 }
                             }
@@ -284,7 +285,7 @@ import SwiftUI
                     }
 
                     // Check if there's a requestedScaleHint
-                    if let scaleHint = try? sub.value(forKeyPath: "requestedScaleHint") {
+                    if let scaleHint = sub.value(forKeyPath: "requestedScaleHint") {
                         log("\(prefix)  requestedScaleHint = \(scaleHint)")
                     }
                 }
@@ -438,7 +439,7 @@ import SwiftUI
                         let filterType = filter.value(forKeyPath: "filterType") as? String ?? "unknown"
                         log("  filter: \(filterType)")
                         for inputKey in ["inputRadius", "inputAmount"] {
-                            if let val = try? filter.value(forKey: inputKey) {
+                            if let val = filter.value(forKey: inputKey) {
                                 log("    \(inputKey) = \(val)")
                             }
                         }
@@ -458,7 +459,7 @@ import SwiftUI
                         let filterType = filter.value(forKeyPath: "filterType") as? String ?? "unknown"
                         log("  filter: \(filterType)")
                         for inputKey in ["inputRadius", "inputAmount"] {
-                            if let val = try? filter.value(forKey: inputKey) {
+                            if let val = filter.value(forKey: inputKey) {
                                 log("    \(inputKey) = \(val)")
                             }
                         }
@@ -491,7 +492,7 @@ import SwiftUI
                             let filterType = filter.value(forKeyPath: "filterType") as? String ?? "unknown"
                             var vals: [String] = []
                             for inputKey in ["inputRadius", "inputAmount"] {
-                                if let val = try? filter.value(forKey: inputKey) {
+                                if let val = filter.value(forKey: inputKey) {
                                     vals.append("\(inputKey)=\(val)")
                                 }
                             }
@@ -610,7 +611,7 @@ import SwiftUI
 
                     // Dump all known input keys
                     for inputKey in ["inputRadius", "inputAmount", "inputNormalizeEdges"] {
-                        if let val = try? filter.value(forKey: inputKey) {
+                        if let val = filter.value(forKey: inputKey) {
                             log("    \(inputKey) = \(val)")
                         }
                     }
