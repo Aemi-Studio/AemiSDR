@@ -317,9 +317,13 @@ fragment half4 liquidLensFragment(
     }
 
     // Calculate normalized radial position (0 at center, 1 at edge)
-    float distFromEdge = -dOuter;
-    float normalizedRadius = 1.0f - (distFromEdge / minHalf);
-    normalizedRadius = clamp(normalizedRadius, 0.0f, 1.0f);
+    // Use aspect-ratio-corrected coordinates so distortion is uniform across non-square lenses.
+    // Without this, dividing by minHalf creates a large flat zero-distortion plateau in the
+    // center of elongated lenses, with abrupt onset near edges.
+    float2 normalizedP = toPixel / halfSize;
+    float normalizedCorner = clampedCorner / minHalf;
+    float dNormalized = sdRoundedRect(normalizedP, float2(1.0f), normalizedCorner);
+    float normalizedRadius = 1.0f - clamp(-dNormalized, 0.0f, 1.0f);
 
     float innerBoundary = 1.0f - clampedFalloffLength;
 

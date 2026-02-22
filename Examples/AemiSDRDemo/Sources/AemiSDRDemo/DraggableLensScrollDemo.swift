@@ -291,7 +291,7 @@ import SwiftUI
                         .pickerStyle(.segmented)
                     }
 
-                    lensSlider("Chromatic", value: $chromaticAmount, range: 0...5)
+                    lensSlider("Chromatic", value: $chromaticAmount, range: 0...20)
 
                     Divider()
 
