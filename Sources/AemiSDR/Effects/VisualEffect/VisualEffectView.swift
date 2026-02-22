@@ -245,15 +245,15 @@ import SwiftUI
             guard let backdrop = view.backdropLayer else { return }
 
             if let blur = view.gaussianBlurFilter {
-                blur.setValue(config.blurRadius, forKey: _InternedKeys.inputRadius)
+                blur.setValue(config.blurRadius, forKey: _InternedKeys.radiusParam)
             }
 
             if let saturate = view.colorSaturateFilter {
                 let amount = config.saturationDeltaFactor > 0 ? config.saturationDeltaFactor : 1.0
-                saturate.setValue(amount, forKey: _InternedKeys.inputAmount)
+                saturate.setValue(amount, forKey: _InternedKeys.amountParam)
             }
 
-            backdrop.setValue(config.scale, forKey: _InternedKeys.scale)
+            backdrop.setValue(config.scale, forKey: _InternedKeys.scaleFactorKey)
         }
 
         private static func applyTintLayer(
