@@ -1,0 +1,819 @@
+meta:
+  project: AemiSDR
+  type: review
+  swift_version: "6.2"
+  language_mode: strict
+  platforms: [iOS, macOS]
+  files:
+    source: 48
+    test: 1
+    loc: 9860
+  scope:
+    audits: [code, meta-code]
+    criteria: [file_organization, single_responsibility, solid_principles, dry_violations, kiss_violations, unused_code, code_quality, consistency]
+    meta_criteria: [comments_docs_code]
+  auditors:
+    - pass: "deep-read library source (opus)"
+      model: claude-opus-4-6
+    - pass: "deep-read demo + tests (opus)"
+      model: claude-opus-4-6
+    - pass: "deep-read Metal shaders (opus)"
+      model: claude-opus-4-6
+    - pass: "static analysis: unused code reachability + duplicate detection"
+      model: swa-mcp
+  skills: [swift, gpu-metal-engineer, simplify, testing]
+
+scorecard:
+  file_organization: "B — Effects/ well-decomposed; Models/ is a catch-all for non-model types"
+  single_responsibility: "B- — LiquidLens Coordinator does 5+ jobs; VariableBlurCache has dual responsibilities"
+  solid_principles: "B — OCP violated by MaskType parallel switch; ISP borderline on VisualEffectConfiguration"
+  dry_violations: "C — Kernel loading boilerplate x13; mask generation duplicated; slider helpers x5; liquidLens modifier 12-param signature x4"
+  kiss_violations: "B — UICorner unreachable watchOS branches; dead plateau kernels in shader; computeShapeAwareDirection trivial wrapper"
+  unused_code: "C+ — ~750 lines dead sub-views in demo; 6 unreachable top-level demo views; 4 dead Metal kernels; dead state/imports"
+  code_quality: "B+ — Physics code and Metal pipeline are excellent; zero-copy bridge correct; struct alignment verified"
+  consistency: "B — Naming diverges across demo; platform conditionals inconsistent (#if os vs canImport); slider helpers vary"
+  test_coverage: "D — 24 tests in 1 file covering only SDF math; entire rendering pipeline, configuration, view modifiers, build tools untested"
+  overall: "B- — Solid core effects with infrastructure DRY debt, demo bloat, and minimal test coverage"
+
+findings:
+
+  # ── HIGH: DRY ──────────────────────────────────────────────────────
+
+  - id: DRY-001
+    severity: high
+    effort: haiku/quick
+    area: [dry, code_quality]
+    title: "Kernel loading boilerplate repeated 13 times across 3 cache files"
+    location:
+      - "Sources/AemiSDR/Models/CIKernelCache.swift:175 (linearMask)"
+      - "Sources/AemiSDR/Effects/AlphaMask/AlphaMaskCache.swift:40,71,100,132,162 (5 kernels)"
+      - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurCache.swift:37,67,95,126,155,185,215 (7 kernels)"
+    detail: >
+      Every CIColorKernel follows an identical 10-line lazy-static pattern: guard libraryData,
+      try CIColorKernel(functionName:fromMetalLibraryData:), catch + log error.
+      Only the function name string differs across all 13 instances.
+    fix: >
+      Add a single factory to CIKernelCache:
+        static func loadKernel(_ name: String) -> CIColorKernel?
+      Replace all 13 blocks with one-liners.
+
+  - id: DRY-002
+    severity: high
+    effort: sonnet/fast
+    area: [dry, solid]
+    title: "roundedRectAlphaMask and superellipseAlphaMask kernels loaded redundantly in both caches"
+    location:
+      - "Sources/AemiSDR/Effects/AlphaMask/AlphaMaskCache.swift:71-83, 132-144"
+      - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurCache.swift:185-197, 215-227"
+    detail: >
+      Both AlphaMaskCache and VariableBlurCache define properties for the same Metal kernel
+      functions (roundedRectAlphaMask, superellipseAlphaMask). Each independently calls
+      CIColorKernel(functionName:fromMetalLibraryData:), creating the same kernel object twice.
+      Both inherit from CIKernelCache — shared kernels should live in the base class.
+    fix: >
+      Move roundedRectAlphaMask and superellipseAlphaMask to CIKernelCache base class.
+
+  - id: DRY-003
+    severity: high
+    effort: sonnet/fast
+    area: [dry, solid]
+    title: "Mask generation switch statements structurally duplicated across 2 UIView subclasses"
+    location:
+      - "Sources/AemiSDR/Effects/AlphaMask/AlphaMaskUIView.swift:172-255 (generateAlphaMask)"
+      - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurUIView.swift:189-253 (generateMaskImage)"
+    detail: >
+      Both methods contain an 8-case switch over MaskType with near-identical structure.
+      The only differences: AlphaMaskUIView passes an extra inverted argument, and they
+      reference different cache classes. Adding a new MaskType requires parallel edits
+      in both files (OCP violation).
+    fix: >
+      Give MaskType a method that returns (kernel, arguments) for a given size/scale/inverted.
+      Both UIView subclasses call that instead of duplicating the switch.
+
+  - id: DRY-004
+    severity: high
+    effort: sonnet/fast
+    area: [dry]
+    title: "liquidLens modifier repeats 14-parameter signature 4 times"
+    location:
+      - "Sources/AemiSDR/Effects/LiquidLens/View+LiquidLens.swift:28-68 (auto-capture, ShapePathProvider)"
+      - "Sources/AemiSDR/Effects/LiquidLens/View+LiquidLens.swift:73-107 (auto-capture, Shape)"
+      - "Sources/AemiSDR/Effects/LiquidLens/View+LiquidLens.swift:117-152 (explicit image, ShapePathProvider)"
+      - "Sources/AemiSDR/Effects/LiquidLens/View+LiquidLens.swift:157-187 (explicit image, Shape)"
+    detail: >
+      Four overloads each repeat the full 14-parameter signature (center, halfSize, strength,
+      lensCurvature, cornerRadius, falloff, falloffLength, falloffIntensity, chromaticAmount,
+      material, useRadialDirection, clipShape, continuousCapture, refreshRate, captureScale).
+      The Shape overloads just wrap the ShapePathProvider ones.
+    fix: >
+      Accept LiquidLensConfiguration directly in 2 primary overloads (auto-capture and
+      explicit-image). Provide thin convenience overloads that build the config.
+
+  - id: DRY-005
+    severity: high
+    effort: haiku/quick
+    area: [dry]
+    title: "(cornerStyle, transition) -> MaskType mapping duplicated"
+    location:
+      - "Sources/AemiSDR/Effects/AlphaMask/AlphaMaskView.swift:124-131"
+      - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurView.swift:138-145"
+    detail: >
+      Identical 5-case switch mapping cornerStyle+transition to MaskType in both views.
+    fix: >
+      Add MaskType.init(cornerStyle:transition:) factory.
+
+  - id: DRY-006
+    severity: medium
+    effort: haiku/quick
+    area: [dry]
+    title: "currentScale / displayScale expression repeated 6+ times"
+    location:
+      - "Sources/AemiSDR/Effects/AlphaMask/AlphaMaskUIView.swift:47"
+      - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurUIView.swift:44"
+      - "Sources/AemiSDR/Effects/LiquidLens/LiquidLensUIView.swift:101,123,136"
+      - "Sources/AemiSDR/Effects/LiquidLens/View+LiquidLens.swift:363"
+    detail: >
+      window?.screen.scale ?? UIScreen.main.scale is computed independently in 6+ places.
+      AlphaMaskUIView and VariableBlurUIView define internal currentScale properties;
+      LiquidLensUIView inlines the expression each time.
+    fix: >
+      Add a UIView extension: var displayScale: CGFloat { window?.screen.scale ?? UIScreen.main.scale }
+
+  - id: DRY-007
+    severity: medium
+    effort: haiku/quick
+    area: [dry]
+    title: "4 pairs of non-inverted/inverted CIKernel functions in AemiSDR.ci.metal"
+    location:
+      - "Sources/AemiSDR/Shaders/AemiSDR.ci.metal:380-418 vs 419-459 (roundedRect)"
+      - "Sources/AemiSDR/Shaders/AemiSDR.ci.metal:462-502 vs 504-543 (superellipse)"
+      - "Sources/AemiSDR/Shaders/AemiSDR.ci.metal:632-666 vs 668-702 (roundedRectEase)"
+      - "Sources/AemiSDR/Shaders/AemiSDR.ci.metal:706-750 vs 752-796 (superellipseEase)"
+    detail: >
+      8 Metal kernel functions exist as 4 pairs. Each pair differs by a single line:
+      if (inverted > 0.5f) alpha = 1.0f - alpha;
+      The non-inverted versions are the inverted versions with inverted=0.
+    fix: >
+      Collapse each pair into one kernel accepting an inversion parameter.
+      Halves the kernel count from 13 to ~9.
+
+  - id: DRY-008
+    severity: medium
+    effort: haiku/quick
+    area: [dry]
+    title: "5 near-identical slider-row helpers across 4 demo files"
+    location:
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/LiquidLensDemoView.swift:343 (lensSlider)"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/LiquidLensDemoView.swift:1239 (floatSlider)"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/EffectsLabView.swift:776 (sliderRow)"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/CustomBlurView.swift:84 (sliderRow)"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/InteractiveDemoView.swift:81 (row)"
+    detail: >
+      All five are HStack { label | Slider | readout } with different names, label widths
+      (70/100/110/120pt), value widths (36/40/44/48/50pt), format strings (%.1f vs %.2f),
+      and binding types (Float vs CGFloat).
+    fix: >
+      Create a single generic ParameterSlider<V: BinaryFloatingPoint> in a shared file.
+
+  - id: DRY-009
+    severity: medium
+    effort: haiku/quick
+    area: [dry]
+    title: "settingsRow and formRow are byte-identical in LiquidLensDemoView"
+    location:
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/LiquidLensDemoView.swift:361 (settingsRow)"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/LiquidLensDemoView.swift:625 (formRow)"
+    detail: >
+      Both wrap content with padding(.horizontal, 16).padding(.vertical, 12). Only the name differs.
+    fix: Keep one, delete the other.
+
+  - id: DRY-010
+    severity: medium
+    effort: haiku/quick
+    area: [dry]
+    title: "CustomBlurView duplicates BlurSettings state and reset logic"
+    location:
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/CustomBlurView.swift:5-23"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/InteractiveDemoView.swift:7-36"
+    detail: >
+      CustomBlurView redeclares the same 7 @State properties that BlurSettings wraps in
+      @Observable. The configuration computed property is character-for-character identical.
+    fix: Reuse BlurSettings in CustomBlurView.
+
+  - id: DRY-011
+    severity: medium
+    effort: haiku/quick
+    area: [dry]
+    title: "Plugin createBuildCommands duplicated between SPM and Xcode entry points"
+    location:
+      - "Plugins/AemiSDRShaderPlugin/plugin.swift:12-66 (SPM)"
+      - "Plugins/AemiSDRShaderPlugin/plugin.swift:71-122 (Xcode)"
+    detail: >
+      The metal-file filtering, command construction, and argument building logic is
+      duplicated verbatim. Only the type signatures differ (PluginContext vs XcodePluginContext).
+    fix: >
+      Extract shared logic into a helper function parameterized on input/output paths.
+
+  - id: DRY-012
+    severity: low
+    effort: haiku/quick
+    area: [dry]
+    title: "Rounded-rect SDF implemented twice across two .metal files"
+    location:
+      - "Sources/AemiSDR/Shaders/AemiSDR.ci.metal:84-106 (rounded_rect_sdf)"
+      - "Sources/AemiSDR/Shaders/LiquidLens.metal:215-223 (sdRoundedRect)"
+    detail: >
+      Identical Inigo Quilez rounded-rectangle SDF algorithm with different names.
+      Unavoidable due to CIKernel vs render-pipeline compilation unit separation.
+    fix: >
+      Document as intentional. If a shared .metal header is introduced, consolidate.
+
+  # ── HIGH: UNUSED CODE ──────────────────────────────────────────────
+
+  - id: UNUSED-001
+    severity: high
+    effort: haiku/quick
+    area: [unused_code]
+    title: "6 top-level demo view files unreachable from ContentView (~3,400 lines)"
+    location:
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/ContentView.swift:3-7 (hardcodes LiquidLensDemoView)"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/InteractiveDemoView.swift (579 lines)"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/PresetsGalleryView.swift (74 lines)"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/EffectsLabView.swift (897 lines)"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/ModifiersShowcaseView.swift (133 lines)"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/CustomBlurView.swift (98 lines)"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/DebugDumpView.swift (658 lines)"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/SampleBackground.swift (21 lines, only used by unreachable views)"
+    detail: >
+      ContentView only shows LiquidLensDemoView. No TabView, NavigationStack, or NavigationLink
+      routes to any other view. 6 out of 8 demo view files are completely unreachable at runtime.
+      This appears to be a regression from when ContentView was simplified to focus on the
+      liquid lens demo.
+    fix: >
+      Add a TabView or NavigationStack in ContentView to expose all demo views,
+      or delete unused files.
+
+  - id: UNUSED-002
+    severity: high
+    effort: haiku/quick
+    area: [unused_code]
+    title: "~694 lines of dead sub-views in LiquidLensDemoView.swift"
+    location:
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/LiquidLensDemoView.swift:462 (LiveUIComponentsDemo, 169 lines)"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/LiquidLensDemoView.swift:714 (LiquidLensPlayground, 129 lines)"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/LiquidLensDemoView.swift:846 (MaterialGalleryView, 53 lines)"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/LiquidLensDemoView.swift:902 (FalloffGalleryView, 62 lines)"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/LiquidLensDemoView.swift:967 (DragToDistortView, 88 lines)"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/LiquidLensDemoView.swift:1058 (ClipShapeDemo, 79 lines)"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/LiquidLensDemoView.swift:1140 (ViewModifierDemo, 96 lines)"
+    detail: >
+      7 private structs are defined but never instantiated. LiquidLensDemoView navigates
+      only to DraggableLensScrollDemo. Also dead: makeSampleImage() (71 lines),
+      LensOverImage (17 lines), floatSlider() (16 lines).
+    fix: >
+      Either re-wire to a navigation menu or delete. If keeping, extract to separate files.
+
+  - id: UNUSED-003
+    severity: medium
+    effort: haiku/quick
+    area: [unused_code]
+    title: "4 plateau mask kernels in AemiSDR.ci.metal never loaded from Swift"
+    location:
+      - "Sources/AemiSDR/Shaders/AemiSDR.ci.metal:806 (roundedRectPlateauMask)"
+      - "Sources/AemiSDR/Shaders/AemiSDR.ci.metal:842 (superellipsePlateauMask)"
+      - "Sources/AemiSDR/Shaders/AemiSDR.ci.metal:870 (roundedRectPlateauEaseMask)"
+      - "Sources/AemiSDR/Shaders/AemiSDR.ci.metal:894 (superellipsePlateauEaseMask)"
+    detail: >
+      These 4 Metal kernel functions (plus helper functions distance_to_alpha_with_plateau
+      at line 238 and distance_to_alpha_with_plateau_ease at line 273) are compiled into
+      the metallib but have no corresponding Swift kernel loader in any cache file.
+      They increase binary size with no runtime use.
+    fix: >
+      Either add Swift loaders to expose them, or delete from the shader file.
+
+  - id: UNUSED-004
+    severity: medium
+    effort: haiku/quick
+    area: [unused_code]
+    title: "DebugDumpView is unreachable developer research code (658 lines)"
+    location:
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/DebugDumpView.swift:1-658"
+    detail: >
+      7 numbered test cases walking private UIKit internals, pixel sampling,
+      CATransaction experiments. No NavigationLink points to it. Development artifact.
+    fix: >
+      Move to a separate dev-only target or delete.
+
+  - id: UNUSED-005
+    severity: medium
+    effort: haiku/quick
+    area: [unused_code]
+    title: "colorScheme environment variable unused in VariableBlurView"
+    location:
+      - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurView.swift:46"
+    detail: >
+      @Environment(\.colorScheme) private var colorScheme — read but never referenced
+      in any method or computed property.
+    fix: Remove the unused environment variable.
+
+  - id: UNUSED-006
+    severity: medium
+    effort: haiku/quick
+    area: [unused_code]
+    title: "CoreImage.CIFilterBuiltins import unused in VariableBlurView"
+    location:
+      - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurView.swift:8"
+    detail: >
+      No CIFilter built-in types are used in this file.
+    fix: Remove the unused import.
+
+  - id: UNUSED-007
+    severity: low
+    effort: haiku/quick
+    area: [unused_code]
+    title: "_InternedKeys.backgroundFilters never referenced"
+    location:
+      - "Sources/AemiSDR/Models/_InternedKeys.swift:84"
+    detail: >
+      The interned key for 'backgroundFilters' is defined in the macOS section
+      but never used anywhere in the codebase.
+    fix: Remove the unused key.
+
+  - id: UNUSED-008
+    severity: low
+    effort: haiku/quick
+    area: [unused_code]
+    title: "MaskTestView defined but never used in ShaderTestPreview"
+    location:
+      - "Sources/AemiSDR/Previews/ShaderTestPreview.swift:17-32"
+    detail: >
+      MaskTestView struct is defined as a preview helper but never instantiated.
+      The preview uses CornerComparisonView, FadeWidthComparisonView, etc., not MaskTestView.
+    fix: Delete if not needed for development.
+
+  - id: UNUSED-009
+    severity: low
+    effort: haiku/quick
+    area: [unused_code]
+    title: "UICornerDiscoverable protocol and UICornerContext enum never used externally"
+    location:
+      - "Sources/AemiSDR/UICorner/UICornerContext.swift:1-27"
+      - "Sources/AemiSDR/UICorner/UICornerDiscoverable.swift:1-21"
+      - "Sources/AemiSDR/UICorner/UIScreen+Extensions.swift:166-200"
+    detail: >
+      UICornerDiscoverable is internal, its conformance is only on UIScreen/UIView/UIViewController.
+      Only UIScreen.displayCornerRadius is actually used. The protocol, enum, and
+      UIView/UIViewController extensions add indirection with no external or internal consumers.
+    fix: >
+      Inline the logic into UIScreen+Extensions.swift. Remove protocol, enum, and unused extensions.
+
+  - id: UNUSED-010
+    severity: low
+    effort: haiku/quick
+    area: [unused_code]
+    title: "fast_pow unreachable branch (x==0 && n==0)"
+    location:
+      - "Sources/AemiSDR/Shaders/AemiSDR.ci.metal:48"
+    detail: >
+      Line 45 returns 0 when x <= 0. Line 48 checks x == 0 && n == 0, which can never
+      execute since x == 0 is already handled by the x <= 0 guard.
+    fix: Remove the dead branch or reorder the guards.
+
+  # ── MEDIUM: SRP / SOLID ────────────────────────────────────────────
+
+  - id: SRP-001
+    severity: medium
+    effort: opus/long
+    area: [single_responsibility]
+    title: "_LiquidLensOverlay.Coordinator does 5+ distinct jobs"
+    location:
+      - "Sources/AemiSDR/Effects/LiquidLens/View+LiquidLens.swift:260-462"
+    detail: >
+      Single class handles: display link lifecycle, app lifecycle observation,
+      frame rate config, content view hierarchy traversal, background color
+      resolution, image capture/rendering, zero-copy texture bridge management,
+      and configuration change detection.
+    fix: >
+      Extract ContentCaptureService (hierarchy traversal + rendering) and
+      DisplayLinkDriver (start/stop/pause/resume/rate) as reusable components.
+
+  - id: SRP-002
+    severity: medium
+    effort: sonnet/fast
+    area: [single_responsibility]
+    title: "_LiquidLensOverlay embedded in View+LiquidLens.swift (270 lines)"
+    location:
+      - "Sources/AemiSDR/Effects/LiquidLens/View+LiquidLens.swift:197-463"
+    detail: >
+      The UIViewRepresentable + Coordinator is more complex than most standalone files
+      in the project but is nested inside the View extension file.
+    fix: >
+      Extract to _LiquidLensOverlay.swift.
+
+  - id: SRP-003
+    severity: medium
+    effort: sonnet/fast
+    area: [single_responsibility]
+    title: "VariableBlurCache has dual responsibility (blur masks + alpha masks)"
+    location:
+      - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurCache.swift:37-167 (blur mask kernels)"
+      - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurCache.swift:169-227 (alpha mask kernels)"
+    detail: >
+      VariableBlurCache loads both variable-blur-specific mask kernels AND alpha mask
+      kernels (which overlap with AlphaMaskCache). The class serves two different
+      rendering pipelines.
+    fix: >
+      Move shared alpha mask kernels to CIKernelCache base class.
+
+  - id: SOLID-001
+    severity: medium
+    effort: sonnet/fast
+    area: [solid]
+    title: "MaskType switch requires parallel updates in 2+ files for new cases (OCP violation)"
+    location:
+      - "Sources/AemiSDR/Models/MaskType.swift"
+      - "Sources/AemiSDR/Effects/AlphaMask/AlphaMaskUIView.swift:172-255"
+      - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurUIView.swift:189-253"
+      - "Sources/AemiSDR/Effects/AlphaMask/AlphaMaskView.swift:124-131"
+      - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurView.swift:138-145"
+    detail: >
+      Adding a new mask type requires updating the enum, both generation switches,
+      both caches, and both mapping initializers. Classic Open/Closed violation.
+    fix: >
+      Add MaskType.kernelDescriptor(size:scale:inverted:) centralizing the mapping.
+      Add MaskType.init(cornerStyle:transition:) for the initializer mapping.
+
+  - id: SOLID-002
+    severity: medium
+    effort: sonnet/fast
+    area: [solid]
+    title: "VisualEffectUIView exposes dual conflicting APIs"
+    location:
+      - "Sources/AemiSDR/Effects/VisualEffect/VisualEffectUIView.swift:47-281"
+    detail: >
+      Individual property setters (blurRadius, scale, etc.) each trigger
+      prepareForChanges/applyChanges independently. The configuration-based
+      API (updateConfiguration) does a single batch. These can conflict.
+    fix: >
+      Deprecate individual property setters or make them batch-aware.
+
+  - id: SOLID-003
+    severity: low
+    effort: haiku/quick
+    area: [solid]
+    title: "open class on types unlikely to be subclassed"
+    location:
+      - "Sources/AemiSDR/Effects/AlphaMask/AlphaMaskUIView.swift:27 (open class)"
+      - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurUIView.swift:28 (open class)"
+    detail: >
+      AlphaMaskUIView and VariableBlurUIView are open class but are Metal shader-backed
+      views unlikely to be subclassed by consumers. public would be more appropriate.
+    fix: >
+      Change to public class unless subclassing is an intended use case.
+
+  # ── MEDIUM: FILE ORGANIZATION ──────────────────────────────────────
+
+  - id: ORG-001
+    severity: medium
+    effort: haiku/quick
+    area: [file_organization]
+    title: "Models/ directory contains non-model infrastructure types"
+    location:
+      - "Sources/AemiSDR/Models/CIKernelCache.swift (GPU infrastructure)"
+      - "Sources/AemiSDR/Models/_InternedKeys.swift (private-API string constants)"
+      - "Sources/AemiSDR/Models/View+Extension.swift (UI utility)"
+    detail: >
+      CIKernelCache is GPU rendering infrastructure. _InternedKeys is private-API
+      string constants. View+Extension is a SwiftUI helper. None are domain models.
+    fix: >
+      Rename Models/ to Internal/ or Core/. Or distribute files to appropriate locations.
+
+  - id: ORG-002
+    severity: medium
+    effort: haiku/quick
+    area: [file_organization]
+    title: "LiquidLensDemoView.swift is 1,276 lines with 10+ private structs"
+    location:
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/LiquidLensDemoView.swift"
+    detail: >
+      Single file contains the main demo, 7 dead sub-views, a helper view, a 70-line
+      Core Graphics image generator, and 2 slider helpers. Even after removing dead code,
+      splitting DraggableLensScrollDemo and the image generator improves navigability.
+    fix: >
+      Split into DraggableLensDemo.swift, SampleImageGenerator.swift at minimum.
+
+  # ── MEDIUM: KISS ────────────────────────────────────────────────────
+
+  - id: KISS-001
+    severity: medium
+    effort: haiku/quick
+    area: [kiss]
+    title: "Unreachable watchOS conditional branches in iOS-only files"
+    location:
+      - "Sources/AemiSDR/UICorner/UICornerContext.swift:6+ (#if os(iOS) wraps entire file)"
+      - "Sources/AemiSDR/UICorner/UIScreen+Extensions.swift:113-161 (~30 lines of #if os(watchOS))"
+    detail: >
+      UICornerContext has #if !os(watchOS) branches inside an #if os(iOS) block.
+      UIScreen+Extensions has extensive watchOS branches inside iOS-only scope.
+      These code paths can never execute, adding ~30 lines of dead conditional code.
+    fix: Remove the unreachable watchOS branches.
+
+  - id: KISS-002
+    severity: low
+    effort: haiku/quick
+    area: [kiss]
+    title: "computeShapeAwareDirection is a trivial pass-through wrapper"
+    location:
+      - "Sources/AemiSDR/Shaders/LiquidLens.metal:275-277"
+    detail: >
+      One-line function that just calls computeSDFGradient with the same arguments.
+      Adds indirection with no additional logic.
+    fix: >
+      Inline or document why the abstraction exists for future expansion.
+
+  - id: KISS-003
+    severity: low
+    effort: haiku/quick
+    area: [kiss]
+    title: "@_exported import of heavy frameworks in AemiSDR.swift"
+    location:
+      - "Sources/AemiSDR/AemiSDR.swift:8-15"
+    detail: >
+      Re-exports CoreImage, InternedStrings, QuartzCore, SwiftUI, and UIKit.
+      Every consumer implicitly imports all of these, causing namespace pollution.
+    fix: >
+      Remove @_exported imports. Let consumers import what they need.
+
+  - id: KISS-004
+    severity: low
+    effort: haiku/quick
+    area: [kiss]
+    title: "Display link frame rate clamping duplicated"
+    location:
+      - "Sources/AemiSDR/Effects/LiquidLens/View+LiquidLens.swift:63"
+      - "Sources/AemiSDR/Effects/LiquidLens/View+LiquidLens.swift:320"
+    detail: >
+      max(1, min(refreshRate, 120)) appears twice.
+    fix: >
+      Clamp once at the entry point.
+
+  # ── LOW: CONSISTENCY ────────────────────────────────────────────────
+
+  - id: CONSIST-001
+    severity: low
+    effort: haiku/quick
+    area: [consistency]
+    title: "Inconsistent platform conditional style"
+    location:
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/EffectsLabView.swift:4 (#if canImport(UIKit))"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/DebugDumpView.swift:4 (#if canImport(UIKit))"
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/LiquidLensDemoView.swift:4 (#if os(iOS))"
+    detail: >
+      Some files use #if canImport(UIKit), others use #if os(iOS). These differ on
+      Mac Catalyst. A consistent convention should be chosen.
+    fix: >
+      Standardize on one pattern project-wide.
+
+  - id: CONSIST-002
+    severity: low
+    effort: haiku/quick
+    area: [consistency]
+    title: "Inconsistent navigationBarTitleDisplayMode across demo views"
+    location:
+      - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/ModifiersShowcaseView.swift (missing .inline)"
+    detail: >
+      All other demo views apply .navigationBarTitleDisplayMode(.inline).
+      ModifiersShowcaseView does not.
+
+  - id: CONSIST-003
+    severity: low
+    effort: haiku/quick
+    area: [consistency]
+    title: ".ci.metal detection uses fragile contains() instead of hasSuffix()"
+    location:
+      - "Plugins/AemiSDRShaderPlugin/plugin.swift:31"
+    detail: >
+      inputURL.lastPathComponent.contains(".ci.") would match unexpected filenames
+      like something.ci.other.metal. hasSuffix(".ci.metal") would be more precise.
+    fix: Change to hasSuffix(".ci.metal").
+
+  # ── LOW: QUALITY / SAFETY ──────────────────────────────────────────
+
+  - id: QUALITY-001
+    severity: low
+    effort: haiku/quick
+    area: [code_quality]
+    title: "No compile-time assertion for Metal/Swift uniform struct alignment"
+    location:
+      - "Sources/AemiSDR/Effects/LiquidLens/LiquidLensConfiguration.swift:33-48"
+      - "Sources/AemiSDR/Shaders/LiquidLens.metal:28-42"
+    detail: >
+      The structs are currently byte-identical at 64 bytes, verified by manual audit.
+      But there is no static assertion to catch drift if fields are added.
+      The doc comment says "Verify with MemoryLayout" but this is advice, not enforcement.
+    fix: >
+      Add assert(MemoryLayout<LiquidLensUniforms>.stride == 64) in a debug-only check.
+
+  - id: QUALITY-002
+    severity: low
+    effort: haiku/quick
+    area: [code_quality]
+    title: "No GPU command buffer error handling"
+    location:
+      - "Sources/AemiSDR/Effects/LiquidLens/LiquidLensRenderer.swift:118-148"
+    detail: >
+      commandBuffer.commit() has no addCompletedHandler. GPU errors are silently lost.
+    fix: >
+      Add a completed handler that logs GPU errors in debug builds.
+
+  - id: QUALITY-003
+    severity: low
+    effort: sonnet/fast
+    area: [code_quality, performance]
+    title: "Three texture samples per fragment even when chromaticAmount is 0"
+    location:
+      - "Sources/AemiSDR/Shaders/LiquidLens.metal:376-378"
+    detail: >
+      When chromaticAmount is 0, the three UV coordinates are identical but three
+      texture fetches still occur. The GPU cache likely coalesces them, but an
+      early-out to sample once would be cleaner and save bandwidth on older devices.
+    fix: >
+      Add: if (clampedChromatic == 0) { return sourceTexture.sample(texSampler, greenUV); }
+
+  # ── INFO: INFORMATIONAL ────────────────────────────────────────────
+
+  - id: INFO-001
+    severity: info
+    effort: sonnet/fast
+    area: [solid]
+    title: "VisualEffectConfiguration has 15 properties — borderline ISP"
+    location:
+      - "Sources/AemiSDR/Effects/VisualEffect/VisualEffectConfiguration.swift:30-131"
+    detail: >
+      Most callers use only 3-4 properties. Grouping into sub-structs
+      (TintConfiguration, DarkeningConfiguration) would improve intent clarity.
+
+  - id: INFO-002
+    severity: info
+    effort: sonnet/fast
+    area: [solid]
+    title: "Private API access scattered without abstraction layer"
+    location:
+      - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurUIView.swift:138-165"
+      - "Sources/AemiSDR/Effects/VisualEffect/_VisualEffectInternals.swift:14-29,37-66,90-123"
+    detail: >
+      NSClassFromString and perform(_:with:) calls for private CAFilter APIs are
+      spread across multiple files. If Apple changes the private API, every callsite
+      must be updated.
+    fix: >
+      Centralize filter creation behind a factory to contain blast radius.
+
+  - id: INFO-003
+    severity: info
+    effort: haiku/quick
+    area: [consistency]
+    title: "BlurEffectKey in VisualEffectUIView duplicates _InternedKeys"
+    location:
+      - "Sources/AemiSDR/Effects/VisualEffect/VisualEffectUIView.swift:287"
+      - "Sources/AemiSDR/Models/_InternedKeys.swift"
+    detail: >
+      BlurEffectKey enum defines key name strings that already exist in _InternedKeys,
+      creating a second source of truth.
+
+  - id: INFO-004
+    severity: info
+    effort: opus/long
+    area: [test_coverage]
+    title: "Only 24 tests covering SDF math — entire rendering pipeline untested"
+    location:
+      - "Tests/AemiSDRTests/SDFMathTests.swift (sole test file)"
+    detail: >
+      Test coverage is limited to mathematical helper functions (SDF, alpha calculations,
+      fast_pow). Zero automated tests for: VisualEffect, VariableBlur, AlphaMask, LiquidLens
+      rendering pipelines; configuration construction; view modifiers; build plugin; Metal
+      compiler tool. All UIKit-backed views, Metal renderers, and CIKernel caches are untested.
+
+meta_code_alignment:
+  comments_docs_code:
+    rating: "B+"
+    notes:
+      - "Public API is well-documented with doc comments (LiquidLensConfiguration, View modifiers, enums)"
+      - "Metal shader has excellent physics reference comments (Sellmeier, Snell's law, SDF, IOR)"
+      - "Internal types (_InternedKeys, CIKernelCache) lack documentation"
+      - "Demo code has no doc comments (acceptable for demo)"
+      - "LiquidLensCornerRadius.resolve has clear inline doc explaining the math"
+
+test_gaps:
+  high:
+    effort: "opus/long — ~3 hours"
+    items:
+      - target: "LiquidLensConfiguration"
+        gap: "No tests for toUniforms conversion, cornerRadius resolution, or default values"
+      - target: "LiquidLensRenderer"
+        gap: "No tests for render pipeline creation, texture loading, or draw calls"
+      - target: "VisualEffectConfiguration"
+        gap: "No tests for preset static properties (.light, .dark, etc.) or property validation"
+      - target: "CIKernelCache / AlphaMaskCache / VariableBlurCache"
+        gap: "No tests for kernel loading or CGImage generation"
+  medium:
+    effort: "sonnet/fast — ~1.5 hours"
+    items:
+      - target: "View modifiers (View+LiquidLens, View+VariableBlur, View+AlphaMask, View+VisualEffect)"
+        gap: "No snapshot or integration tests for modifier behavior"
+      - target: "LiquidLensMaterial / LiquidLensFalloff"
+        gap: "No tests for raw value mapping or edge cases"
+      - target: "MaskType"
+        gap: "No tests for enum case coverage or the proposed init(cornerStyle:transition:)"
+  low:
+    effort: "haiku/quick — ~30 min"
+    items:
+      - target: "MetalCompilerTool"
+        gap: "No tests for argument parsing, error handling, or compilation flow"
+      - target: "AemiSDRShaderPlugin"
+        gap: "No tests for .ci.metal detection or command generation"
+  edge_cases:
+    effort: "sonnet/fast — ~1 hour"
+    items:
+      - "Zero-size halfSize in LiquidLensConfiguration (division by zero in shader)"
+      - "Negative strength values for lens inversion"
+      - "captureScale at extremes (0.25 and 3.0)"
+      - "Display link behavior when window is nil"
+      - "Multiple simultaneous LiquidLensUIView instances sharing command queues"
+
+improvement_plan:
+  - phase: 1
+    priority: high
+    effort: "haiku/quick — ~30 min"
+    goal: "Eliminate dead code"
+    items:
+      - "UNUSED-001: Wire ContentView to show all demo views via TabView/NavigationStack, or delete unused files"
+      - "UNUSED-002: Delete or re-wire 7 dead sub-views in LiquidLensDemoView"
+      - "UNUSED-003: Delete 4 unused plateau kernel functions from AemiSDR.ci.metal"
+      - "UNUSED-004: Move DebugDumpView to dev-only target or delete"
+      - "UNUSED-005: Remove unused colorScheme @Environment"
+      - "UNUSED-006: Remove unused CoreImage.CIFilterBuiltins import"
+      - "UNUSED-007: Remove unused _InternedKeys.backgroundFilters"
+      - "UNUSED-008: Remove unused MaskTestView"
+      - "UNUSED-010: Fix fast_pow unreachable branch"
+      - "KISS-001: Remove unreachable watchOS branches"
+
+  - phase: 2
+    priority: high
+    effort: "sonnet/fast — ~1.5 hours"
+    goal: "Consolidate DRY violations in library"
+    items:
+      - "DRY-001: Extract CIKernelCache.loadKernel(named:) helper, replace 13 blocks with one-liners"
+      - "DRY-002: Move shared alpha mask kernels to CIKernelCache base class"
+      - "DRY-003 + SOLID-001: Add MaskType.kernelDescriptor(size:scale:inverted:) to centralize mapping"
+      - "DRY-005: Add MaskType.init(cornerStyle:transition:) factory"
+      - "DRY-006: Add UIView.displayScale extension"
+      - "DRY-007: Collapse 4 pairs of non-inverted/inverted kernels into 4 kernels with inversion param"
+
+  - phase: 3
+    priority: medium
+    effort: "sonnet/fast — ~1 hour"
+    goal: "Improve file organization and SRP"
+    items:
+      - "ORG-001: Rename Models/ to Internal/ or redistribute files"
+      - "ORG-002: Split LiquidLensDemoView.swift into focused files"
+      - "SRP-002: Extract _LiquidLensOverlay into its own file"
+      - "SRP-003: Move shared alpha mask kernels out of VariableBlurCache"
+      - "UNUSED-009: Inline UICornerDiscoverable into UIScreen+Extensions"
+      - "DRY-011: Extract shared plugin logic into helper function"
+
+  - phase: 4
+    priority: medium
+    effort: "opus/long — ~2 hours"
+    goal: "Refactor complex components"
+    items:
+      - "SRP-001: Extract ContentCaptureService and DisplayLinkDriver from Coordinator"
+      - "DRY-004: Simplify liquidLens modifier overloads to accept LiquidLensConfiguration"
+      - "SOLID-002: Reconcile VisualEffectUIView dual API"
+      - "QUALITY-001: Add compile-time struct alignment assertion"
+      - "QUALITY-003: Add early-out for chromaticAmount == 0"
+
+  - phase: 5
+    priority: low
+    effort: "haiku/quick — ~45 min"
+    goal: "Polish and consistency"
+    items:
+      - "DRY-008 + DRY-009 + DRY-010: Shared ParameterSlider, deduplicate settings helpers"
+      - "KISS-003: Remove @_exported imports"
+      - "KISS-004: Deduplicate frame rate clamping"
+      - "CONSIST-001: Standardize platform conditional style"
+      - "CONSIST-002: Consistent navigationBarTitleDisplayMode"
+      - "CONSIST-003: Fix .ci.metal detection to use hasSuffix"
+      - "SOLID-003: Change open class to public class where appropriate"
+
+summary: >
+  AemiSDR's core effects (LiquidLens Metal pipeline, VisualEffect, AlphaMask, VariableBlur)
+  are well-architected with excellent physics-based shader code, correct Metal/Swift struct
+  alignment, and clean public APIs. The main debt is in three areas: (1) Infrastructure DRY —
+  13 identical kernel-loading blocks, duplicated mask generation switches, 4 pairs of
+  near-identical CIKernel functions, and repeated modifier parameter lists; (2) Demo bloat —
+  6 unreachable top-level demo views (~3,400 lines), 7 dead sub-views (~694 lines), and
+  duplicate slider helpers; (3) Test coverage — only 24 tests in 1 file covering SDF math,
+  with zero coverage of the entire rendering pipeline, configuration, view modifiers, and
+  build tools. Phase 1 (dead code removal) and Phase 2 (DRY consolidation) would eliminate
+  the most impactful issues. The codebase has no security concerns, no retain cycle risks,
+  the Metal pipeline is well-managed, and the zero-copy texture bridge is correctly implemented.

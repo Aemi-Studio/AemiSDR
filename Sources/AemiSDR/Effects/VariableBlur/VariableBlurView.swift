@@ -5,7 +5,6 @@
 
 #if os(iOS)
     import CoreImage
-    import CoreImage.CIFilterBuiltins
     import SwiftUI
     import UIKit
 
@@ -43,8 +42,6 @@
     public struct VariableBlurView: UIViewRepresentable {
         // MARK: - Configuration Properties
         
-        @Environment(\.colorScheme) private var colorScheme
-
         /// The maximum radius of the blur to be applied
         public var maxBlurRadius: CGFloat = 3
 

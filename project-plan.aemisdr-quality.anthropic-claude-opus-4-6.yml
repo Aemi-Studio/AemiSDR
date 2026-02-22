@@ -1,0 +1,334 @@
+project:
+  name: "AemiSDR Code Quality Improvement"
+  context: brownfield
+  tailoring:
+    uncertainty: low
+    dependency_density: medium
+    regulatory_burden: none
+    work_arrival: batched
+  team_size: solo
+  evidence_base: "[E-01] WIP, [E-05] DoD, [E-06] small batches, [E-07] specific goals, [E-25] Kanban, [E-35] tech debt"
+
+initiative_brief:
+  existing_system: "AemiSDR — iOS/macOS Swift UI effects package (48 source files, 9,860 LOC, Swift 6.2)"
+  problem_statement: >
+    Codebase review identified 33 findings: 13x DRY kernel-loading boilerplate, ~4,100 lines
+    dead code, OCP violation in MaskType, SRP violation in LiquidLens Coordinator, minimal test
+    coverage (24 tests in 1 file), and inconsistent naming/convention patterns.
+  desired_outcome: >
+    Clean, DRY codebase with dead code removed, well-organized file structure, centralized
+    mask-type extensibility, and improved maintainability.
+  success_metrics:
+    - id: SM-01
+      description: "Findings resolved from review"
+      baseline: "33 findings"
+      target: "0 high-severity, ≤5 low/info remaining"
+    - id: SM-02
+      description: "Dead code eliminated"
+      baseline: "~4,100 lines dead code"
+      target: "0 unreachable code paths"
+    - id: SM-03
+      description: "DRY violations resolved"
+      baseline: "13 repeated kernel blocks"
+      target: "1 factory + 13 one-liners"
+  constraints:
+    - id: C-01
+      description: "Preserve all existing public API behavior — zero breaking changes [E-06]"
+    - id: C-02
+      description: "Build must pass on iPhone 15 Pro Max after each phase"
+    - id: C-03
+      description: "Solo developer — WIP limit 1 finding at a time [E-02]"
+  non_goals:
+    - id: NG-01
+      description: "Adding new features or effects"
+    - id: NG-02
+      description: "Comprehensive test suite (follow-up initiative)"
+    - id: NG-03
+      description: "API redesign or breaking changes to public surface"
+  risks:
+    - id: R-01
+      category: regression
+      likelihood: medium
+      impact: high
+      description: "Refactoring breaks existing rendering behavior"
+      mitigation: "Build-verify after each phase; visual spot-check effects"
+    - id: R-02
+      category: scope-creep
+      likelihood: high
+      impact: medium
+      description: "'While we're in there' expansion during refactoring [AP-07]"
+      mitigation: "Strict phase boundaries; log new findings, don't fix inline"
+
+methodology:
+  approach: "kanban-flow [E-25]"
+  rationale: "Solo developer, all work items known upfront. Pull-based execution through ordered phases."
+  wip_limit: "1 finding at a time [E-01]"
+  cadence: "Phase-gated: complete one phase, build-verify, commit, then start next [E-06]"
+  anti_patterns:
+    - ref: AP-07
+      description: "Scope creep — refactoring invites 'while we're in there' expansion. Non-goals must be strict."
+
+phases:
+  - id: P1
+    name: "Eliminate Dead Code"
+    priority: high
+    effort: "~30 min"
+    goal: "Remove all unreachable code. Reduce LOC by ~4,100 lines. Zero functional change."
+    gate: "Build passes on IPH15PM"
+    depends_on: null
+    findings_addressed: [UNUSED-001, UNUSED-002, UNUSED-003, UNUSED-004, UNUSED-005, UNUSED-006, UNUSED-007, UNUSED-008, UNUSED-010, KISS-001]
+    tasks:
+      - id: T-01
+        finding: UNUSED-001
+        effort: "15 min"
+        description: "Wire ContentView to show all demo views via TabView/NavigationStack, or delete unused demo files (6 files, ~3,400 lines)"
+        files:
+          - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/ContentView.swift"
+          - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/InteractiveDemoView.swift"
+          - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/PresetsGalleryView.swift"
+          - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/EffectsLabView.swift"
+          - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/ModifiersShowcaseView.swift"
+          - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/CustomBlurView.swift"
+          - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/DebugDumpView.swift"
+          - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/SampleBackground.swift"
+      - id: T-02
+        finding: UNUSED-002
+        effort: "5 min"
+        description: "Delete or re-wire 7 dead sub-views in LiquidLensDemoView (~694 lines)"
+        files:
+          - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/LiquidLensDemoView.swift"
+      - id: T-03
+        finding: UNUSED-003
+        effort: "3 min"
+        description: "Delete 4 unused plateau kernel functions and 2 helper functions from AemiSDR.ci.metal"
+        files:
+          - "Sources/AemiSDR/Shaders/AemiSDR.ci.metal"
+      - id: T-04
+        finding: UNUSED-004
+        effort: "2 min"
+        description: "Move DebugDumpView to dev-only target or delete"
+        files:
+          - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/DebugDumpView.swift"
+      - id: T-05
+        finding: "UNUSED-005, UNUSED-006, UNUSED-007, UNUSED-008, UNUSED-010"
+        effort: "3 min"
+        description: "Remove: unused colorScheme @Environment, CIFilterBuiltins import, backgroundFilters key, MaskTestView, fast_pow dead branch"
+        files:
+          - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurView.swift"
+          - "Sources/AemiSDR/Models/_InternedKeys.swift"
+          - "Sources/AemiSDR/Previews/ShaderTestPreview.swift"
+          - "Sources/AemiSDR/Shaders/AemiSDR.ci.metal"
+      - id: T-06
+        finding: KISS-001
+        effort: "2 min"
+        description: "Remove unreachable watchOS conditional branches in iOS-only files"
+        files:
+          - "Sources/AemiSDR/UICorner/UICornerContext.swift"
+          - "Sources/AemiSDR/UICorner/UIScreen+Extensions.swift"
+
+  - id: P2
+    name: "Consolidate DRY Violations"
+    priority: high
+    effort: "~1.5 hours"
+    goal: "Eliminate 13 kernel-loading duplications, centralize mask-type mapping, collapse shader pairs."
+    gate: "Build passes + visual regression check"
+    depends_on: P1
+    findings_addressed: [DRY-001, DRY-002, DRY-003, DRY-005, DRY-006, DRY-007, SOLID-001]
+    tasks:
+      - id: T-07
+        finding: DRY-001
+        effort: "20 min"
+        description: "Extract CIKernelCache.loadKernel(named:) factory method. Replace 13 copy-pasted kernel-loading blocks with one-liners."
+        files:
+          - "Sources/AemiSDR/Models/CIKernelCache.swift"
+          - "Sources/AemiSDR/Effects/AlphaMask/AlphaMaskCache.swift"
+          - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurCache.swift"
+      - id: T-08
+        finding: DRY-002
+        effort: "10 min"
+        description: "Move roundedRectAlphaMask and superellipseAlphaMask to CIKernelCache base class. Remove duplicates from VariableBlurCache and AlphaMaskCache."
+        files:
+          - "Sources/AemiSDR/Models/CIKernelCache.swift"
+          - "Sources/AemiSDR/Effects/AlphaMask/AlphaMaskCache.swift"
+          - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurCache.swift"
+      - id: T-09
+        finding: "DRY-003, SOLID-001"
+        effort: "25 min"
+        description: "Add MaskType.kernelDescriptor(size:scale:inverted:) centralizing the 8-case switch. Update AlphaMaskUIView and VariableBlurUIView to use it."
+        files:
+          - "Sources/AemiSDR/Models/MaskType.swift"
+          - "Sources/AemiSDR/Effects/AlphaMask/AlphaMaskUIView.swift"
+          - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurUIView.swift"
+      - id: T-10
+        finding: DRY-005
+        effort: "10 min"
+        description: "Add MaskType.init(cornerStyle:transition:) factory. Update AlphaMaskView and VariableBlurView."
+        files:
+          - "Sources/AemiSDR/Models/MaskType.swift"
+          - "Sources/AemiSDR/Effects/AlphaMask/AlphaMaskView.swift"
+          - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurView.swift"
+      - id: T-11
+        finding: DRY-006
+        effort: "5 min"
+        description: "Add UIView extension: var displayScale: CGFloat. Replace 6 inline window?.screen.scale computations."
+        files:
+          - "Sources/AemiSDR/Models/View+Extension.swift"
+          - "Sources/AemiSDR/Effects/AlphaMask/AlphaMaskUIView.swift"
+          - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurUIView.swift"
+          - "Sources/AemiSDR/Effects/LiquidLens/LiquidLensUIView.swift"
+          - "Sources/AemiSDR/Effects/LiquidLens/View+LiquidLens.swift"
+      - id: T-12
+        finding: DRY-007
+        effort: "20 min"
+        description: "Collapse 4 pairs of non-inverted/inverted CIKernel functions into 4 kernels with inversion parameter. Update Swift-side callers."
+        files:
+          - "Sources/AemiSDR/Shaders/AemiSDR.ci.metal"
+          - "Sources/AemiSDR/Effects/AlphaMask/AlphaMaskCache.swift"
+          - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurCache.swift"
+          - "Sources/AemiSDR/Effects/AlphaMask/AlphaMaskUIView.swift"
+          - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurUIView.swift"
+
+  - id: P3
+    name: "File Organization and SRP"
+    priority: medium
+    effort: "~1 hour"
+    goal: "Improve directory structure, split oversized files, reduce SRP violations."
+    gate: "Build passes"
+    depends_on: P2
+    findings_addressed: [ORG-001, ORG-002, SRP-002, SRP-003, UNUSED-009, DRY-011]
+    tasks:
+      - id: T-13
+        finding: ORG-001
+        effort: "10 min"
+        description: "Rename Models/ to Internal/ or Core/. Redistribute non-model files appropriately."
+        files:
+          - "Sources/AemiSDR/Models/ (entire directory)"
+      - id: T-14
+        finding: ORG-002
+        effort: "15 min"
+        description: "Split LiquidLensDemoView.swift into focused files (DraggableLensDemo.swift, SampleImageGenerator.swift)."
+        files:
+          - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/LiquidLensDemoView.swift"
+      - id: T-15
+        finding: SRP-002
+        effort: "10 min"
+        description: "Extract _LiquidLensOverlay UIViewRepresentable + Coordinator into its own file."
+        files:
+          - "Sources/AemiSDR/Effects/LiquidLens/View+LiquidLens.swift"
+          - "Sources/AemiSDR/Effects/LiquidLens/_LiquidLensOverlay.swift (new)"
+      - id: T-16
+        finding: SRP-003
+        effort: "10 min"
+        description: "Remove alpha mask kernels from VariableBlurCache (now in CIKernelCache base class from P2)."
+        files:
+          - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurCache.swift"
+      - id: T-17
+        finding: UNUSED-009
+        effort: "10 min"
+        description: "Inline UICornerDiscoverable into UIScreen+Extensions. Delete protocol and enum files."
+        files:
+          - "Sources/AemiSDR/UICorner/UICornerDiscoverable.swift (delete)"
+          - "Sources/AemiSDR/UICorner/UICornerContext.swift (delete)"
+          - "Sources/AemiSDR/UICorner/UIScreen+Extensions.swift"
+      - id: T-18
+        finding: DRY-011
+        effort: "10 min"
+        description: "Extract shared plugin createBuildCommands logic into helper function."
+        files:
+          - "Plugins/AemiSDRShaderPlugin/plugin.swift"
+
+  - id: P4
+    name: "Refactor Complex Components"
+    priority: medium
+    effort: "~2 hours"
+    goal: "Decompose the LiquidLens Coordinator, simplify modifier API, add safety checks."
+    gate: "Build passes + deploy + visual regression test"
+    depends_on: P3
+    findings_addressed: [SRP-001, DRY-004, SOLID-002, QUALITY-001, QUALITY-002, QUALITY-003]
+    tasks:
+      - id: T-19
+        finding: SRP-001
+        effort: "45 min"
+        description: "Extract ContentCaptureService (hierarchy traversal + rendering) and DisplayLinkDriver (start/stop/pause/resume/rate) from Coordinator."
+        files:
+          - "Sources/AemiSDR/Effects/LiquidLens/_LiquidLensOverlay.swift"
+          - "Sources/AemiSDR/Effects/LiquidLens/ContentCaptureService.swift (new)"
+          - "Sources/AemiSDR/Effects/LiquidLens/DisplayLinkDriver.swift (new)"
+      - id: T-20
+        finding: DRY-004
+        effort: "30 min"
+        description: "Add liquidLens(configuration:clipShape:) primary overloads. Keep existing parameter-list overloads as thin convenience wrappers."
+        files:
+          - "Sources/AemiSDR/Effects/LiquidLens/View+LiquidLens.swift"
+      - id: T-21
+        finding: SOLID-002
+        effort: "30 min"
+        description: "Make VisualEffectUIView individual property setters batch-aware (defer applyChanges until explicit commit or next layout cycle)."
+        files:
+          - "Sources/AemiSDR/Effects/VisualEffect/VisualEffectUIView.swift"
+      - id: T-22
+        finding: "QUALITY-001, QUALITY-002, QUALITY-003"
+        effort: "15 min"
+        description: "Add struct alignment assertion, GPU command buffer error logging, chromatic aberration early-out."
+        files:
+          - "Sources/AemiSDR/Effects/LiquidLens/LiquidLensConfiguration.swift"
+          - "Sources/AemiSDR/Effects/LiquidLens/LiquidLensRenderer.swift"
+          - "Sources/AemiSDR/Shaders/LiquidLens.metal"
+
+  - id: P5
+    name: "Polish and Consistency"
+    priority: low
+    effort: "~45 min"
+    goal: "Standardize conventions, deduplicate demo helpers, minor cleanups."
+    gate: "Build passes"
+    depends_on: P4
+    findings_addressed: [DRY-008, DRY-009, DRY-010, KISS-003, KISS-004, CONSIST-001, CONSIST-002, CONSIST-003, SOLID-003]
+    tasks:
+      - id: T-23
+        finding: "DRY-008, DRY-009, DRY-010"
+        effort: "15 min"
+        description: "Create shared ParameterSlider<V: BinaryFloatingPoint>. Deduplicate settingsRow/formRow. Reuse BlurSettings in CustomBlurView."
+        files:
+          - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/ParameterSlider.swift (new)"
+          - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/LiquidLensDemoView.swift"
+          - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/EffectsLabView.swift"
+          - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/CustomBlurView.swift"
+          - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/InteractiveDemoView.swift"
+      - id: T-24
+        finding: "KISS-003, KISS-004"
+        effort: "5 min"
+        description: "Remove @_exported imports from AemiSDR.swift. Deduplicate frame rate clamping in View+LiquidLens."
+        files:
+          - "Sources/AemiSDR/AemiSDR.swift"
+          - "Sources/AemiSDR/Effects/LiquidLens/View+LiquidLens.swift"
+      - id: T-25
+        finding: "CONSIST-001, CONSIST-002, CONSIST-003"
+        effort: "10 min"
+        description: "Standardize platform conditionals to #if os(iOS). Fix navigationBarTitleDisplayMode on ModifiersShowcaseView. Change .ci.metal detection to hasSuffix."
+        files:
+          - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/EffectsLabView.swift"
+          - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/DebugDumpView.swift"
+          - "Examples/AemiSDRDemo/Sources/AemiSDRDemo/ModifiersShowcaseView.swift"
+          - "Plugins/AemiSDRShaderPlugin/plugin.swift"
+      - id: T-26
+        finding: SOLID-003
+        effort: "5 min"
+        description: "Change open class to public class on AlphaMaskUIView and VariableBlurUIView."
+        files:
+          - "Sources/AemiSDR/Effects/AlphaMask/AlphaMaskUIView.swift"
+          - "Sources/AemiSDR/Effects/VariableBlur/VariableBlurUIView.swift"
+
+definition_of_done:
+  - "xcodebuild succeeds on iPhone 15 Pro Max target"
+  - "Existing 24 SDFMathTests pass"
+  - "No new compiler warnings introduced"
+  - "Visual spot-check: liquid lens, variable blur, alpha mask, visual effect render correctly"
+  - "One commit per phase with clear message referencing finding IDs"
+
+summary: >
+  5-phase brownfield improvement plan for AemiSDR addressing 33 review findings.
+  Total estimated effort: ~5.75 hours solo. Phases ordered by risk minimization:
+  dead code first (safest), then DRY consolidation, then structural reorganization,
+  then complex refactoring, then polish. Each phase is gated by a successful build
+  on the target device. No breaking API changes. Execution follows Kanban flow
+  with WIP limit of 1 finding at a time [E-01][E-25].

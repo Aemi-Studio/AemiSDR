@@ -10,27 +10,6 @@ import SwiftUI
 
 #if os(iOS)
 
-// MARK: - Individual Mask Test Views
-
-/// Visual test view for a single mask configuration
-@available(iOS 15.0, *)
-private struct MaskTestView: View {
-    let title: String
-    let color: Color
-
-    var body: some View {
-        VStack(spacing: 4) {
-            Text(title)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-
-            Rectangle()
-                .fill(color)
-                .frame(width: 100, height: 100)
-        }
-    }
-}
-
 // MARK: - Rounded Rect vs Superellipse Comparison
 
 @available(iOS 15.0, *)

@@ -14,14 +14,9 @@
     enum UICornerContext: Sendable, Equatable, Hashable {
         /// Context from a UIView - will traverse up to find the containing screen
         case view(UIView)
-
-        #if !os(watchOS)
-            /// Context from a UIWindow - directly accesses the window's screen
-            /// - Note: Not available on watchOS
-            case window(UIWindow)
-            /// Context from a UIWindowScene - directly accesses the scene's screen
-            /// - Note: Not available on watchOS
-            case windowScene(UIWindowScene)
-        #endif
+        /// Context from a UIWindow - directly accesses the window's screen
+        case window(UIWindow)
+        /// Context from a UIWindowScene - directly accesses the scene's screen
+        case windowScene(UIWindowScene)
     }
 #endif
