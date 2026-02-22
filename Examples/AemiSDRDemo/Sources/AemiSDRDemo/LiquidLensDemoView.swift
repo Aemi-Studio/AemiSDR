@@ -22,7 +22,8 @@ import SwiftUI
         @State private var isDragging = false
 
         // Lens settings
-        @State private var radius: Float = 120
+        @State private var lensWidth: Float = 240
+        @State private var lensHeight: Float = 240
         @State private var strength: Float = 0.5
         @State private var lensCurvature: Float = 0.6
         @State private var chromaticAmount: Float = 2.0
@@ -31,6 +32,7 @@ import SwiftUI
         @State private var falloffLength: Float = 1.0
         @State private var falloffIntensity: Float = 0.5
         @State private var lensCornerRadius: Float = 0
+        @State private var cornerRadiusProportional = false
 
         // Quality / performance
         @State private var refreshRate: Float = 30
@@ -47,16 +49,25 @@ import SwiftUI
         @State private var stepperValue = 3
         @State private var pickerSelection = 1
 
+        private var outlineCornerRadius: Float {
+            let hs = SIMD2(lensWidth / 2, lensHeight / 2)
+            return cornerRadiusProportional
+                ? (lensCornerRadius / 100) * max(hs.x, hs.y)
+                : lensCornerRadius
+        }
+
         var body: some View {
             ZStack(alignment: .bottom) {
                 // Content + lens
                 scrollContent
                     .liquidLens(
                         center: SIMD2(Float(lensCenter.x), Float(lensCenter.y)),
-                        radius: radius,
+                        halfSize: SIMD2(lensWidth / 2, lensHeight / 2),
                         strength: strength,
                         lensCurvature: lensCurvature,
-                        cornerRadius: lensCornerRadius,
+                        cornerRadius: cornerRadiusProportional
+                            ? .proportional(lensCornerRadius / 100)
+                            : .points(lensCornerRadius),
                         falloff: falloff,
                         falloffLength: falloffLength,
                         falloffIntensity: falloffIntensity,
@@ -67,12 +78,12 @@ import SwiftUI
                         captureScale: CGFloat(captureScale)
                     )
                     .overlay {
-                        Circle()
+                        RoundedRectangle(cornerRadius: CGFloat(outlineCornerRadius))
                             .stroke(
                                 isDragging ? Color.white : Color.white.opacity(0.4),
                                 lineWidth: isDragging ? 2 : 1
                             )
-                            .frame(width: CGFloat(radius) * 2, height: CGFloat(radius) * 2)
+                            .frame(width: CGFloat(lensWidth), height: CGFloat(lensHeight))
                             .position(lensCenter)
                             .allowsHitTesting(false)
                     }
@@ -243,10 +254,37 @@ import SwiftUI
                     }
 
                     // Lens geometry
-                    lensSlider("Radius", value: $radius, range: 30...300)
+                    lensSlider("Width", value: $lensWidth, range: 60...600)
+                    lensSlider("Height", value: $lensHeight, range: 60...600)
                     lensSlider("Strength", value: $strength, range: 0...1)
                     lensSlider("Curvature", value: $lensCurvature, range: 0...1)
-                    lensSlider("Corner Radius", value: $lensCornerRadius, range: 0...200)
+                    HStack(spacing: 6) {
+                        Text("Corner R.")
+                            .font(.caption)
+                            .frame(width: 100, alignment: .leading)
+                        Picker("", selection: $cornerRadiusProportional) {
+                            Text("pt").tag(false)
+                            Text("%").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 70)
+                        .onChange(of: cornerRadiusProportional) { _, isProportional in
+                            // Convert current value when switching modes
+                            let hs = SIMD2(lensWidth / 2, lensHeight / 2)
+                            let maxHalf = max(hs.x, hs.y)
+                            if isProportional {
+                                lensCornerRadius = min((lensCornerRadius / maxHalf) * 100, 100)
+                            } else {
+                                lensCornerRadius = (lensCornerRadius / 100) * maxHalf
+                            }
+                        }
+                    }
+                    lensSlider(
+                        cornerRadiusProportional ? "Rounding" : "Corner Radius",
+                        value: $lensCornerRadius,
+                        range: cornerRadiusProportional ? 0...100 : 0...200,
+                        format: cornerRadiusProportional ? "%.0f%%" : "%.1f"
+                    )
 
                     Divider()
 
@@ -327,7 +365,8 @@ import SwiftUI
         }
 
         private func resetDefaults() {
-            radius = 120
+            lensWidth = 240
+            lensHeight = 240
             strength = 0.5
             lensCurvature = 0.6
             chromaticAmount = 2.0
@@ -336,6 +375,7 @@ import SwiftUI
             falloffLength = 1.0
             falloffIntensity = 0.5
             lensCornerRadius = 0
+            cornerRadiusProportional = false
             refreshRate = 30
             captureScale = 1.0
         }
@@ -456,7 +496,7 @@ import SwiftUI
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .liquidLens(
                         center: SIMD2(180, 100),
-                        radius: 120,
+                        halfSize: SIMD2(120, 120),
                         strength: 1.5,
                         lensCurvature: 0.6,
                         chromaticAmount: 2.0,
@@ -472,7 +512,7 @@ import SwiftUI
                             .font(.title3)
                             .liquidLens(
                                 center: SIMD2(160, 22),
-                                radius: 100,
+                                halfSize: SIMD2(100, 100),
                                 strength: 1.3,
                                 chromaticAmount: 1.5,
                                 material: .crownGlass
@@ -503,7 +543,7 @@ import SwiftUI
                         }
                         .liquidLens(
                             center: SIMD2(120, 22),
-                            radius: 90,
+                            halfSize: SIMD2(90, 90),
                             strength: 1.8,
                             lensCurvature: 0.7,
                             chromaticAmount: 2.5,
@@ -526,7 +566,7 @@ import SwiftUI
                         .pickerStyle(.segmented)
                         .liquidLens(
                             center: SIMD2(180, 16),
-                            radius: 80,
+                            halfSize: SIMD2(80, 80),
                             strength: 1.2,
                             chromaticAmount: 1.5,
                             material: .water
@@ -563,7 +603,7 @@ import SwiftUI
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .liquidLens(
                         center: SIMD2(160, 60),
-                        radius: 100,
+                        halfSize: SIMD2(100, 100),
                         strength: 1.4,
                         lensCurvature: 0.5,
                         chromaticAmount: 2.0,
@@ -625,7 +665,7 @@ import SwiftUI
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .liquidLens(
                     center: SIMD2(180, 80),
-                    radius: 80,
+                    halfSize: SIMD2(80, 80),
                     strength: 1.6,
                     lensCurvature: 0.6,
                     chromaticAmount: 2.0,
@@ -673,7 +713,8 @@ import SwiftUI
 
     private struct LiquidLensPlayground: View {
         @State private var sampleImage: UIImage?
-        @State private var radius: Float = 150
+        @State private var lensWidth: Float = 300
+        @State private var lensHeight: Float = 300
         @State private var strength: Float = 1.0
         @State private var lensCurvature: Float = 0.5
         @State private var cornerRadius: Float = 0
@@ -698,10 +739,10 @@ import SwiftUI
                             image: image,
                             configuration: LiquidLensConfiguration(
                                 center: center,
-                                radius: radius,
+                                halfSize: SIMD2(lensWidth / 2, lensHeight / 2),
                                 strength: strength,
                                 lensCurvature: lensCurvature,
-                                cornerRadius: cornerRadius,
+                                cornerRadius: .points(cornerRadius),
                                 falloff: falloff,
                                 falloffLength: falloffLength,
                                 falloffIntensity: falloffIntensity,
@@ -727,7 +768,8 @@ import SwiftUI
                 ScrollView {
                     VStack(spacing: 12) {
                         Group {
-                            floatSlider("Radius", value: $radius, range: 10...300)
+                            floatSlider("Width", value: $lensWidth, range: 20...600)
+                            floatSlider("Height", value: $lensHeight, range: 20...600)
                             floatSlider("Strength", value: $strength, range: -3...3)
                             floatSlider("Curvature", value: $lensCurvature, range: 0...1)
                             floatSlider("Corner Radius", value: $cornerRadius, range: 0...200)
@@ -791,7 +833,7 @@ import SwiftUI
 
         private var resetButton: some View {
             Button("Reset All") {
-                radius = 150; strength = 1.0; lensCurvature = 0.5; cornerRadius = 0
+                lensWidth = 300; lensHeight = 300; strength = 1.0; lensCurvature = 0.5; cornerRadius = 0
                 falloff = .easeInOut; falloffLength = 1.0; falloffIntensity = 0.5
                 chromaticAmount = 1.0; material = .crownGlass; useRadialDirection = true
             }
@@ -827,7 +869,7 @@ import SwiftUI
                                     image: image,
                                     configuration: LiquidLensConfiguration(
                                         center: SIMD2(150, 120),
-                                        radius: 120,
+                                        halfSize: SIMD2(120, 120),
                                         strength: 1.5,
                                         lensCurvature: 0.6,
                                         chromaticAmount: 2.0,
@@ -888,7 +930,7 @@ import SwiftUI
                                         image: image,
                                         configuration: LiquidLensConfiguration(
                                             center: SIMD2(100, 100),
-                                            radius: 90,
+                                            halfSize: SIMD2(90, 90),
                                             strength: 1.2,
                                             lensCurvature: 0.5,
                                             falloff: curve,
@@ -926,7 +968,8 @@ import SwiftUI
         @State private var sampleImage: UIImage?
         @State private var lensCenter: CGPoint = .zero
         @State private var viewSize: CGSize = .zero
-        @State private var radius: Float = 120
+        @State private var lensWidth: Float = 240
+        @State private var lensHeight: Float = 240
         @State private var strength: Float = 1.5
         @State private var material: LiquidLensMaterial = .crownGlass
 
@@ -952,7 +995,7 @@ import SwiftUI
                                         Float(lensCenter.x),
                                         Float(lensCenter.y)
                                     ),
-                                    radius: radius,
+                                    halfSize: SIMD2(lensWidth / 2, lensHeight / 2),
                                     strength: strength,
                                     lensCurvature: 0.6,
                                     chromaticAmount: 1.5,
@@ -962,9 +1005,9 @@ import SwiftUI
                         }
 
                         // Lens indicator ring
-                        Circle()
+                        RoundedRectangle(cornerRadius: 0)
                             .stroke(.white.opacity(0.5), lineWidth: 1)
-                            .frame(width: CGFloat(radius) * 2, height: CGFloat(radius) * 2)
+                            .frame(width: CGFloat(lensWidth), height: CGFloat(lensHeight))
                             .position(lensCenter)
                             .allowsHitTesting(false)
                     }
@@ -988,7 +1031,8 @@ import SwiftUI
 
                 // Compact controls
                 VStack(spacing: 10) {
-                    floatSlider("Radius", value: $radius, range: 30...200)
+                    floatSlider("Width", value: $lensWidth, range: 60...400)
+                    floatSlider("Height", value: $lensHeight, range: 60...400)
                     floatSlider("Strength", value: $strength, range: -3...3)
 
                     Picker("Material", selection: $material) {
@@ -1073,7 +1117,7 @@ import SwiftUI
                         image: image,
                         configuration: LiquidLensConfiguration(
                             center: SIMD2(200, 150),
-                            radius: 130,
+                            halfSize: SIMD2(130, 130),
                             strength: 1.3,
                             lensCurvature: 0.5,
                             chromaticAmount: 1.5,
@@ -1115,13 +1159,13 @@ import SwiftUI
                                 .liquidLens(
                                     image: image,
                                     center: SIMD2(180, 130),
-                                    radius: 120,
+                                    halfSize: SIMD2(120, 120),
                                     strength: 1.2,
                                     material: .crownGlass
                                 )
                                 .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                            Text(".liquidLens(image:center:radius:strength:material:)")
+                            Text(".liquidLens(image:center:halfSize:strength:material:)")
                                 .font(.caption.monospaced())
                                 .foregroundStyle(.secondary)
                         }
@@ -1137,10 +1181,10 @@ import SwiftUI
                                 .liquidLens(
                                     image: image,
                                     center: SIMD2(180, 130),
-                                    radius: 150,
+                                    halfSize: SIMD2(150, 150),
                                     strength: 2.0,
                                     lensCurvature: 0.7,
-                                    cornerRadius: 40,
+                                    cornerRadius: .points(40),
                                     falloff: .cubic,
                                     falloffLength: 0.8,
                                     falloffIntensity: 0.6,
@@ -1166,7 +1210,7 @@ import SwiftUI
                                 .liquidLens(
                                     image: image,
                                     center: SIMD2(180, 130),
-                                    radius: 140,
+                                    halfSize: SIMD2(140, 140),
                                     strength: -1.5,
                                     chromaticAmount: 1.5,
                                     material: .flintGlass

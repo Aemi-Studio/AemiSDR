@@ -28,7 +28,7 @@ using namespace metal;
 struct LiquidLensUniforms {
     float2 center;
     float2 textureSize;
-    float radius;
+    float2 halfSize;
     float strength;
     float lensCurvature;
     float cornerRadius;
@@ -212,9 +212,9 @@ inline float snellDeviation(float incidentAngle, float n1, float n2) {
 
 // MARK: - SDF Functions
 
-inline float sdRoundedRect(float2 p, float halfSize, float cornerRadius) {
-    float corner = clamp(cornerRadius, 0.0f, halfSize);
-    float inner = halfSize - corner;
+inline float sdRoundedRect(float2 p, float2 halfSize, float cornerRadius) {
+    float corner = clamp(cornerRadius, 0.0f, min(halfSize.x, halfSize.y));
+    float2 inner = halfSize - corner;
     float2 q = abs(p) - inner;
     float2 outside = max(q, float2(0.0f));
     float outsideDist = length(outside);
@@ -232,9 +232,9 @@ inline float2 computeRadialDirection(float2 p) {
     return p / len;
 }
 
-inline float2 computeSDFGradient(float2 p, float halfSize, float cornerRadius) {
-    float corner = clamp(cornerRadius, 0.0f, halfSize);
-    float inner = halfSize - corner;
+inline float2 computeSDFGradient(float2 p, float2 halfSize, float cornerRadius) {
+    float corner = clamp(cornerRadius, 0.0f, min(halfSize.x, halfSize.y));
+    float2 inner = halfSize - corner;
 
     float2 signP = float2(p.x >= 0.0f ? 1.0f : -1.0f, p.y >= 0.0f ? 1.0f : -1.0f);
     float2 absP = abs(p);
@@ -272,7 +272,7 @@ inline float2 computeSDFGradient(float2 p, float halfSize, float cornerRadius) {
     return grad * signP;
 }
 
-inline float2 computeShapeAwareDirection(float2 p, float halfSize, float cornerRadius) {
+inline float2 computeShapeAwareDirection(float2 p, float2 halfSize, float cornerRadius) {
     return computeSDFGradient(p, halfSize, cornerRadius);
 }
 
@@ -288,17 +288,18 @@ fragment half4 liquidLensFragment(
     // Convert normalized texCoord to pixel coordinates for physics calculations
     float2 position = in.texCoord * uniforms.textureSize;
     float2 toPixel = position - uniforms.center;
-    float halfSize = uniforms.radius;
+    float2 halfSize = uniforms.halfSize;
+    float minHalf = min(halfSize.x, halfSize.y);
 
     bool isOverlay = uniforms.overlayMode != 0;
 
     // Early exit for zero-size lens
-    if (halfSize <= 0.0f) {
+    if (minHalf <= 0.0f) {
         return isOverlay ? half4(0.0h) : sourceTexture.sample(texSampler, in.texCoord);
     }
 
     // Clamp parameters
-    float clampedCorner = clamp(uniforms.cornerRadius, 0.0f, halfSize);
+    float clampedCorner = clamp(uniforms.cornerRadius, 0.0f, minHalf);
     float clampedCurvature = clamp(uniforms.lensCurvature, 0.0f, 1.0f);
     float clampedFalloffLength = clamp(uniforms.falloffLength, 0.01f, 1.0f);
     float clampedFalloffIntensity = clamp(uniforms.falloffIntensity, 0.0f, 1.0f);
@@ -317,7 +318,7 @@ fragment half4 liquidLensFragment(
 
     // Calculate normalized radial position (0 at center, 1 at edge)
     float distFromEdge = -dOuter;
-    float normalizedRadius = 1.0f - (distFromEdge / halfSize);
+    float normalizedRadius = 1.0f - (distFromEdge / minHalf);
     normalizedRadius = clamp(normalizedRadius, 0.0f, 1.0f);
 
     float innerBoundary = 1.0f - clampedFalloffLength;
@@ -359,7 +360,7 @@ fragment half4 liquidLensFragment(
     float deviationBlue  = snellDeviation(surfaceAngle, kAirRefractiveIndex, nBlue);
 
     // Convert angular deviation to pixel displacement
-    float displacementScale = halfSize * absStrength * effectIntensity * 2.0f;
+    float displacementScale = minHalf * absStrength * effectIntensity * 2.0f;
 
     float dispGreen = deviationGreen * displacementScale * signFactor;
     float dispRed   = mix(dispGreen, deviationRed * displacementScale * signFactor, clampedChromatic);

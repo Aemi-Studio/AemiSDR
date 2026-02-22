@@ -15,7 +15,7 @@
     /// ```swift
     /// LiquidLensView(image: myUIImage, configuration: .init(
     ///     center: SIMD2(200, 300),
-    ///     radius: 150,
+    ///     halfSize: SIMD2(150, 150),
     ///     material: .flintGlass
     /// ))
     /// ```
