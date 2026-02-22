@@ -4,7 +4,9 @@
 //
 
 #if os(iOS)
+    import QuartzCore
     import SwiftUI
+    import UIKit
 
     // MARK: - Auto-capture Overlay
 
@@ -136,7 +138,7 @@
             }
 
             private func applyFrameRate(to link: CADisplayLink) {
-                let fps = max(1, min(refreshRate, 120))
+                let fps = refreshRate  // already clamped at the modifier entry point
                 if #available(iOS 15.0, *) {
                     let fpsFloat = Float(fps)
                     link.preferredFrameRateRange = CAFrameRateRange(

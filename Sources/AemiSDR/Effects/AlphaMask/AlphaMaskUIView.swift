@@ -24,7 +24,7 @@
     ///
     /// The view automatically updates its mask when layout changes occur and caches the generated
     /// mask images to avoid unnecessary recomputation.
-    open class AlphaMaskUIView: UIView {
+    public class AlphaMaskUIView: UIView {
         // MARK: - Configuration Properties
 
         /// The type of mask shape to generate (linear, rounded rectangle, superellipse, etc.)
@@ -168,7 +168,7 @@
         ///
         /// This ensures the mask always matches the current view bounds and maintains
         /// pixel-perfect accuracy across different screen sizes and orientations.
-        override open func layoutSubviews() {
+        override public func layoutSubviews() {
             super.layoutSubviews()
             updateMask(for: bounds.size)
         }
