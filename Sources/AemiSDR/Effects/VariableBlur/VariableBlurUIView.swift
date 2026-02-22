@@ -25,7 +25,7 @@
     /// - Alpha 1.0 (white) = maximum blur radius
     /// - Alpha 0.0 (black) = no blur (clear)
     /// - Intermediate values = proportional blur intensity
-    open class VariableBlurUIView: UIVisualEffectView {
+    public class VariableBlurUIView: UIVisualEffectView {
         // MARK: - Private Properties
 
         private let logger = Logger(
@@ -114,18 +114,18 @@
 
         // MARK: - UIView Lifecycle
 
-        override open func didMoveToWindow() {
+        override public func didMoveToWindow() {
             guard let window, let backdropLayer = subviews.first?.layer else { return }
             backdropLayer.setValue(window.screen.scale, forKey: _InternedKeys.scale)
             updateMask(for: bounds.size)
         }
 
-        override open func layoutSubviews() {
+        override public func layoutSubviews() {
             super.layoutSubviews()
             updateMask(for: bounds.size)
         }
 
-        override open func traitCollectionDidChange(_: UITraitCollection?) {
+        override public func traitCollectionDidChange(_: UITraitCollection?) {
             // Intentionally empty to avoid crashes with filter APIs
         }
     }
