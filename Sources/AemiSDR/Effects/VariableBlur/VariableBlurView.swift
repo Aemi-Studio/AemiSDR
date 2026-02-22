@@ -132,14 +132,7 @@
             transition: TransitionAlgorithm = .eased
         ) {
             self.maxBlurRadius = maxBlurRadius
-            maskType =
-                switch (cornerStyle, transition) {
-                case (.circular, .linear): .roundedRectangle
-                case (.circular, .eased): .easedRoundedRectangle
-                case (.continuous, .linear): .superellipseSquircle
-                case (.continuous, .eased): .easedSuperellipseSquircle
-                case (_, _): .easedSuperellipseSquircle
-                }
+            maskType = MaskType(cornerStyle: cornerStyle, transition: transition)
             self.startOffset = startOffset
             self.cornerRadius = cornerRadius
             self.fadeWidth = fadeWidth

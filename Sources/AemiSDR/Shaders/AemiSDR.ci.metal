@@ -286,63 +286,22 @@ extern "C" { namespace coreimage {
     }
     
     // --------------------------------------------------------------
-    // MARK: Rounded rectangle (Hermite/smoothstep falloff)
+    // MARK: Rounded rectangle with optional inversion (Hermite/smoothstep)
     // --------------------------------------------------------------
     /**
-     * Creates a rounded rectangle mask with smooth anti-aliased edges.
+     * Creates a rounded rectangle mask with optional inversion.
      *
-     * This kernel generates an alpha mask in the shape of a rounded rectangle,
-     * commonly used for iOS-style UI elements, image masks, or container shapes.
      * Uses signed distance fields for perfect anti-aliasing at any scale.
+     * With inverted=0, acts as a standard shape mask (opaque inside, transparent outside).
+     * With inverted=1, creates a cut-out effect (transparent inside, opaque outside).
      *
      * @param widthPx Width of the rectangle in pixels
      * @param heightPx Height of the rectangle in pixels
      * @param cornerRadiusPx Corner radius in pixels (0 = sharp corners)
      * @param fadeInWidthPx Width of the anti-aliasing fade zone in pixels
+     * @param inverted 0 = normal mask, 1 = inverted (cut-out) mask
      * @param dest Core Image destination for pixel coordinates
      * @return RGBA with alpha mask (all channels identical for grayscale)
-     *
-     * The Hermite falloff provides smooth, visually pleasing edges without
-     * aliasing artifacts. Larger fadeInWidth values create softer edges.
-     */
-    float4 roundedRectMask(float widthPx,
-                           float heightPx,
-                           float cornerRadiusPx,
-                           float fadeInWidthPx,
-                           coreimage::destination dest)
-    {
-        // Calculate half-dimensions for SDF computation (centered at origin)
-        float2 half_size = max(float2(widthPx, heightPx) * 0.5f, float2(1.0f));
-        
-        // Transform pixel coordinates to centered coordinate system
-        // Note: The duplicate calculation here could be optimized
-        float2 p = dest.coord() - float2(widthPx * 0.5f, heightPx * 0.5f);
-        
-        // Compute signed distance to rounded rectangle boundary
-        float dist  = rounded_rect_sdf(p, half_size, max(cornerRadiusPx, 0.0f));
-        
-        // Convert distance to alpha with smooth Hermite falloff
-        float alpha = distance_to_alpha(dist, max(fadeInWidthPx, 0.0f));
-        
-        return float4(alpha);
-    }
-    
-    // --------------------------------------------------------------
-    // MARK: Rounded rectangle with inversion option
-    // --------------------------------------------------------------
-    /**
-     * Creates a rounded rectangle mask with optional inversion.
-     *
-     * Same as roundedRectMask but with an inversion flag that flips the
-     * alpha values, creating a cut-out effect (opaque outside, transparent inside).
-     *
-     * @param inverted 0 = normal mask, 1 = inverted (cut-out) mask
-     * Other parameters identical to roundedRectMask
-     *
-     * Inverted masks are useful for:
-     * - Creating hole/window effects
-     * - Masking out central content
-     * - Vignette-style darkening of edges
      */
     float4 roundedRectAlphaMask(float widthPx,
                                 float heightPx,
@@ -364,70 +323,23 @@ extern "C" { namespace coreimage {
     }
     
     // --------------------------------------------------------------
-    // MARK: Superellipse/Squircle mask (iOS-style continuous curvature)
+    // MARK: Superellipse/Squircle with optional inversion
     // --------------------------------------------------------------
     /**
-     * Creates a superellipse (squircle) mask with smooth edges.
+     * Creates a superellipse (squircle) mask with optional inversion.
      *
      * Superellipses provide more natural-looking rounded corners than simple
-     * circular arcs. They maintain continuous curvature (no sudden transitions)
-     * which matches iOS design language and appears more visually pleasing.
+     * circular arcs, matching iOS design language. With inverted=0, acts as a
+     * standard shape mask. With inverted=1, creates a cut-out effect.
      *
      * @param widthPx Width of the shape in pixels
      * @param heightPx Height of the shape in pixels
      * @param cornerRadiusPx Size of corner regions in pixels
      * @param fadeInWidthPx Anti-aliasing fade width in pixels
-     * @param exponent Superellipse exponent (n-value):
-     *                 2.0 = ellipse/circle
-     *                 4.0-5.0 = iOS-style squircle (default 5.0)
-     *                 8.0+ = nearly rectangular
+     * @param exponent Superellipse exponent (2.0=ellipse, 5.0=iOS squircle, 8.0+=near-rect)
+     * @param inverted 0 = normal, 1 = inverted (cut-out)
      * @param dest Pixel coordinate provider
      * @return RGBA grayscale mask
-     *
-     * The default exponent of 5.0 closely matches iOS system UI corners.
-     * Lower values create rounder corners, higher values approach rectangular.
-     */
-    float4 superellipseMask(float widthPx,
-                            float heightPx,
-                            float cornerRadiusPx,
-                            float fadeInWidthPx,
-                            float exponent,
-                            coreimage::destination dest)
-    {
-        // Calculate center point and half-dimensions
-        // Clamp to minimum of 1.0 for consistency with roundedRect kernels
-        float2 center = float2(widthPx * 0.5f, heightPx * 0.5f);
-        float2 half_size = max(float2(widthPx * 0.5f, heightPx * 0.5f), float2(1.0f));
-
-        // Transform to centered coordinates
-        float2 p = dest.coord() - center;
-
-        // Default to iOS-style squircle exponent if not specified
-        // iOS typically uses n≈5 for system UI elements
-        // Clamp to reasonable range [2, 100] to prevent numerical issues
-        float n = (exponent > 1.0f) ? clamp(exponent, 2.0f, 100.0f) : 5.0f;
-
-        // Calculate signed distance using simplified squircle SDF
-        float dist = simple_squircle_sdf(p, half_size, cornerRadiusPx, n);
-
-        // Convert to alpha with smooth falloff
-        float alpha = distance_to_alpha(dist, max(fadeInWidthPx, 0.0f));
-
-        return float4(alpha);
-    }
-    
-    // --------------------------------------------------------------
-    // MARK: Superellipse with inversion option
-    // --------------------------------------------------------------
-    /**
-     * Creates a superellipse mask with optional inversion for cut-out effects.
-     *
-     * Combines superellipse shape generation with inversion capability,
-     * useful for creating sophisticated masking effects with continuous
-     * curvature corners.
-     *
-     * Parameters identical to superellipseMask with addition of:
-     * @param inverted 0 = normal, 1 = inverted (cut-out)
      */
     float4 superellipseAlphaMask(float widthPx,
                                  float heightPx,
@@ -452,65 +364,21 @@ extern "C" { namespace coreimage {
     }
     
     // --------------------------------------------------------------
-    // MARK: Ease-in vertical mask (quadratic acceleration)
+    // MARK: Ease-in vertical mask with optional inversion
     // --------------------------------------------------------------
     /**
-     * Creates a vertical gradient with quadratic ease-in curve.
+     * Creates a vertical gradient with quadratic ease-in curve and optional inversion.
      *
-     * Unlike linearMask which uses constant rate of change, this applies
-     * a quadratic easing function (t²) for an accelerating transition.
-     * Creates more dynamic, less mechanical-looking fades.
+     * The quadratic ease (t²) starts slowly and accelerates, creating
+     * a more natural fade than linear gradients.
      *
      * @param widthPx Width in pixels (unused but required for consistency)
      * @param heightPx Height in pixels
      * @param startOffset Start position as fraction [0.0, 1.0]
      * @param direction 0 = top-to-bottom, 1 = bottom-to-top
+     * @param inverted 0 = normal, 1 = inverted gradient
      * @param dest Pixel coordinates
      * @return half4 for memory efficiency (16-bit per channel)
-     *
-     * The quadratic ease (t²) starts slowly and accelerates, creating
-     * a more natural fade that draws less attention to the transition.
-     */
-    half4 easeInMask(float widthPx,
-                     float heightPx,
-                     float startOffset,
-                     float direction,
-                     coreimage::destination dest)
-    {
-        float h     = max(heightPx, 1.0f);
-        
-        // Normalize Y coordinate to [0,1] range
-        float yNorm = dest.coord().y / h;  // 0 at top, 1 at bottom
-        
-        // Flip direction if requested
-        if (direction > 0.5f) yNorm = 1.0f - yNorm;
-        
-        // Clamp offset to prevent division by zero
-        float s = clamp(startOffset, 0.0f, 0.999f);
-        
-        // Calculate normalized position within gradient
-        // Maps [startOffset, 1.0] to [0, 1]
-        float t = clamp((yNorm - s) / (1.0f - s), 0.0f, 1.0f);
-        
-        // Apply quadratic ease-in: slow start, accelerating finish
-        float eased = t * t;
-        
-        // Convert to half precision for efficiency
-        half a = half(eased);
-        return half4(a, a, a, a);
-    }
-    
-    // --------------------------------------------------------------
-    // MARK: Ease-in vertical mask with inversion
-    // --------------------------------------------------------------
-    /**
-     * Creates an ease-in vertical gradient with optional inversion.
-     *
-     * Combines quadratic easing with inversion capability for versatile
-     * gradient effects.
-     *
-     * Parameters identical to easeInMask with:
-     * @param inverted 0 = normal, 1 = inverted gradient
      */
     half4 easeInAlphaMask(float widthPx,
                           float heightPx,
@@ -537,61 +405,23 @@ extern "C" { namespace coreimage {
     }
     
     // --------------------------------------------------------------
-    // MARK: Rounded rectangle with quadratic ease falloff
+    // MARK: Rounded rectangle with quadratic ease and optional inversion
     // --------------------------------------------------------------
     /**
-     * Creates a rounded rectangle using quadratic easing for edge falloff.
+     * Creates a rounded rectangle using quadratic easing for edge falloff,
+     * with optional inversion for cut-out effects.
      *
-     * Alternative to Hermite smoothstep version, using t² easing instead.
-     * Produces slightly different visual characteristics - more aggressive
-     * initial falloff, softer final transition.
+     * Quadratic easing (t²) vs Hermite (3t²-2t³):
+     * - Quadratic: Faster initial falloff, linear acceleration
+     * - Hermite: Smoother at both ends, S-curve profile
      *
      * @param widthPx Rectangle width
      * @param heightPx Rectangle height
      * @param cornerRadiusPx Corner rounding radius
      * @param fadeInWidthPx Edge fade width (0 = hard edge)
+     * @param inverted 0 = normal, 1 = inverted (cut-out)
      * @param dest Pixel coordinates
      * @return RGBA grayscale mask
-     *
-     * Quadratic easing (t²) vs Hermite (3t²-2t³):
-     * - Quadratic: Faster initial falloff, linear acceleration
-     * - Hermite: Smoother at both ends, S-curve profile
-     */
-    float4 roundedRectEaseMask(float widthPx,
-                               float heightPx,
-                               float cornerRadiusPx,
-                               float fadeInWidthPx,
-                               coreimage::destination dest)
-    {
-        float2 half_size = max(float2(widthPx, heightPx) * 0.5f, float2(1.0f));
-        float2 p         = dest.coord() - float2(widthPx * 0.5f, heightPx * 0.5f);
-        
-        // Calculate signed distance to shape boundary
-        float dist = rounded_rect_sdf(p, half_size, max(cornerRadiusPx, 0.0f));
-        
-        float alpha;
-        if (fadeInWidthPx <= 0.0f) {
-            // Hard edge: binary inside/outside test
-            alpha = (dist >= 0.0f) ? 1.0f : 0.0f;
-        } else {
-            // Soft edge with quadratic ease
-            float t = clamp(1.0f + dist / fadeInWidthPx, 0.0f, 1.0f);
-            alpha = t * t; // Quadratic ease-in
-        }
-        
-        return float4(alpha);
-    }
-    
-    // --------------------------------------------------------------
-    // MARK: Rounded rectangle (Ease-in) with inversion
-    // --------------------------------------------------------------
-    /**
-     * Rounded rectangle with quadratic easing and optional inversion.
-     *
-     * Combines quadratic ease falloff with cut-out capability.
-     *
-     * Parameters identical to roundedRectEaseMask with:
-     * @param inverted 0 = normal, 1 = inverted (cut-out)
      */
     float4 roundedRectEaseAlphaMask(float widthPx,
                                     float heightPx,
@@ -619,63 +449,22 @@ extern "C" { namespace coreimage {
     }
     
     // --------------------------------------------------------------
-    // MARK: Superellipse with quadratic ease falloff
-    // --------------------------------------------------------------
-    /**
-     * Creates a superellipse mask using quadratic easing for edges.
-     *
-     * Alternative edge treatment for superellipse shapes, using t²
-     * instead of Hermite smoothstep. Maintains continuous curvature
-     * corners while providing different edge characteristics.
-     *
-     * Parameters identical to superellipseMask
-     * Uses quadratic (t²) easing instead of Hermite
-     */
-    float4 superellipseEaseMask(float widthPx,
-                                float heightPx,
-                                float cornerRadiusPx,
-                                float fadeInWidthPx,
-                                float exponent,
-                                coreimage::destination dest)
-    {
-        float2 center = float2(widthPx * 0.5f, heightPx * 0.5f);
-        float2 half_size = max(float2(widthPx * 0.5f, heightPx * 0.5f), float2(1.0f));
-        float2 p = dest.coord() - center;
-
-        // Default to iOS-style squircle with clamped range
-        float n = (exponent > 1.0f) ? clamp(exponent, 2.0f, 100.0f) : 5.0f;
-
-        float dist = simple_squircle_sdf(p, half_size, cornerRadiusPx, n);
-
-        float alpha;
-        if (fadeInWidthPx <= 0.0f) {
-            // Binary edge
-            alpha = (dist >= 0.0f) ? 1.0f : 0.0f;
-        } else {
-            // Quadratic ease edge
-            float t = clamp(1.0f + dist / fadeInWidthPx, 0.0f, 1.0f);
-            alpha = t * t;
-        }
-
-        return float4(alpha);
-    }
-    
-    // --------------------------------------------------------------
-    // MARK: Superellipse ease-in with inversion
+    // MARK: Superellipse with quadratic ease and optional inversion
     // --------------------------------------------------------------
     /**
      * Superellipse mask with quadratic easing and optional inversion.
      *
-     * Final variant combining:
-     * - Superellipse/squircle shape (continuous curvature)
-     * - Quadratic ease edge falloff
-     * - Optional inversion for cut-outs
+     * Combines continuous curvature corners with quadratic ease edge falloff
+     * and optional inversion for cut-outs.
      *
-     * This provides maximum flexibility for creating sophisticated
-     * UI masks and effects matching modern design languages.
-     *
-     * All parameters as previously documented with:
+     * @param widthPx Shape width
+     * @param heightPx Shape height
+     * @param cornerRadiusPx Corner region size
+     * @param fadeInWidthPx Anti-aliasing fade width
+     * @param exponent Superellipse exponent (2.0=ellipse, 5.0=iOS squircle)
      * @param inverted 0 = normal, 1 = inverted mask
+     * @param dest Pixel coordinates
+     * @return RGBA grayscale mask
      */
     float4 superellipseEaseAlphaMask(float widthPx,
                                      float heightPx,

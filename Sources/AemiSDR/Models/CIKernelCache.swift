@@ -95,6 +95,28 @@ class CIKernelCache {
         }
     }()
 
+    // MARK: - Kernel Loading
+
+    /// Loads a CIColorKernel from the compiled Metal library by function name.
+    ///
+    /// Centralizes the boilerplate of checking library data, creating the kernel,
+    /// and logging errors. Each kernel property can be defined as a simple one-liner.
+    ///
+    /// - Parameter name: The Metal function name to load
+    /// - Returns: The loaded kernel, or nil if loading fails
+    static func loadKernel(_ name: String) -> CIColorKernel? {
+        guard let libraryData else {
+            logger.error("Library data is nil.")
+            return nil
+        }
+        do {
+            return try CIColorKernel(functionName: name, fromMetalLibraryData: libraryData)
+        } catch {
+            logger.error("Failed to load CIColorKernel '\(name)': \(error)")
+            return nil
+        }
+    }
+
     // MARK: - Utility Methods
 
     /// Generates a CGImage from a CIColorKernel using specified parameters.
@@ -143,46 +165,18 @@ class CIKernelCache {
     }
 }
 
-// MARK: - Kernel Extensions
+// MARK: - Shared Kernels
 
-/// Extension containing specific kernel implementations.
-///
-/// This extension demonstrates how subclasses or extensions can add specific
-/// kernel implementations. Each kernel follows the same pattern:
-/// 1. Check for library data availability
-/// 2. Attempt to create the kernel from the Metal library
-/// 3. Log errors and return nil on failure
-/// 4. Cache the result for subsequent use
 extension CIKernelCache {
-    /// Linear gradient mask kernel for directional blur effects.
-    ///
-    /// Creates a CIColorKernel that generates linear gradient masks, useful for
-    /// creating fade-in/fade-out blur effects or directional edge softening.
-    ///
-    /// **Metal Function**: `linearMask` from the compiled Metal library
-    /// **Expected Signature**:
-    /// ```metal
-    /// float4 linearMask(float widthPx, float heightPx, float startOffset, float inverted, coreimage::destination dest)
-    /// ```
-    ///
-    /// **Parameters for kernel.apply()**:
-    /// - widthPx: Width of the gradient in pixels
-    /// - heightPx: Height of the gradient in pixels
-    /// - startOffset: Start position as fraction of height (0.0 to 1.0)
-    /// - inverted: 0 for top-to-bottom, 1 for bottom-to-top
-    ///
-    /// - Returns: Cached CIColorKernel instance, or nil if creation fails
-    static let linearMask: CIColorKernel? = {
-        guard let libraryData else {
-            logger.error("Library data is nil.")
-            return nil
-        }
+    // Gradient kernels
+    static let linearMask = loadKernel("linearMask")
+    static let easeInAlphaMask = loadKernel("easeInAlphaMask")
 
-        do {
-            return try CIColorKernel(functionName: "linearMask", fromMetalLibraryData: libraryData)
-        } catch {
-            logger.error("Failed to create linearMask kernel: \(error.localizedDescription)")
-            return nil
-        }
-    }()
+    // Rounded rectangle kernels (with inversion support)
+    static let roundedRectAlphaMask = loadKernel("roundedRectAlphaMask")
+    static let roundedRectEaseAlphaMask = loadKernel("roundedRectEaseAlphaMask")
+
+    // Superellipse kernels (with inversion support)
+    static let superellipseAlphaMask = loadKernel("superellipseAlphaMask")
+    static let superellipseEaseAlphaMask = loadKernel("superellipseEaseAlphaMask")
 }
