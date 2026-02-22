@@ -230,4 +230,104 @@ public struct VisualEffectConfiguration: Sendable, Equatable {
         /// Configuration matching `UIBlurEffect.Style.systemChromeMaterial`.
         public static var chromeMaterial: VisualEffectConfiguration { systemStyle(.systemChromeMaterial) }
     }
+
+#elseif os(macOS)
+    import AppKit
+
+    extension VisualEffectConfiguration {
+        /// Creates a configuration by introspecting the internal CABackdropLayer
+        /// of an `NSVisualEffectView` configured with the given material.
+        ///
+        /// This reads filter values at runtime from the backdrop layer's CAFilter
+        /// objects so it automatically matches the current OS version.
+        ///
+        /// - Parameter material: The macOS material to introspect.
+        /// - Returns: A configuration with values extracted from the system material.
+        public static func systemMaterial(_ material: NSVisualEffectView.Material) -> VisualEffectConfiguration {
+            _introspect(material: material)
+        }
+
+        // MARK: - Named Presets
+
+        /// Configuration with light appearance (introspected from `.underWindowBackground`).
+        public static var light: VisualEffectConfiguration {
+            _introspect(material: .underWindowBackground, appearance: NSAppearance(named: .aqua))
+        }
+
+        /// Configuration with dark appearance (introspected from `.underWindowBackground`).
+        public static var dark: VisualEffectConfiguration {
+            _introspect(material: .underWindowBackground, appearance: NSAppearance(named: .darkAqua))
+        }
+
+        /// Configuration matching `NSVisualEffectView.Material.headerView`.
+        public static var ultraThinMaterial: VisualEffectConfiguration { systemMaterial(.headerView) }
+
+        /// Configuration matching `NSVisualEffectView.Material.titlebar`.
+        public static var thinMaterial: VisualEffectConfiguration { systemMaterial(.titlebar) }
+
+        /// Configuration matching `NSVisualEffectView.Material.popover`.
+        public static var material: VisualEffectConfiguration { systemMaterial(.popover) }
+
+        /// Configuration matching `NSVisualEffectView.Material.sheet`.
+        public static var thickMaterial: VisualEffectConfiguration { systemMaterial(.sheet) }
+
+        /// Configuration matching `NSVisualEffectView.Material.hudWindow`.
+        public static var chromeMaterial: VisualEffectConfiguration { systemMaterial(.hudWindow) }
+
+        // MARK: - Private
+
+        private static func _introspect(
+            material: NSVisualEffectView.Material,
+            appearance: NSAppearance? = nil
+        ) -> VisualEffectConfiguration {
+            let view = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+            view.material = material
+            view.blendingMode = .behindWindow
+            view.state = .active
+            if let appearance { view.appearance = appearance }
+
+            // Force layout so the backdrop layer hierarchy is created
+            view.layoutSubtreeIfNeeded()
+            view.displayIfNeeded()
+
+            var config = VisualEffectConfiguration()
+
+            // Read gaussianBlur inputRadius -> blurRadius
+            if let blur = view.gaussianBlurFilter,
+               let radius = blur.value(forKeyPath: _InternedKeys.inputRadius) as? CGFloat
+            {
+                config.blurRadius = radius
+            }
+
+            // Read colorSaturate inputAmount -> saturationDeltaFactor
+            if let saturate = view.colorSaturateFilter,
+               let amount = saturate.value(forKeyPath: _InternedKeys.inputAmount) as? CGFloat
+            {
+                config.saturationDeltaFactor = amount
+            }
+
+            // Read backdrop scale
+            if let backdrop = view.backdropLayer,
+               let scale = backdrop.value(forKeyPath: _InternedKeys.scale) as? CGFloat
+            {
+                config.scale = scale
+            }
+
+            // Read tint from sublayer backgroundColor
+            if let backdrop = view.backdropLayer {
+                for sublayer in backdrop.sublayers ?? [] {
+                    if let bg = sublayer.backgroundColor {
+                        let nsColor = NSColor(cgColor: bg)
+                        if let srgb = nsColor?.usingColorSpace(.sRGB) {
+                            config.colorTint = Color(srgb)
+                            config.colorTintAlpha = srgb.alphaComponent
+                        }
+                        break
+                    }
+                }
+            }
+
+            return config
+        }
+    }
 #endif

@@ -133,8 +133,9 @@ import SwiftUI
 
     /// A SwiftUI view that provides customizable blur effects using AppKit's visual effect system.
     ///
-    /// On macOS, this uses `NSVisualEffectView` with material-based blurring.
-    /// Note that macOS does not support the same level of blur customization as iOS.
+    /// On macOS, this introspects `NSVisualEffectView`'s internal `CABackdropLayer` to provide
+    /// the same continuous parameter control as iOS — blur radius, saturation, brightness, and tint
+    /// can all be set to arbitrary values rather than being limited to discrete materials.
     public struct VisualEffectView: NSViewRepresentable {
         // MARK: - Configuration Properties
 
@@ -144,13 +145,13 @@ import SwiftUI
         /// Alpha value for the tint color (0.0 to 1.0)
         public let colorTintAlpha: CGFloat
 
-        /// The blur radius (used to select material on macOS)
+        /// The blur radius in points
         public let blurRadius: CGFloat
 
-        /// Scale factor (unused on macOS)
+        /// Scale factor for the effect
         public let scale: CGFloat
 
-        /// Full configuration (new properties are no-ops on macOS)
+        /// Full configuration, when using the configuration-based API
         private let configuration: VisualEffectConfiguration?
 
         // MARK: - Initialization
@@ -160,8 +161,8 @@ import SwiftUI
         /// - Parameters:
         ///   - colorTint: Optional tint color applied over the blur. Default is `nil`.
         ///   - colorTintAlpha: Alpha value for the tint color. Default is `0`.
-        ///   - blurRadius: The blur radius (used to select material). Default is `0`.
-        ///   - scale: Scale factor (unused on macOS). Default is `1`.
+        ///   - blurRadius: The blur radius in points. Default is `0`.
+        ///   - scale: Scale factor for the effect. Default is `1`.
         public init(
             colorTint: Color? = nil,
             colorTintAlpha: CGFloat = 0,
@@ -176,9 +177,6 @@ import SwiftUI
         }
 
         /// Creates a visual effect view from a full configuration.
-        ///
-        /// On macOS, the extended blur properties are no-ops.
-        /// Only `blurRadius` is used (to select a material).
         ///
         /// - Parameter configuration: The configuration specifying all effect properties.
         public init(configuration: VisualEffectConfiguration) {
@@ -214,16 +212,76 @@ import SwiftUI
         // MARK: - Private Helpers
 
         private func configureView(_ view: NSVisualEffectView) {
+            // Set a base material to initialize the layer hierarchy
             view.blendingMode = .behindWindow
             view.state = .active
+            view.material = .popover
 
-            // Map blur radius to material - higher blur = thicker material
-            if blurRadius > 15 {
-                view.material = .hudWindow
-            } else if blurRadius > 8 {
-                view.material = .popover
+            let config = configuration ?? VisualEffectConfiguration(
+                blurRadius: blurRadius,
+                scale: scale,
+                colorTint: colorTint,
+                colorTintAlpha: colorTintAlpha
+            )
+
+            // Force layout so the backdrop layer hierarchy is created
+            view.layoutSubtreeIfNeeded()
+
+            // Override filter values on the internal backdrop layer
+            if let backdrop = view.backdropLayer {
+                // gaussianBlur.inputRadius -> blurRadius
+                if let blur = view.gaussianBlurFilter {
+                    blur.setValue(config.blurRadius, forKey: _InternedKeys.inputRadius)
+                }
+
+                // colorSaturate.inputAmount -> saturationDeltaFactor
+                if let saturate = view.colorSaturateFilter {
+                    let amount = config.saturationDeltaFactor > 0 ? config.saturationDeltaFactor : 1.0
+                    saturate.setValue(amount, forKey: _InternedKeys.inputAmount)
+                }
+
+                // colorBrightness.inputAmount -> derived from grayscale/darkening
+                if let brightness = view.colorBrightnessFilter {
+                    let brightnessAmount = config.grayscaleTintLevel > 0
+                        ? config.grayscaleTintLevel - 1.0
+                        : -config.darkeningTintAlpha
+                    brightness.setValue(brightnessAmount, forKey: _InternedKeys.inputAmount)
+                }
+
+                // backdropLayer.scale
+                backdrop.setValue(config.scale, forKey: _InternedKeys.scale)
+            }
+
+            // Manage tint sublayer
+            configureTintLayer(on: view, with: config)
+        }
+
+        private func configureTintLayer(on view: NSVisualEffectView, with config: VisualEffectConfiguration) {
+            // Find or create the tint sublayer
+            let existingTint = view.layer?.sublayers?.first { $0.name == "AemiSDR.tint" }
+
+            guard let tintColor = config.colorTint, config.colorTintAlpha > 0 else {
+                existingTint?.removeFromSuperlayer()
+                return
+            }
+
+            let tintLayer = existingTint ?? CALayer()
+            tintLayer.name = "AemiSDR.tint"
+
+            let nsColor = NSColor(tintColor).withAlphaComponent(config.colorTintAlpha)
+            tintLayer.backgroundColor = nsColor.cgColor
+            tintLayer.frame = view.bounds
+            tintLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
+
+            // Apply compositing filter via CIFilter name
+            if config.darkenWithSourceOver {
+                tintLayer.compositingFilter = CIFilter(name: "CIMultiplyBlendMode")
             } else {
-                view.material = .headerView
+                tintLayer.compositingFilter = CIFilter(name: "CISourceOverCompositing")
+            }
+
+            if existingTint == nil {
+                view.layer?.addSublayer(tintLayer)
             }
         }
     }
