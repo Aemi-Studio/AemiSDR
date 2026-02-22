@@ -16,7 +16,7 @@ extension NSObject {
             return nil
         }
         return objects.first { filter in
-            for lookupKey in [_InternedKeys.filterType, "type", "name"] {
+            for lookupKey in [_InternedKeys.kindKey, _InternedKeys.kindFallbackA, _InternedKeys.kindFallbackB] {
                 if filter.responds(to: NSSelectorFromString(lookupKey)),
                    let value = filter.value(forKeyPath: lookupKey) as? String,
                    value == filterType
@@ -44,24 +44,24 @@ extension NSObject {
         }
 
         var gaussianBlur: NSObject? {
-            backdropView?._filterValue(forKey: _InternedKeys.filters, filterType: _InternedKeys.gaussianBlur)
+            backdropView?._filterValue(forKey: _InternedKeys.filterListKey, filterType: _InternedKeys.blurFilterID)
         }
 
         var colorSaturate: NSObject? {
-            backdropView?._filterValue(forKey: _InternedKeys.filters, filterType: _InternedKeys.colorSaturate)
+            backdropView?._filterValue(forKey: _InternedKeys.filterListKey, filterType: _InternedKeys.saturateFilterID)
         }
 
         var sourceOver: NSObject? {
-            overlayView?._filterValue(forKey: _InternedKeys.viewEffects, filterType: _InternedKeys.sourceOver)
+            overlayView?._filterValue(forKey: _InternedKeys.effectsListKey, filterType: _InternedKeys.compositeFilterID)
         }
 
         func prepareForChanges() {
             effect = UIBlurEffect(style: .light)
-            gaussianBlur?.setValue(1.0, forKeyPath: _InternedKeys.requestedScaleHint)
+            gaussianBlur?.setValue(1.0, forKeyPath: _InternedKeys.scaleHintKey)
         }
 
         func applyChanges() {
-            _ = unsafe backdropView?.perform(Selector(_InternedKeys.applyRequestedFilterEffects))
+            _ = unsafe backdropView?.perform(Selector(_InternedKeys.commitFiltersSelector))
         }
     }
 
@@ -69,8 +69,8 @@ extension NSObject {
 
     extension NSObject {
         var requestedValues: [String: Any]? {
-            get { value(forKeyPath: _InternedKeys.requestedValues) as? [String: Any] }
-            set { setValue(newValue, forKeyPath: _InternedKeys.requestedValues) }
+            get { value(forKeyPath: _InternedKeys.pendingValuesKey) as? [String: Any] }
+            set { setValue(newValue, forKeyPath: _InternedKeys.pendingValuesKey) }
         }
     }
 
@@ -94,13 +94,13 @@ extension NSObject {
         /// On macOS 26+ that property was removed, so we fall back to
         /// traversing the layer hierarchy to find the `CABackdropLayer`.
         var backdropLayer: CALayer? {
-            if responds(to: NSSelectorFromString(_InternedKeys._backdropLayer)),
-               let layer = value(forKey: _InternedKeys._backdropLayer) as? CALayer
+            if responds(to: NSSelectorFromString(_InternedKeys.backdropLayerRef)),
+               let layer = value(forKey: _InternedKeys.backdropLayerRef) as? CALayer
             {
                 return layer
             }
             func find(in layer: CALayer) -> CALayer? {
-                if NSStringFromClass(type(of: layer)) == "CABackdropLayer" { return layer }
+                if NSStringFromClass(type(of: layer)) == _InternedKeys.backdropLayerClassName { return layer }
                 return layer.sublayers?.lazy.compactMap { find(in: $0) }.first
             }
             return layer.flatMap { find(in: $0) }
@@ -108,17 +108,17 @@ extension NSObject {
 
         /// The `gaussianBlur` CAFilter from the backdrop layer's filters array.
         var gaussianBlurFilter: NSObject? {
-            backdropLayer?._filterValue(forKey: _InternedKeys.filters, filterType: _InternedKeys.gaussianBlur)
+            backdropLayer?._filterValue(forKey: _InternedKeys.filterListKey, filterType: _InternedKeys.blurFilterID)
         }
 
         /// The `colorSaturate` CAFilter from the backdrop layer's filters array.
         var colorSaturateFilter: NSObject? {
-            backdropLayer?._filterValue(forKey: _InternedKeys.filters, filterType: _InternedKeys.colorSaturate)
+            backdropLayer?._filterValue(forKey: _InternedKeys.filterListKey, filterType: _InternedKeys.saturateFilterID)
         }
 
         /// The `colorBrightness` CAFilter from the backdrop layer's filters array.
         var colorBrightnessFilter: NSObject? {
-            backdropLayer?._filterValue(forKey: _InternedKeys.filters, filterType: _InternedKeys.colorBrightness)
+            backdropLayer?._filterValue(forKey: _InternedKeys.filterListKey, filterType: _InternedKeys.brightnessFilterID)
         }
     }
 #endif

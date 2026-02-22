@@ -13,46 +13,48 @@ import InternedStrings
 /// - Provide compile-time safety for key references
 /// - Enable efficient string comparison via pointer equality
 package enum _InternedKeys {
-    // MARK: - Filter Keys
+    // MARK: - Filter Identifiers
 
-    @Interned static var caFilterClass = "CAFilter"
-    @Interned static var filterWithType = "filterWithType:"
-    @Interned static var gaussianBlur = "gaussianBlur"
-    @Interned static var sourceOver = "sourceOver"
-    @Interned static var colorSaturate = "colorSaturate"
-    @Interned static var colorBrightness = "colorBrightness"
+    @Interned static var caLayerFilterClass = "CAFilter"
+    @Interned static var filterCreationSelector = "filterWithType:"
+    @Interned static var blurFilterID = "gaussianBlur"
+    @Interned static var compositeFilterID = "sourceOver"
+    @Interned static var saturateFilterID = "colorSaturate"
+    @Interned static var brightnessFilterID = "colorBrightness"
 
-    // MARK: - Input Keys
+    // MARK: - Filter Parameters
 
-    @Interned static var inputRadius = "inputRadius"
-    @Interned static var inputNormalizeEdges = "inputNormalizeEdges"
-    @Interned static var inputMaskImage = "inputMaskImage"
-    @Interned static var inputAmount = "inputAmount"
+    @Interned static var radiusParam = "inputRadius"
+    @Interned static var normalizeParam = "inputNormalizeEdges"
+    @Interned static var maskParam = "inputMaskImage"
+    @Interned static var amountParam = "inputAmount"
 
     // MARK: - Key Paths
 
-    @Interned static var filters = "filters"
-    @Interned static var filterType = "filterType"
-    @Interned static var scale = "scale"
-    @Interned static var colorTint = "colorTint"
-    @Interned static var colorTintAlpha = "colorTintAlpha"
-    @Interned static var blurRadius = "blurRadius"
-    @Interned static var saturationDeltaFactor = "saturationDeltaFactor"
-    @Interned static var grayscaleTintLevel = "grayscaleTintLevel"
-    @Interned static var grayscaleTintAlpha = "grayscaleTintAlpha"
-    @Interned static var colorBurnTintLevel = "colorBurnTintLevel"
-    @Interned static var colorBurnTintAlpha = "colorBurnTintAlpha"
-    @Interned static var darkeningTintAlpha = "darkeningTintAlpha"
-    @Interned static var darkeningTintHue = "darkeningTintHue"
-    @Interned static var darkeningTintSaturation = "darkeningTintSaturation"
-    @Interned static var zoom = "zoom"
-    @Interned static var lightenGrayscaleWithSourceOver = "lightenGrayscaleWithSourceOver"
-    @Interned static var darkenWithSourceOver = "darkenWithSourceOver"
+    @Interned static var filterListKey = "filters"
+    @Interned static var kindKey = "filterType"
+    @Interned static var kindFallbackA = "type"
+    @Interned static var kindFallbackB = "name"
+    @Interned static var scaleFactorKey = "scale"
+    @Interned static var tintColorKey = "colorTint"
+    @Interned static var tintAlphaKey = "colorTintAlpha"
+    @Interned static var radiusValueKey = "blurRadius"
+    @Interned static var saturationKey = "saturationDeltaFactor"
+    @Interned static var grayLevelKey = "grayscaleTintLevel"
+    @Interned static var grayAlphaKey = "grayscaleTintAlpha"
+    @Interned static var burnLevelKey = "colorBurnTintLevel"
+    @Interned static var burnAlphaKey = "colorBurnTintAlpha"
+    @Interned static var darkAlphaKey = "darkeningTintAlpha"
+    @Interned static var darkHueKey = "darkeningTintHue"
+    @Interned static var darkSatKey = "darkeningTintSaturation"
+    @Interned static var zoomKey = "zoom"
+    @Interned static var lightenGrayFlag = "lightenGrayscaleWithSourceOver"
+    @Interned static var darkenCompFlag = "darkenWithSourceOver"
 
     // MARK: - iOS-Only Keys
 
     #if os(iOS)
-        @Interned static var variableBlur = "variableBlur"
+        @Interned static var maskedBlurFilterID = "variableBlur"
 
         // Effect View Classes
         @Interned static var customBlurEffectClass = "_UICustomBlurEffect"
@@ -60,26 +62,30 @@ package enum _InternedKeys {
         @Interned static var overlaySubviewClass = "_UIVisualEffectSubview"
 
         // Key Paths
-        @Interned static var viewEffects = "viewEffects"
-        @Interned static var requestedValues = "requestedValues"
-        @Interned static var requestedScaleHint = "requestedScaleHint"
-        @Interned static var color = "color"
+        @Interned static var effectsListKey = "viewEffects"
+        @Interned static var pendingValuesKey = "requestedValues"
+        @Interned static var scaleHintKey = "requestedScaleHint"
+        @Interned static var colorKey = "color"
 
         // Backdrop Settings
         @Interned static var backdropViewSettingsClass = "_UIBackdropViewSettings"
-        @Interned static var settingsForStyle = "settingsForStyle:"
-        @Interned static var usesGrayscaleTintView = "usesGrayscaleTintView"
-        @Interned static var usesColorTintView = "usesColorTintView"
-        @Interned static var usesColorBurnTintView = "usesColorBurnTintView"
+        @Interned static var settingsCreationSelector = "settingsForStyle:"
+        @Interned static var grayTintEnabledKey = "usesGrayscaleTintView"
+        @Interned static var tintEnabledKey = "usesColorTintView"
+        @Interned static var burnTintEnabledKey = "usesColorBurnTintView"
 
         // Selectors
-        @Interned static var applyRequestedEffectToView = "applyRequestedEffectToView:"
-        @Interned static var applyRequestedFilterEffects = "applyRequestedFilterEffects"
+        @Interned static var applyEffectSelector = "applyRequestedEffectToView:"
+        @Interned static var commitFiltersSelector = "applyRequestedFilterEffects"
+
+        // Private UIKit Properties
+        @Interned static var screenCornerRadiusKey = "_displayCornerRadius"
     #endif
 
     // MARK: - macOS-Only Keys
 
     #if os(macOS)
-        @Interned static var _backdropLayer = "_backdropLayer"
+        @Interned static var backdropLayerRef = "_backdropLayer"
+        @Interned static var backdropLayerClassName = "CABackdropLayer"
     #endif
 }

@@ -116,7 +116,7 @@
 
         override public func didMoveToWindow() {
             guard let window, let backdropLayer = subviews.first?.layer else { return }
-            backdropLayer.setValue(window.screen.scale, forKey: _InternedKeys.scale)
+            backdropLayer.setValue(window.screen.scale, forKey: _InternedKeys.scaleFactorKey)
             updateMask(for: bounds.size)
         }
 
@@ -134,23 +134,23 @@
 
     extension VariableBlurUIView {
         fileprivate func setupVariableBlurFilter() {
-            guard let filterClass = NSClassFromString(_InternedKeys.caFilterClass) as? NSObject.Type else {
+            guard let filterClass = NSClassFromString(_InternedKeys.caLayerFilterClass) as? NSObject.Type else {
                 logger.error("Failed to locate filter class.")
                 return
             }
 
             guard
                 let variableBlur = unsafe filterClass.perform(
-                    NSSelectorFromString(_InternedKeys.filterWithType),
-                    with: _InternedKeys.variableBlur
+                    NSSelectorFromString(_InternedKeys.filterCreationSelector),
+                    with: _InternedKeys.maskedBlurFilterID
                 ).takeUnretainedValue() as? NSObject
             else {
                 logger.error("Failed to create variable blur filter instance.")
                 return
             }
 
-            variableBlur.setValue(configuredMaxBlurRadius, forKey: _InternedKeys.inputRadius)
-            variableBlur.setValue(true, forKey: _InternedKeys.inputNormalizeEdges)
+            variableBlur.setValue(configuredMaxBlurRadius, forKey: _InternedKeys.radiusParam)
+            variableBlur.setValue(true, forKey: _InternedKeys.normalizeParam)
 
             let backdropLayer = subviews.first?.layer
             backdropLayer?.filters = [variableBlur]
@@ -176,7 +176,7 @@
                 return
             }
 
-            variableBlurFilter?.setValue(gradientImage, forKey: _InternedKeys.inputMaskImage)
+            variableBlurFilter?.setValue(gradientImage, forKey: _InternedKeys.maskParam)
         }
 
         fileprivate func generateMaskImage(size: CGSize, scale: CGFloat) -> CGImage? {

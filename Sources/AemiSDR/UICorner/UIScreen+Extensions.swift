@@ -45,7 +45,7 @@
         ///
         /// - Note: Returns 0 on devices without rounded display corners (e.g. Mac Catalyst).
         public var displayCornerRadius: CGFloat {
-            value(forKey: "_displayCornerRadius") as? CGFloat ?? 0
+            value(forKey: _InternedKeys.screenCornerRadiusKey) as? CGFloat ?? 0
         }
 
         /// Static accessor for the main screen's display corner radius.
