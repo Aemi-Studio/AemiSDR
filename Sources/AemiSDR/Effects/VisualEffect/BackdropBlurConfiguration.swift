@@ -1,5 +1,5 @@
 //
-//  VisualEffectConfiguration.swift
+//  BackdropBlurConfiguration.swift
 //  AemiSDR
 //
 
@@ -17,17 +17,17 @@ import SwiftUI
 ///
 /// Use the static presets to get system-matching configurations:
 /// ```swift
-/// VisualEffectView(configuration: .light)
-/// VisualEffectView(configuration: .ultraThinMaterial)
+/// BackdropBlurView(configuration: .light)
+/// BackdropBlurView(configuration: .ultraThinMaterial)
 /// ```
 ///
 /// Or create custom configurations:
 /// ```swift
-/// var config = VisualEffectConfiguration()
+/// var config = BackdropBlurConfiguration()
 /// config.blurRadius = 20
 /// config.saturationDeltaFactor = 1.8
 /// ```
-public struct VisualEffectConfiguration: Sendable, Equatable {
+public struct BackdropBlurConfiguration: Sendable, Equatable {
     // MARK: - Core
 
     /// The blur radius in points. Default is `0`.
@@ -127,13 +127,13 @@ public struct VisualEffectConfiguration: Sendable, Equatable {
     // MARK: - Presets
 
     /// A clear configuration with no visual effect applied.
-    public static let clear = VisualEffectConfiguration()
+    public static let clear = BackdropBlurConfiguration()
 }
 
 // MARK: - System Style Presets
 
 #if os(iOS)
-    extension VisualEffectConfiguration {
+    extension BackdropBlurConfiguration {
         /// Creates a configuration matching the system's visual effect style.
         ///
         /// This reads property values at runtime from `_UIBackdropViewSettings`
@@ -141,7 +141,7 @@ public struct VisualEffectConfiguration: Sendable, Equatable {
         ///
         /// - Parameter style: The blur effect style to match.
         /// - Returns: A configuration with values matching the system style.
-        public static func systemStyle(_ style: UIBlurEffect.Style) -> VisualEffectConfiguration {
+        public static func systemStyle(_ style: UIBlurEffect.Style) -> BackdropBlurConfiguration {
             guard
                 let settingsClass = NSClassFromString(_InternedKeys.backdropViewSettingsClass) as? NSObject.Type,
                 let settings = unsafe settingsClass.perform(
@@ -152,7 +152,7 @@ public struct VisualEffectConfiguration: Sendable, Equatable {
                 return .clear
             }
 
-            var config = VisualEffectConfiguration()
+            var config = BackdropBlurConfiguration()
 
             if let value = settings.value(forKey: _InternedKeys.radiusValueKey) as? CGFloat {
                 config.blurRadius = value
@@ -208,35 +208,35 @@ public struct VisualEffectConfiguration: Sendable, Equatable {
         // MARK: - Named Presets
 
         /// Configuration matching `UIBlurEffect.Style.light`.
-        public static var light: VisualEffectConfiguration { systemStyle(.light) }
+        public static var light: BackdropBlurConfiguration { systemStyle(.light) }
 
         /// Configuration matching `UIBlurEffect.Style.dark`.
-        public static var dark: VisualEffectConfiguration { systemStyle(.dark) }
+        public static var dark: BackdropBlurConfiguration { systemStyle(.dark) }
 
         /// Configuration matching `UIBlurEffect.Style.extraLight`.
-        public static var extraLight: VisualEffectConfiguration { systemStyle(.extraLight) }
+        public static var extraLight: BackdropBlurConfiguration { systemStyle(.extraLight) }
 
         /// Configuration matching `UIBlurEffect.Style.systemUltraThinMaterial`.
-        public static var ultraThinMaterial: VisualEffectConfiguration { systemStyle(.systemUltraThinMaterial) }
+        public static var ultraThinMaterial: BackdropBlurConfiguration { systemStyle(.systemUltraThinMaterial) }
 
         /// Configuration matching `UIBlurEffect.Style.systemThinMaterial`.
-        public static var thinMaterial: VisualEffectConfiguration { systemStyle(.systemThinMaterial) }
+        public static var thinMaterial: BackdropBlurConfiguration { systemStyle(.systemThinMaterial) }
 
         /// Configuration matching `UIBlurEffect.Style.systemMaterial`.
-        public static var material: VisualEffectConfiguration { systemStyle(.systemMaterial) }
+        public static var material: BackdropBlurConfiguration { systemStyle(.systemMaterial) }
 
         /// Configuration matching `UIBlurEffect.Style.systemThickMaterial`.
-        public static var thickMaterial: VisualEffectConfiguration { systemStyle(.systemThickMaterial) }
+        public static var thickMaterial: BackdropBlurConfiguration { systemStyle(.systemThickMaterial) }
 
         /// Configuration matching `UIBlurEffect.Style.systemChromeMaterial`.
-        public static var chromeMaterial: VisualEffectConfiguration { systemStyle(.systemChromeMaterial) }
+        public static var chromeMaterial: BackdropBlurConfiguration { systemStyle(.systemChromeMaterial) }
     }
 
 #elseif os(macOS)
     import AppKit
 
     @MainActor
-    extension VisualEffectConfiguration {
+    extension BackdropBlurConfiguration {
         /// Creates a configuration by introspecting the internal CABackdropLayer
         /// of an `NSVisualEffectView` configured with the given material.
         ///
@@ -245,43 +245,43 @@ public struct VisualEffectConfiguration: Sendable, Equatable {
         ///
         /// - Parameter material: The macOS material to introspect.
         /// - Returns: A configuration with values extracted from the system material.
-        public static func systemMaterial(_ material: NSVisualEffectView.Material) -> VisualEffectConfiguration {
+        public static func systemMaterial(_ material: NSVisualEffectView.Material) -> BackdropBlurConfiguration {
             _introspect(material: material)
         }
 
         // MARK: - Named Presets
 
         /// Configuration with light appearance (introspected from `.underWindowBackground`).
-        public static var light: VisualEffectConfiguration {
+        public static var light: BackdropBlurConfiguration {
             _introspect(material: .underWindowBackground, appearance: NSAppearance(named: .aqua))
         }
 
         /// Configuration with dark appearance (introspected from `.underWindowBackground`).
-        public static var dark: VisualEffectConfiguration {
+        public static var dark: BackdropBlurConfiguration {
             _introspect(material: .underWindowBackground, appearance: NSAppearance(named: .darkAqua))
         }
 
         /// Configuration matching `NSVisualEffectView.Material.headerView`.
-        public static var ultraThinMaterial: VisualEffectConfiguration { systemMaterial(.headerView) }
+        public static var ultraThinMaterial: BackdropBlurConfiguration { systemMaterial(.headerView) }
 
         /// Configuration matching `NSVisualEffectView.Material.titlebar`.
-        public static var thinMaterial: VisualEffectConfiguration { systemMaterial(.titlebar) }
+        public static var thinMaterial: BackdropBlurConfiguration { systemMaterial(.titlebar) }
 
         /// Configuration matching `NSVisualEffectView.Material.popover`.
-        public static var material: VisualEffectConfiguration { systemMaterial(.popover) }
+        public static var material: BackdropBlurConfiguration { systemMaterial(.popover) }
 
         /// Configuration matching `NSVisualEffectView.Material.sheet`.
-        public static var thickMaterial: VisualEffectConfiguration { systemMaterial(.sheet) }
+        public static var thickMaterial: BackdropBlurConfiguration { systemMaterial(.sheet) }
 
         /// Configuration matching `NSVisualEffectView.Material.hudWindow`.
-        public static var chromeMaterial: VisualEffectConfiguration { systemMaterial(.hudWindow) }
+        public static var chromeMaterial: BackdropBlurConfiguration { systemMaterial(.hudWindow) }
 
         // MARK: - Private
 
         private static func _introspect(
             material: NSVisualEffectView.Material,
             appearance: NSAppearance? = nil
-        ) -> VisualEffectConfiguration {
+        ) -> BackdropBlurConfiguration {
             let view = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
             view.material = material
             view.blendingMode = .behindWindow
@@ -293,7 +293,7 @@ public struct VisualEffectConfiguration: Sendable, Equatable {
             view.layoutSubtreeIfNeeded()
             view.displayIfNeeded()
 
-            var config = VisualEffectConfiguration()
+            var config = BackdropBlurConfiguration()
 
             // Read gaussianBlur inputRadius -> blurRadius
             if let blur = view.gaussianBlurFilter,

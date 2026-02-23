@@ -78,11 +78,6 @@ vertex VertexOut liquidLensVertex(uint vertexID [[vertex_id]]) {
 
 // MARK: - Physical Constants
 
-// Standard RGB wavelengths in micrometers (Fraunhofer lines)
-constant float kRedWavelength   = 0.6563;  // μm - Hydrogen C line (656.3nm)
-constant float kGreenWavelength = 0.5461;  // μm - Mercury e line (546.1nm)
-constant float kBlueWavelength  = 0.4861;  // μm - Hydrogen F line (486.1nm)
-
 // Refractive index of air at standard conditions
 constant float kAirRefractiveIndex = 1.000293;
 
@@ -237,46 +232,84 @@ inline float2 computeRadialDirection(float2 p) {
 
 inline float2 computeSDFGradient(float2 p, float2 halfSize, float cornerRadius) {
     float corner = clamp(cornerRadius, 0.0f, min(halfSize.x, halfSize.y));
-    float2 inner = halfSize - corner;
-
-    float2 signP = float2(p.x >= 0.0f ? 1.0f : -1.0f, p.y >= 0.0f ? 1.0f : -1.0f);
     float2 absP = abs(p);
+    float2 signP = float2(p.x >= 0.0f ? 1.0f : -1.0f, p.y >= 0.0f ? 1.0f : -1.0f);
+
+    // Rounded-rectangle corner frame in the first quadrant.
+    float2 inner = halfSize - corner;
     float2 q = absP - inner;
+    float2 qp = max(q, float2(0.0f));
 
-    float2 grad;
-    if (q.x > 0.0f && q.y > 0.0f) {
-        float2 cornerVec = max(q, float2(0.0f));
-        float cornerLen = length(cornerVec);
-        if (cornerLen > 0.0001f) {
-            grad = cornerVec / cornerLen;
-        } else {
-            grad = float2(0.707107f, 0.707107f);
-        }
-    } else if (q.x > q.y) {
-        float blend = smoothstep(-corner * 0.5f, corner * 0.5f, q.x - q.y);
-        float2 edgeDir = float2(1.0f, 0.0f);
-        float2 diagDir = float2(0.707107f, 0.707107f);
-        grad = mix(diagDir, edgeDir, blend);
-
-        if (q.x > 0.0f) {
-            grad = float2(1.0f, 0.0f);
-        }
+    float2 gradLocal;
+    if (corner > 0.0001f && qp.x > 0.0f && qp.y > 0.0f) {
+        // Exact corner arc normal for SDF in corner sectors.
+        float qLen = length(qp);
+        gradLocal = (qLen > 0.0001f) ? (qp / qLen) : float2(0.707107f, 0.707107f);
     } else {
-        float blend = smoothstep(-corner * 0.5f, corner * 0.5f, q.y - q.x);
-        float2 edgeDir = float2(0.0f, 1.0f);
-        float2 diagDir = float2(0.707107f, 0.707107f);
-        grad = mix(diagDir, edgeDir, blend);
-
-        if (q.y > 0.0f) {
-            grad = float2(0.0f, 1.0f);
-        }
+        // Exact nearest straight-edge normal for non-corner sectors.
+        float dx = max(halfSize.x - absP.x, 0.0f);
+        float dy = max(halfSize.y - absP.y, 0.0f);
+        gradLocal = (dx <= dy) ? float2(1.0f, 0.0f) : float2(0.0f, 1.0f);
     }
 
-    return grad * signP;
+    return gradLocal * signP;
 }
 
 inline float2 computeShapeAwareDirection(float2 p, float2 halfSize, float cornerRadius) {
     return computeSDFGradient(p, halfSize, cornerRadius);
+}
+
+inline float2 safeNormalize(float2 v, float2 fallback) {
+    float len = length(v);
+    if (len > 0.0001f) {
+        return v / len;
+    }
+    return fallback;
+}
+
+inline float cornerRadialBlendFactor(float2 p, float2 halfSize, float cornerRadius) {
+    float corner = clamp(cornerRadius, 0.0f, min(halfSize.x, halfSize.y));
+    if (corner <= 0.0001f) {
+        return 0.0f;
+    }
+
+    float2 inner = halfSize - corner;
+    float2 q = abs(p) - inner;
+    float2 qp = max(q, float2(0.0f));
+
+    // Keep straight edges shape-aware. Radial contribution is only for rounded corners.
+    if (qp.x <= 0.0f || qp.y <= 0.0f) {
+        return 0.0f;
+    }
+
+    float cornerRadiusLocal = length(qp);
+    if (cornerRadiusLocal <= 0.0001f) {
+        return 0.0f;
+    }
+
+    // Angular term: sin(2*theta) = 2*sin(theta)*cos(theta), zero on straight-edge tangents.
+    float2 cornerUnit = qp / cornerRadiusLocal;
+    float angularBlend = clamp(2.0f * cornerUnit.x * cornerUnit.y, 0.0f, 1.0f);
+
+    // Radial term: increases from inner-corner start to the outer corner arc.
+    float radialBlend = clamp(cornerRadiusLocal / corner, 0.0f, 1.0f);
+
+    return smoothstep(0.0f, 1.0f, radialBlend) * smoothstep(0.0f, 1.0f, angularBlend);
+}
+
+inline float2 computeHybridDirection(
+    float2 p,
+    float2 halfSize,
+    float cornerRadius,
+    float radialBoost
+) {
+    float2 radialDir = computeRadialDirection(p);
+    float2 shapeDir = safeNormalize(
+        computeShapeAwareDirection(p, halfSize, cornerRadius),
+        radialDir
+    );
+    float cornerBlend = cornerRadialBlendFactor(p, halfSize, cornerRadius) * radialBoost;
+    return safeNormalize(mix(shapeDir, radialDir, cornerBlend), shapeDir);
 }
 
 // MARK: - Fragment Shader
@@ -345,10 +378,12 @@ fragment half4 liquidLensFragment(
         return isOverlay ? half4(0.0h) : sourceTexture.sample(texSampler, in.texCoord);
     }
 
-    // Get outward direction based on mode
-    float2 outwardDir = radialMode
-        ? computeRadialDirection(toPixel)
-        : computeShapeAwareDirection(toPixel, halfSize, clampedCorner);
+    // Hybrid direction field:
+    // - shape-aware normal on straight edges (uniform edge response),
+    // - radial influence in rounded-corner sectors,
+    // - smooth geometric blend from tangent lines to corner arcs.
+    float radialBoost = radialMode ? 1.0f : 0.75f;
+    float2 outwardDir = computeHybridDirection(toPixel, halfSize, clampedCorner, radialBoost);
 
     // Calculate refraction deviation using precomputed refractive indices.
     // These values are computed on CPU and passed in uniforms to avoid

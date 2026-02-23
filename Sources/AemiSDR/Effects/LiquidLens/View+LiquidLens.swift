@@ -7,217 +7,159 @@
     import SwiftUI
 
     extension View {
-
-        // MARK: - Configuration-based (primary implementations)
-
-        /// Applies a liquid lens distortion overlay with auto-capture using a configuration object.
+        /// Applies a full-surface liquid glass effect as a background.
         @available(iOS 15.0, *)
         @ViewBuilder
-        public func liquidLens(
-            configuration: LiquidLensConfiguration,
-            clipShape: ShapePathProvider? = nil,
-            continuousCapture: Bool = true,
-            refreshRate: Int = 30,
-            captureScale: CGFloat = 1.0
+        public func liquid(
+            _ configuration: LiquidGlassConfiguration = .regular,
+            chromaticIntensity: Float? = nil,
+            shape: ShapePathProvider? = nil,
+            cornerRadius: LiquidLensCornerRadius? = nil,
+            ignoreSafeArea: Bool = false
         ) -> some View {
-            overlay {
-                _LiquidLensOverlay(
-                    configuration: LiquidLensConfiguration(
-                        center: configuration.center,
-                        halfSize: configuration.halfSize,
-                        strength: configuration.strength,
-                        lensCurvature: configuration.lensCurvature,
-                        cornerRadius: configuration.cornerRadius,
-                        falloff: configuration.falloff,
-                        falloffLength: configuration.falloffLength,
-                        falloffIntensity: configuration.falloffIntensity,
-                        chromaticAmount: configuration.chromaticAmount,
-                        material: configuration.material,
-                        useRadialDirection: configuration.useRadialDirection,
-                        overlayMode: true
-                    ),
-                    clipShapePath: clipShape,
-                    continuousCapture: continuousCapture,
-                    refreshRate: max(1, min(refreshRate, 120)),
-                    captureScale: max(0.25, min(captureScale, 3.0))
+            let resolvedConfiguration = resolvedLiquidConfiguration(
+                configuration,
+                chromaticIntensity: chromaticIntensity
+            )
+            liquidBackground(
+                resolvedConfiguration,
+                shape: shape,
+                cornerRadius: cornerRadius,
+                ignoreSafeArea: ignoreSafeArea
+            )
+        }
+
+        /// Applies a full-surface liquid glass effect as a background using a SwiftUI shape.
+        @available(iOS 16.0, *)
+        @ViewBuilder
+        public func liquid<S: Shape>(
+            _ configuration: LiquidGlassConfiguration = .regular,
+            chromaticIntensity: Float? = nil,
+            shape: S,
+            cornerRadius: LiquidLensCornerRadius? = nil,
+            ignoreSafeArea: Bool = false
+        ) -> some View {
+            let resolvedConfiguration = resolvedLiquidConfiguration(
+                configuration,
+                chromaticIntensity: chromaticIntensity
+            )
+            let resolvedCornerRadius = cornerRadius
+                ?? LiquidShapeCornerRadiusResolver.inferCornerRadius(from: shape)
+
+            liquidBackground(
+                resolvedConfiguration,
+                shape: { rect in shape.path(in: rect).cgPath },
+                cornerRadius: resolvedCornerRadius,
+                ignoreSafeArea: ignoreSafeArea
+            )
+        }
+
+        /// Applies a full-surface liquid glass effect as a background.
+        @available(iOS 15.0, *)
+        @ViewBuilder
+        public func liquidBackground(
+            _ configuration: LiquidGlassConfiguration = .regular,
+            chromaticIntensity: Float? = nil,
+            shape: ShapePathProvider? = nil,
+            cornerRadius: LiquidLensCornerRadius? = nil,
+            ignoreSafeArea: Bool = false
+        ) -> some View {
+            let resolvedConfiguration = resolvedLiquidConfiguration(
+                configuration,
+                chromaticIntensity: chromaticIntensity
+            )
+            background {
+                LiquidGlassView(
+                    configuration: resolvedConfiguration,
+                    clipShapePath: shape,
+                    cornerRadius: cornerRadius
                 )
-                .allowsHitTesting(false)
+                .conditionalIgnoreSafeArea(ignoreSafeArea)
             }
         }
 
-        /// Applies a liquid lens distortion overlay using an explicit source image and a configuration object.
+        /// Applies a full-surface liquid glass effect as a background using a SwiftUI shape.
+        @available(iOS 16.0, *)
+        @ViewBuilder
+        public func liquidBackground<S: Shape>(
+            _ configuration: LiquidGlassConfiguration = .regular,
+            chromaticIntensity: Float? = nil,
+            shape: S,
+            cornerRadius: LiquidLensCornerRadius? = nil,
+            ignoreSafeArea: Bool = false
+        ) -> some View {
+            let resolvedConfiguration = resolvedLiquidConfiguration(
+                configuration,
+                chromaticIntensity: chromaticIntensity
+            )
+            let resolvedCornerRadius = cornerRadius
+                ?? LiquidShapeCornerRadiusResolver.inferCornerRadius(from: shape)
+
+            liquidBackground(
+                resolvedConfiguration,
+                shape: { rect in shape.path(in: rect).cgPath },
+                cornerRadius: resolvedCornerRadius,
+                ignoreSafeArea: ignoreSafeArea
+            )
+        }
+
+        /// Applies a full-surface liquid glass effect as an overlay.
         @available(iOS 15.0, *)
         @ViewBuilder
-        public func liquidLens(
-            image: UIImage,
-            configuration: LiquidLensConfiguration,
-            clipShape: ShapePathProvider? = nil
+        public func liquidOverlay(
+            _ configuration: LiquidGlassConfiguration = .regular,
+            chromaticIntensity: Float? = nil,
+            shape: ShapePathProvider? = nil,
+            cornerRadius: LiquidLensCornerRadius? = nil,
+            ignoreSafeArea: Bool = false
         ) -> some View {
+            let resolvedConfiguration = resolvedLiquidConfiguration(
+                configuration,
+                chromaticIntensity: chromaticIntensity
+            )
             overlay {
-                LiquidLensView(
-                    image: image,
-                    configuration: configuration,
-                    clipShapePath: clipShape
+                LiquidGlassView(
+                    configuration: resolvedConfiguration,
+                    clipShapePath: shape,
+                    cornerRadius: cornerRadius
                 )
-                .allowsHitTesting(false)
+                .conditionalIgnoreSafeArea(ignoreSafeArea)
             }
         }
 
-        // MARK: - Auto-capture (parameter-list wrappers)
-
-        /// Applies a physics-based liquid lens distortion effect that automatically
-        /// captures the view's content as the source texture.
-        @available(iOS 15.0, *)
-        @ViewBuilder
-        public func liquidLens(
-            center: SIMD2<Float> = .zero,
-            halfSize: SIMD2<Float> = SIMD2(150, 150),
-            strength: Float = 1.0,
-            lensCurvature: Float = 0.5,
-            cornerRadius: LiquidLensCornerRadius = .points(0),
-            falloff: LiquidLensFalloff = .easeInOut,
-            falloffLength: Float = 1.0,
-            falloffIntensity: Float = 0.5,
-            chromaticAmount: Float = 1.0,
-            material: LiquidLensMaterial = .crownGlass,
-            useRadialDirection: Bool = true,
-            clipShape: ShapePathProvider? = nil,
-            continuousCapture: Bool = true,
-            refreshRate: Int = 30,
-            captureScale: CGFloat = 1.0
-        ) -> some View {
-            liquidLens(
-                configuration: LiquidLensConfiguration(
-                    center: center,
-                    halfSize: halfSize,
-                    strength: strength,
-                    lensCurvature: lensCurvature,
-                    cornerRadius: cornerRadius,
-                    falloff: falloff,
-                    falloffLength: falloffLength,
-                    falloffIntensity: falloffIntensity,
-                    chromaticAmount: chromaticAmount,
-                    material: material,
-                    useRadialDirection: useRadialDirection
-                ),
-                clipShape: clipShape,
-                continuousCapture: continuousCapture,
-                refreshRate: refreshRate,
-                captureScale: captureScale
-            )
-        }
-
-        /// Auto-capture overload that accepts a SwiftUI `Shape` for clip masking.
+        /// Applies a full-surface liquid glass effect as an overlay using a SwiftUI shape.
         @available(iOS 16.0, *)
         @ViewBuilder
-        public func liquidLens<S: Shape>(
-            center: SIMD2<Float> = .zero,
-            halfSize: SIMD2<Float> = SIMD2(150, 150),
-            strength: Float = 1.0,
-            lensCurvature: Float = 0.5,
-            cornerRadius: LiquidLensCornerRadius = .points(0),
-            falloff: LiquidLensFalloff = .easeInOut,
-            falloffLength: Float = 1.0,
-            falloffIntensity: Float = 0.5,
-            chromaticAmount: Float = 1.0,
-            material: LiquidLensMaterial = .crownGlass,
-            useRadialDirection: Bool = true,
-            clipShape shape: S,
-            continuousCapture: Bool = true,
-            refreshRate: Int = 30,
-            captureScale: CGFloat = 1.0
+        public func liquidOverlay<S: Shape>(
+            _ configuration: LiquidGlassConfiguration = .regular,
+            chromaticIntensity: Float? = nil,
+            shape: S,
+            cornerRadius: LiquidLensCornerRadius? = nil,
+            ignoreSafeArea: Bool = false
         ) -> some View {
-            liquidLens(
-                center: center,
-                halfSize: halfSize,
-                strength: strength,
-                lensCurvature: lensCurvature,
-                cornerRadius: cornerRadius,
-                falloff: falloff,
-                falloffLength: falloffLength,
-                falloffIntensity: falloffIntensity,
-                chromaticAmount: chromaticAmount,
-                material: material,
-                useRadialDirection: useRadialDirection,
-                clipShape: { rect in shape.path(in: rect).cgPath },
-                continuousCapture: continuousCapture,
-                refreshRate: refreshRate,
-                captureScale: captureScale
+            let resolvedConfiguration = resolvedLiquidConfiguration(
+                configuration,
+                chromaticIntensity: chromaticIntensity
+            )
+            let resolvedCornerRadius = cornerRadius
+                ?? LiquidShapeCornerRadiusResolver.inferCornerRadius(from: shape)
+
+            liquidOverlay(
+                resolvedConfiguration,
+                shape: { rect in shape.path(in: rect).cgPath },
+                cornerRadius: resolvedCornerRadius,
+                ignoreSafeArea: ignoreSafeArea
             )
         }
 
-        // MARK: - Explicit image (parameter-list wrappers)
-
-        /// Applies a physics-based liquid lens distortion effect using an explicit source image.
-        @available(iOS 15.0, *)
-        @ViewBuilder
-        public func liquidLens(
-            image: UIImage,
-            center: SIMD2<Float> = .zero,
-            halfSize: SIMD2<Float> = SIMD2(150, 150),
-            strength: Float = 1.0,
-            lensCurvature: Float = 0.5,
-            cornerRadius: LiquidLensCornerRadius = .points(0),
-            falloff: LiquidLensFalloff = .easeInOut,
-            falloffLength: Float = 1.0,
-            falloffIntensity: Float = 0.5,
-            chromaticAmount: Float = 1.0,
-            material: LiquidLensMaterial = .crownGlass,
-            useRadialDirection: Bool = true,
-            clipShape: ShapePathProvider? = nil
-        ) -> some View {
-            liquidLens(
-                image: image,
-                configuration: LiquidLensConfiguration(
-                    center: center,
-                    halfSize: halfSize,
-                    strength: strength,
-                    lensCurvature: lensCurvature,
-                    cornerRadius: cornerRadius,
-                    falloff: falloff,
-                    falloffLength: falloffLength,
-                    falloffIntensity: falloffIntensity,
-                    chromaticAmount: chromaticAmount,
-                    material: material,
-                    useRadialDirection: useRadialDirection
-                ),
-                clipShape: clipShape
-            )
-        }
-
-        /// Explicit image overload that accepts a SwiftUI `Shape` for clip masking.
-        @available(iOS 16.0, *)
-        @ViewBuilder
-        public func liquidLens<S: Shape>(
-            image: UIImage,
-            center: SIMD2<Float> = .zero,
-            halfSize: SIMD2<Float> = SIMD2(150, 150),
-            strength: Float = 1.0,
-            lensCurvature: Float = 0.5,
-            cornerRadius: LiquidLensCornerRadius = .points(0),
-            falloff: LiquidLensFalloff = .easeInOut,
-            falloffLength: Float = 1.0,
-            falloffIntensity: Float = 0.5,
-            chromaticAmount: Float = 1.0,
-            material: LiquidLensMaterial = .crownGlass,
-            useRadialDirection: Bool = true,
-            clipShape shape: S
-        ) -> some View {
-            liquidLens(
-                image: image,
-                center: center,
-                halfSize: halfSize,
-                strength: strength,
-                lensCurvature: lensCurvature,
-                cornerRadius: cornerRadius,
-                falloff: falloff,
-                falloffLength: falloffLength,
-                falloffIntensity: falloffIntensity,
-                chromaticAmount: chromaticAmount,
-                material: material,
-                useRadialDirection: useRadialDirection,
-                clipShape: { rect in shape.path(in: rect).cgPath }
-            )
+        private func resolvedLiquidConfiguration(
+            _ configuration: LiquidGlassConfiguration,
+            chromaticIntensity: Float?
+        ) -> LiquidGlassConfiguration {
+            guard let chromaticIntensity else { return configuration }
+            var resolved = configuration
+            resolved.chromaticAmount = chromaticIntensity
+            return resolved
         }
     }
 #endif

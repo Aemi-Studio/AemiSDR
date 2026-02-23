@@ -23,21 +23,13 @@ struct VariableBlurDemo: View {
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .bottom) {
-                SharedScrollContent()
-                    .verticalEdgeBlur(
-                        height: useFullHeight ? .infinity : height,
-                        maxBlurRadius: maxBlurRadius,
-                        edges: edges.edgeSet,
-                        transition: transition
-                    )
-
-                if showSettings {
-                    settingsPanel
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            .animation(.easeInOut(duration: 0.25), value: showSettings)
+            SharedScrollContent()
+                .verticalEdgeBlur(
+                    height: useFullHeight ? .infinity : height,
+                    maxBlurRadius: maxBlurRadius,
+                    edges: edges.edgeSet,
+                    transition: transition
+                )
             .navigationTitle("Variable Blur")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -48,22 +40,32 @@ struct VariableBlurDemo: View {
                             systemName: showSettings
                                 ? "slider.horizontal.2.square.on.square"
                                 : "slider.horizontal.2.square"
-                        )
+                            )
                     }
                 }
+            }
+            .sheet(isPresented: $showSettings) {
+                settingsSheet
             }
         }
     }
 
-    private var settingsPanel: some View {
-        ScrollView {
-            VStack(spacing: 10) {
-                HStack {
-                    Text("Blur Settings")
-                        .font(.headline)
-                    Spacer()
+    private var settingsSheet: some View {
+        NavigationStack {
+            List {
+                NavigationLink("Variable Blur Settings") {
+                    variableBlurSettings
                 }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .presentationDetents([.medium, .large])
+    }
 
+    private var variableBlurSettings: some View {
+        Form {
+            Section("Blur") {
                 parameterSlider("Max Radius", value: $maxBlurRadius, range: 1...20, format: "%.1f")
 
                 if !useFullHeight {
@@ -71,36 +73,23 @@ struct VariableBlurDemo: View {
                 }
 
                 Toggle("Full Height", isOn: $useFullHeight)
-                    .font(.subheadline)
+            }
 
-                Divider()
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Edges").font(.caption.bold())
-                    Picker("Edges", selection: $edges) {
-                        Text("Top").tag(EdgeSelection.top)
-                        Text("Bottom").tag(EdgeSelection.bottom)
-                        Text("Both").tag(EdgeSelection.both)
-                    }
-                    .pickerStyle(.segmented)
+            Section("Shape") {
+                Picker("Edges", selection: $edges) {
+                    Text("Top").tag(EdgeSelection.top)
+                    Text("Bottom").tag(EdgeSelection.bottom)
+                    Text("Both").tag(EdgeSelection.both)
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Transition").font(.caption.bold())
-                    Picker("Transition", selection: $transition) {
-                        Text("Linear").tag(TransitionAlgorithm.linear)
-                        Text("Eased").tag(TransitionAlgorithm.eased)
-                    }
-                    .pickerStyle(.segmented)
+                Picker("Transition", selection: $transition) {
+                    Text("Linear").tag(TransitionAlgorithm.linear)
+                    Text("Eased").tag(TransitionAlgorithm.eased)
                 }
             }
-            .padding()
         }
-        .frame(maxHeight: 280)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .padding(.horizontal, 8)
-        .padding(.bottom, 4)
+        .navigationTitle("Variable Blur")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private func parameterSlider(

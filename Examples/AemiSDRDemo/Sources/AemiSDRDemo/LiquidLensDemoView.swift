@@ -7,7 +7,7 @@ import SwiftUI
     struct LiquidLensDemoView: View {
         var body: some View {
             NavigationStack {
-                DraggableLensScrollDemo()
+                LiquidSurfaceDemo()
             }
         }
     }
@@ -21,15 +21,20 @@ import SwiftUI
                     Image(systemName: "drop.circle")
                         .font(.system(size: 48))
                         .foregroundStyle(.secondary)
-                    Text("Liquid Lens is iOS-only")
+                    Text("Liquid Background is iOS-only")
                         .font(.title3.bold())
-                    Text("The CAMetalLayer-backed renderer requires iOS.")
+                    Text("The CAMetalLayer-backed liquid renderer requires iOS.")
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .navigationTitle("Liquid Lens")
+                .navigationTitle("Liquid Background")
             }
         }
     }
 
 #endif
+
+
+#Preview {
+    LiquidSurfaceDemo()
+}
