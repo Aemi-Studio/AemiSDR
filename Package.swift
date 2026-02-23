@@ -35,7 +35,7 @@ private let package = Package(
             ],
             swiftSettings: swiftSettings,
             plugins: [
-                .plugin(name: "AemiSDRShaderPlugin")
+                .plugin(name: "MetalShaderBuildPlugin")
             ]
         ),
 
@@ -47,7 +47,7 @@ private let package = Package(
 
         // Build tool plugin that discovers `.metal` sources and schedules compiler invocations.
         .plugin(
-            name: "AemiSDRShaderPlugin",
+            name: "MetalShaderBuildPlugin",
             capability: .buildTool(),
             dependencies: [
                 .target(name: "MetalCompilerTool")
