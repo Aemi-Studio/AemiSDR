@@ -9,6 +9,7 @@ import Foundation
 /// Usage:
 ///   MetalCompilerTool --input <path> --ios-output <path> --macos-output <path>
 ///                     [--ios-min-version <version>] [--macos-min-version <version>]
+///                     [--mode <ci|standard>]
 
 // MARK: - Error Types
 
@@ -201,9 +202,22 @@ func parseArguments() throws -> (
 
     let iosMinVersion = getArg("--ios-min-version") ?? "14.0"
     let macosMinVersion = getArg("--macos-min-version") ?? "11.0"
-    let mode = CompilationMode(rawValue: getArg("--mode") ?? "ci") ?? .ci
+    let mode = resolveCompilationMode(inputPath: inputPath, explicitMode: getArg("--mode"))
 
     return (inputPath, iosOutput, macosOutput, iosMinVersion, macosMinVersion, mode)
+}
+
+func resolveCompilationMode(inputPath: String, explicitMode: String?) -> CompilationMode {
+    if let explicitMode, let mode = CompilationMode(rawValue: explicitMode) {
+        return mode
+    }
+
+    // Prefer deriving mode from file naming convention to keep plugin and tool behavior aligned.
+    if inputPath.hasSuffix(".ci.metal") {
+        return .ci
+    }
+
+    return .standard
 }
 
 // MARK: - Main Entry Point

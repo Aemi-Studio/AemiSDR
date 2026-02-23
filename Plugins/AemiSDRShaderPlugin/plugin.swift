@@ -7,6 +7,10 @@ import PackagePlugin
 /// Supports two compilation modes:
 /// - **CI kernel mode** (`.ci.metal` files): Compiled with `-fcikernel` for Core Image kernels
 /// - **Standard mode** (other `.metal` files): Compiled as standard Metal render/compute shaders
+///
+/// Responsibility split:
+/// - Plugin: discovers `.metal` source files and schedules build commands.
+/// - Tool (`MetalCompilerTool`): performs actual `xcrun metal/metallib` compilation.
 @main
 struct AemiSDRShaderPlugin: BuildToolPlugin {
     func createBuildCommands(context: PluginContext, target: Target) async throws -> [Command] {
@@ -25,7 +29,7 @@ struct AemiSDRShaderPlugin: BuildToolPlugin {
 
         let compilerTool = try context.tool(named: "MetalCompilerTool")
         return metalFiles.map { file in
-            buildCommand(for: file.url, compilerTool: compilerTool.url, workDirectory: context.pluginWorkDirectoryURL)
+            Self.buildCommand(for: file.url, compilerTool: compilerTool.url, workDirectory: context.pluginWorkDirectoryURL)
         }
     }
 }
@@ -36,7 +40,6 @@ extension AemiSDRShaderPlugin {
     /// Creates a build command for a single Metal file, handling both CI kernel and standard modes.
     static func buildCommand(for inputURL: URL, compilerTool: URL, workDirectory: URL) -> Command {
         let isCIKernel = inputURL.lastPathComponent.hasSuffix(".ci.metal")
-        let mode = isCIKernel ? "ci" : "standard"
 
         let baseName = inputURL.deletingPathExtension().lastPathComponent
             .replacingOccurrences(of: ".ci", with: "")
@@ -57,15 +60,10 @@ extension AemiSDRShaderPlugin {
                 "--macos-output", macosOutputURL.path(percentEncoded: false),
                 "--ios-min-version", "14.0",
                 "--macos-min-version", "11.0",
-                "--mode", mode,
             ],
             inputFiles: [inputURL],
             outputFiles: [iosOutputURL, macosOutputURL]
         )
-    }
-
-    func buildCommand(for inputURL: URL, compilerTool: URL, workDirectory: URL) -> Command {
-        Self.buildCommand(for: inputURL, compilerTool: compilerTool, workDirectory: workDirectory)
     }
 }
 
@@ -85,7 +83,7 @@ extension AemiSDRShaderPlugin: XcodeBuildToolPlugin {
 
         let compilerTool = try context.tool(named: "MetalCompilerTool")
         return metalFiles.map { file in
-            buildCommand(for: file.url, compilerTool: compilerTool.url, workDirectory: context.pluginWorkDirectoryURL)
+            Self.buildCommand(for: file.url, compilerTool: compilerTool.url, workDirectory: context.pluginWorkDirectoryURL)
         }
     }
 }
