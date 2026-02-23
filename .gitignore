@@ -4,6 +4,8 @@
 
 # Xcode workspace and user data
 *.xcworkspace/
+!AemiSDR.xcworkspace/
+!AemiSDR.xcworkspace/contents.xcworkspacedata
 xcuserdata/
 
 # macOS Finder

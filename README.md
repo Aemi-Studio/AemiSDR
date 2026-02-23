@@ -190,6 +190,8 @@ A full demo app is included in `Examples/AemiSDRDemo/` with tabbed views showcas
 - **Glass**: Visual effect presets and custom blurs
 - **Lens**: Interactive liquid lens with drag gesture
 
+For Xcode development with both the package and demo app in one window, open `AemiSDR.xcworkspace` at the repository root.
+
 
 ## Development
 
@@ -197,10 +199,10 @@ A full demo app is included in `Examples/AemiSDRDemo/` with tabbed views showcas
 
 The Metal shader source files are located in `Sources/AemiSDR/Shaders/`. The package uses a **Swift Package Manager build plugin** that automatically compiles shaders during the build process.
 
-When you build the package (via `swift build` or Xcode), the `AemiSDRShaderPlugin` will:
+When you build the package (via `swift build` or Xcode), the `MetalShaderBuildPlugin` will:
 
 1. Find all `.metal` files in the target
-2. Compile them using `xcrun metal` with Core Image kernel flags (`-fcikernel`)
+2. Compile `.ci.metal` files in Core Image mode (`-fcikernel`) and other `.metal` files in standard Metal mode
 3. Generate platform-specific Metal libraries:
    - `AemiSDR.iOS.metallib` (iOS 14.0+)
    - `AemiSDR.macOS.metallib` (macOS 11.0+)
@@ -209,7 +211,7 @@ When you build the package (via `swift build` or Xcode), the `AemiSDRShaderPlugi
 
 ### Build Plugin Details
 
-The plugin is located in `Plugins/AemiSDRShaderPlugin/` and uses `MetalCompilerTool` (in `Sources/MetalCompilerTool/`) to invoke the Metal toolchain. Key features:
+The plugin is located in `Plugins/MetalShaderBuildPlugin/` and uses `MetalCompilerTool` (in `Sources/MetalCompilerTool/`) to invoke the Metal toolchain. Key features:
 
 - **Incremental builds**: Shaders are only recompiled when source files change
 - **Xcode Cloud compatible**: Uses `-fmodules=none` to avoid sandbox issues
