@@ -39,8 +39,20 @@
         private var configuredCornerRadius: CGFloat
         private var configuredFadeWidth: CGFloat
         private var variableBlurFilter: NSObject?
+        private var cachedMaskKey: MaskCacheKey?
+        private var cachedMaskImage: CGImage?
 
         private var currentScale: CGFloat { displayScale }
+
+        private struct MaskCacheKey: Equatable {
+            var widthPx: Int
+            var heightPx: Int
+            var scaleQ: Int
+            var maskType: MaskType
+            var startOffsetQ: Int
+            var cornerRadiusQ: Int
+            var fadeWidthQ: Int
+        }
 
         // MARK: - Initialization
 
@@ -134,6 +146,19 @@
 
     extension VariableBlurUIView {
         fileprivate func setupVariableBlurFilter() {
+            if let variableBlurFilter {
+                variableBlurFilter.setValue(configuredMaxBlurRadius, forKey: _InternedKeys.radiusParam)
+                variableBlurFilter.setValue(true, forKey: _InternedKeys.normalizeParam)
+
+                let backdropLayer = subviews.first?.layer
+                backdropLayer?.filters = [variableBlurFilter]
+
+                for subview in subviews.dropFirst() {
+                    subview.alpha = 0
+                }
+                return
+            }
+
             guard let filterClass = NSClassFromString(_InternedKeys.caLayerFilterClass) as? NSObject.Type else {
                 logger.error("Failed to locate filter class.")
                 return
@@ -171,9 +196,18 @@
 
             guard size.width > 0, size.height > 0 else { return }
 
-            guard let gradientImage = generateMaskImage(size: size, scale: currentScale) else {
-                logger.error("Failed to generate mask image")
-                return
+            let key = makeMaskCacheKey(size: size, scale: currentScale)
+            let gradientImage: CGImage
+            if cachedMaskKey == key, let cachedMaskImage {
+                gradientImage = cachedMaskImage
+            } else {
+                guard let generatedMaskImage = generateMaskImage(size: size, scale: currentScale) else {
+                    logger.error("Failed to generate mask image")
+                    return
+                }
+                cachedMaskKey = key
+                cachedMaskImage = generatedMaskImage
+                gradientImage = generatedMaskImage
             }
 
             variableBlurFilter?.setValue(gradientImage, forKey: _InternedKeys.maskParam)
@@ -188,6 +222,25 @@
                 cornerRadius: configuredCornerRadius, fadeWidth: configuredFadeWidth, inverted: false
             )
             return CIKernelCache.generateCGImage(kernel: descriptor.kernel, extent: extent, arguments: descriptor.arguments)
+        }
+
+        private func makeMaskCacheKey(size: CGSize, scale: CGFloat) -> MaskCacheKey {
+            let widthPx = max(1, Int(ceil(size.width * scale)))
+            let heightPx = max(1, Int(ceil(size.height * scale)))
+
+            return MaskCacheKey(
+                widthPx: widthPx,
+                heightPx: heightPx,
+                scaleQ: quantize(scale, precision: 1000),
+                maskType: configuredMaskType,
+                startOffsetQ: quantize(configuredStartOffset, precision: 10_000),
+                cornerRadiusQ: quantize(configuredCornerRadius, precision: 1000),
+                fadeWidthQ: quantize(configuredFadeWidth, precision: 1000)
+            )
+        }
+
+        private func quantize(_ value: CGFloat, precision: CGFloat) -> Int {
+            Int((value * precision).rounded())
         }
     }
 #endif

@@ -45,6 +45,9 @@ public struct LiquidLensUniforms: Sendable, Equatable {
     public var materialType: Int32
     public var useRadialDirection: Int32
     public var overlayMode: Int32
+    public var refractiveIndexRed: Float
+    public var refractiveIndexGreen: Float
+    public var refractiveIndexBlue: Float
 }
 
 /// Configuration for the liquid lens distortion effect.
@@ -125,9 +128,10 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
     ///   - scale: Display scale factor (points → pixels). Pass `contentsScale` from `CAMetalLayer`.
     /// - Returns: A `LiquidLensUniforms` ready to be passed to the GPU.
     public func toUniforms(textureSize: SIMD2<Float>, scale: Float = 1.0) -> LiquidLensUniforms {
+        let coefficients = Self.sellmeierCoefficients(for: material)
         assert(
-            MemoryLayout<LiquidLensUniforms>.stride == 64,
-            "LiquidLensUniforms layout mismatch — Metal expects 64-byte stride, got \(MemoryLayout<LiquidLensUniforms>.stride)"
+            MemoryLayout<LiquidLensUniforms>.stride == 80,
+            "LiquidLensUniforms layout mismatch — Metal expects 80-byte stride, got \(MemoryLayout<LiquidLensUniforms>.stride)"
         )
         return LiquidLensUniforms(
             center: center * scale,
@@ -142,7 +146,19 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
             chromaticAmount: chromaticAmount,
             materialType: Int32(material.rawValue),
             useRadialDirection: useRadialDirection ? 1 : 0,
-            overlayMode: overlayMode ? 1 : 0
+            overlayMode: overlayMode ? 1 : 0,
+            refractiveIndexRed: Self.sellmeierIndex(
+                wavelength: Self.redWavelength,
+                coefficients: coefficients
+            ),
+            refractiveIndexGreen: Self.sellmeierIndex(
+                wavelength: Self.greenWavelength,
+                coefficients: coefficients
+            ),
+            refractiveIndexBlue: Self.sellmeierIndex(
+                wavelength: Self.blueWavelength,
+                coefficients: coefficients
+            )
         )
     }
 }
@@ -150,11 +166,67 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
 // MARK: - Layout Verification
 
 extension LiquidLensUniforms {
-    /// Compile-time sanity check — Metal shader expects exactly 64 bytes.
+    /// Compile-time sanity check — Metal shader expects exactly 80 bytes.
     @usableFromInline
     static let _stride: Int = {
         let s = MemoryLayout<LiquidLensUniforms>.stride
-        assert(s == 64, "LiquidLensUniforms stride changed to \(s) — update Metal struct to match")
+        assert(s == 80, "LiquidLensUniforms stride changed to \(s) — update Metal struct to match")
         return s
     }()
+}
+
+// MARK: - Sellmeier Coefficients
+
+private extension LiquidLensConfiguration {
+    struct SellmeierCoefficients {
+        let b1: Float
+        let b2: Float
+        let b3: Float
+        let c1: Float
+        let c2: Float
+        let c3: Float
+    }
+
+    static let redWavelength: Float = 0.6563
+    static let greenWavelength: Float = 0.5461
+    static let blueWavelength: Float = 0.4861
+
+    static func sellmeierCoefficients(for material: LiquidLensMaterial) -> SellmeierCoefficients {
+        switch material {
+        case .crownGlass:
+            return SellmeierCoefficients(
+                b1: 1.03961212, b2: 0.231792344, b3: 1.01046945,
+                c1: 0.00600069867, c2: 0.0200179144, c3: 103.560653
+            )
+        case .flintGlass:
+            return SellmeierCoefficients(
+                b1: 1.73759695, b2: 0.313747346, b3: 1.89878101,
+                c1: 0.013188707, c2: 0.0623068142, c3: 155.23629
+            )
+        case .water:
+            return SellmeierCoefficients(
+                b1: 0.5684027565, b2: 0.1726177391, b3: 0.02086189578,
+                c1: 0.005101829712, c2: 0.01821153936, c3: 0.02620722293
+            )
+        case .acrylic:
+            return SellmeierCoefficients(
+                b1: 0.99654, b2: 0.18964, b3: 0.00411,
+                c1: 0.00787, c2: 0.02191, c3: 3.85727
+            )
+        case .diamond:
+            return SellmeierCoefficients(
+                b1: 0.3306, b2: 4.3356, b3: 0.0,
+                c1: 0.0, c2: 0.1060, c3: 0.0
+            )
+        }
+    }
+
+    static func sellmeierIndex(wavelength: Float, coefficients: SellmeierCoefficients) -> Float {
+        let l2 = wavelength * wavelength
+        let n2 = 1.0
+            + (coefficients.b1 * l2) / (l2 - coefficients.c1)
+            + (coefficients.b2 * l2) / (l2 - coefficients.c2)
+            + (coefficients.b3 * l2) / (l2 - coefficients.c3)
+        return sqrt(max(Float(1.0), n2))
+    }
 }
