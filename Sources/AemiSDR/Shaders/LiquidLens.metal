@@ -39,6 +39,9 @@ struct LiquidLensUniforms {
     int materialType;
     int useRadialDirection;
     int overlayMode;  // 1 = transparent outside lens (for overlay on live content)
+    float refractiveIndexRed;
+    float refractiveIndexGreen;
+    float refractiveIndexBlue;
 };
 
 // MARK: - Vertex Types
@@ -278,6 +281,8 @@ inline float2 computeShapeAwareDirection(float2 p, float2 halfSize, float corner
 
 // MARK: - Fragment Shader
 
+constant bool kEnableChromatic [[function_constant(0)]];
+
 fragment half4 liquidLensFragment(
     VertexOut in [[stage_in]],
     texture2d<half> sourceTexture [[texture(0)]],
@@ -305,7 +310,6 @@ fragment half4 liquidLensFragment(
     float clampedFalloffIntensity = clamp(uniforms.falloffIntensity, 0.0f, 1.0f);
     float clampedChromatic = clamp(uniforms.chromaticAmount, 0.0f, 10.0f);
     int falloffCurve = uniforms.falloffType;
-    int matType = uniforms.materialType;
     bool radialMode = uniforms.useRadialDirection != 0;
 
     // Calculate distance to outer boundary
@@ -346,29 +350,45 @@ fragment half4 liquidLensFragment(
         ? computeRadialDirection(toPixel)
         : computeShapeAwareDirection(toPixel, halfSize, clampedCorner);
 
-    // Get wavelength-dependent refractive indices using Sellmeier equation
-    float nRed   = getRefractiveIndex(kRedWavelength, matType);
-    float nGreen = getRefractiveIndex(kGreenWavelength, matType);
-    float nBlue  = getRefractiveIndex(kBlueWavelength, matType);
-
-    // Calculate refraction deviation for each wavelength using Snell's law
+    // Calculate refraction deviation using precomputed refractive indices.
+    // These values are computed on CPU and passed in uniforms to avoid
+    // repeated Sellmeier evaluation per fragment.
     float signFactor = (uniforms.strength >= 0.0f) ? 1.0f : -1.0f;
     float absStrength = abs(uniforms.strength);
 
-    float deviationRed   = snellDeviation(surfaceAngle, kAirRefractiveIndex, nRed);
-    float deviationGreen = snellDeviation(surfaceAngle, kAirRefractiveIndex, nGreen);
-    float deviationBlue  = snellDeviation(surfaceAngle, kAirRefractiveIndex, nBlue);
+    float deviationGreen = snellDeviation(
+        surfaceAngle,
+        kAirRefractiveIndex,
+        uniforms.refractiveIndexGreen
+    );
 
     // Convert angular deviation to pixel displacement
     float displacementScale = minHalf * absStrength * effectIntensity * 2.0f;
 
     float dispGreen = deviationGreen * displacementScale * signFactor;
 
-    // Fast path: when chromatic aberration is zero, all channels share the same displacement
+    // Non-chromatic specialization path (function constant = false).
+    if (!kEnableChromatic) {
+        float2 uv = (position + outwardDir * dispGreen) / uniforms.textureSize;
+        return sourceTexture.sample(texSampler, uv);
+    }
+
+    // Fast path: when chromatic aberration is zero, all channels share the same displacement.
     if (clampedChromatic < 0.0001f) {
         float2 uv = (position + outwardDir * dispGreen) / uniforms.textureSize;
         return sourceTexture.sample(texSampler, uv);
     }
+
+    float deviationRed = snellDeviation(
+        surfaceAngle,
+        kAirRefractiveIndex,
+        uniforms.refractiveIndexRed
+    );
+    float deviationBlue = snellDeviation(
+        surfaceAngle,
+        kAirRefractiveIndex,
+        uniforms.refractiveIndexBlue
+    );
 
     float dispRed   = mix(dispGreen, deviationRed * displacementScale * signFactor, clampedChromatic);
     float dispBlue  = mix(dispGreen, deviationBlue * displacementScale * signFactor, clampedChromatic);

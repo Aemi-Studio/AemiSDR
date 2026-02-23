@@ -4,6 +4,190 @@
    <FileRef
       location = "group:Package.swift">
    </FileRef>
+   <Group
+      location = "group:Plugins"
+      name = "Plugins">
+      <Group
+         location = "group:MetalShaderBuildPlugin"
+         name = "MetalShaderBuildPlugin">
+         <FileRef
+            location = "group:plugin.swift">
+         </FileRef>
+      </Group>
+   </Group>
+   <Group
+      location = "group:Sources"
+      name = "Sources">
+      <Group
+         location = "group:AemiSDR"
+         name = "AemiSDR">
+         <Group
+            location = "group:Internal"
+            name = "Internal">
+            <FileRef
+               location = "group:TransitionAlgorithm.swift">
+            </FileRef>
+            <FileRef
+               location = "group:CIKernelCache.swift">
+            </FileRef>
+            <FileRef
+               location = "group:_InternedKeys.swift">
+            </FileRef>
+            <FileRef
+               location = "group:View+Extension.swift">
+            </FileRef>
+            <FileRef
+               location = "group:MaskType.swift">
+            </FileRef>
+         </Group>
+         <FileRef
+            location = "group:AemiSDR.swift">
+         </FileRef>
+         <Group
+            location = "group:UICorner"
+            name = "UICorner">
+            <FileRef
+               location = "group:UIScreen+Extensions.swift">
+            </FileRef>
+            <FileRef
+               location = "group:UICornerDiscoverable.swift">
+            </FileRef>
+            <FileRef
+               location = "group:UICornerContext.swift">
+            </FileRef>
+         </Group>
+         <Group
+            location = "group:Shaders"
+            name = "Shaders">
+            <FileRef
+               location = "group:LiquidLens.metal">
+            </FileRef>
+            <FileRef
+               location = "group:AemiSDR.ci.metal">
+            </FileRef>
+         </Group>
+         <Group
+            location = "group:Previews"
+            name = "Previews">
+            <FileRef
+               location = "group:Assets.xcassets">
+            </FileRef>
+            <FileRef
+               location = "group:ShaderTestPreview.swift">
+            </FileRef>
+            <FileRef
+               location = "group:AemiSDRPreview.swift">
+            </FileRef>
+         </Group>
+         <Group
+            location = "group:Effects"
+            name = "Effects">
+            <Group
+               location = "group:VisualEffect"
+               name = "VisualEffect">
+               <FileRef
+                  location = "group:VisualEffectUIView.swift">
+               </FileRef>
+               <FileRef
+                  location = "group:View+VisualEffect.swift">
+               </FileRef>
+               <FileRef
+                  location = "group:_VisualEffectInternals.swift">
+               </FileRef>
+               <FileRef
+                  location = "group:VisualEffectView.swift">
+               </FileRef>
+               <FileRef
+                  location = "group:VisualEffectConfiguration.swift">
+               </FileRef>
+            </Group>
+            <Group
+               location = "group:AlphaMask"
+               name = "AlphaMask">
+               <FileRef
+                  location = "group:AlphaMaskUIView.swift">
+               </FileRef>
+               <FileRef
+                  location = "group:View+AlphaMask.swift">
+               </FileRef>
+               <FileRef
+                  location = "group:AlphaMaskView.swift">
+               </FileRef>
+               <FileRef
+                  location = "group:AlphaMaskCache.swift">
+               </FileRef>
+            </Group>
+            <Group
+               location = "group:LiquidLens"
+               name = "LiquidLens">
+               <FileRef
+                  location = "group:LiquidLensRenderer.swift">
+               </FileRef>
+               <FileRef
+                  location = "group:ZeroCopyTextureBridge.swift">
+               </FileRef>
+               <FileRef
+                  location = "group:LiquidLensFalloff.swift">
+               </FileRef>
+               <FileRef
+                  location = "group:View+LiquidLens.swift">
+               </FileRef>
+               <FileRef
+                  location = "group:LiquidLensMaterial.swift">
+               </FileRef>
+               <FileRef
+                  location = "group:_LiquidLensOverlay.swift">
+               </FileRef>
+               <FileRef
+                  location = "group:LiquidLensView.swift">
+               </FileRef>
+               <FileRef
+                  location = "group:LiquidLensClipShape.swift">
+               </FileRef>
+               <FileRef
+                  location = "group:LiquidLensUIView.swift">
+               </FileRef>
+               <FileRef
+                  location = "group:LiquidLensConfiguration.swift">
+               </FileRef>
+            </Group>
+            <Group
+               location = "group:VariableBlur"
+               name = "VariableBlur">
+               <FileRef
+                  location = "group:VariableBlurUIView.swift">
+               </FileRef>
+               <FileRef
+                  location = "group:View+VariableBlur.swift">
+               </FileRef>
+               <FileRef
+                  location = "group:VariableBlurCache.swift">
+               </FileRef>
+               <FileRef
+                  location = "group:VariableBlurView.swift">
+               </FileRef>
+            </Group>
+         </Group>
+      </Group>
+      <Group
+         location = "group:MetalCompilerTool"
+         name = "MetalCompilerTool">
+         <FileRef
+            location = "group:main.swift">
+         </FileRef>
+      </Group>
+   </Group>
+   <Group
+      location = "group:Tests"
+      name = "Tests">
+      <Group
+         location = "group:AemiSDRTests"
+         name = "AemiSDRTests">
+         <FileRef
+            location = "group:SDFMathTests.swift">
+         </FileRef>
+      </Group>
+   </Group>
    <FileRef
       location = "group:Examples/AemiSDRDemo/AemiSDRDemo.xcodeproj">
    </FileRef>
