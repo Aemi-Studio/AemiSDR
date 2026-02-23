@@ -7,32 +7,32 @@ struct VisualEffectDemo: View {
 
         var label: String { rawValue.capitalized }
 
-        var configuration: VisualEffectConfiguration {
+        var configuration: BackdropBlurConfiguration {
             switch self {
             case .ultraThin:
-                VisualEffectConfiguration(blurRadius: 10, saturationDeltaFactor: 1.8)
+                BackdropBlurConfiguration(blurRadius: 10, saturationDeltaFactor: 1.8)
             case .thin:
-                VisualEffectConfiguration(blurRadius: 20, saturationDeltaFactor: 1.8)
+                BackdropBlurConfiguration(blurRadius: 20, saturationDeltaFactor: 1.8)
             case .regular:
-                VisualEffectConfiguration(blurRadius: 30, saturationDeltaFactor: 1.8)
+                BackdropBlurConfiguration(blurRadius: 30, saturationDeltaFactor: 1.8)
             case .thick:
-                VisualEffectConfiguration(blurRadius: 50, saturationDeltaFactor: 1.8)
+                BackdropBlurConfiguration(blurRadius: 50, saturationDeltaFactor: 1.8)
             case .chrome:
-                VisualEffectConfiguration(
+                BackdropBlurConfiguration(
                     blurRadius: 10,
                     saturationDeltaFactor: 2.5,
                     grayscaleTintLevel: 0.3,
                     grayscaleTintAlpha: 0.2
                 )
             case .light:
-                VisualEffectConfiguration(
+                BackdropBlurConfiguration(
                     blurRadius: 30,
                     saturationDeltaFactor: 1.8,
                     grayscaleTintLevel: 0.9,
                     grayscaleTintAlpha: 0.4
                 )
             case .dark:
-                VisualEffectConfiguration(
+                BackdropBlurConfiguration(
                     blurRadius: 30,
                     saturationDeltaFactor: 1.8,
                     darkeningTintAlpha: 0.5
@@ -63,9 +63,9 @@ struct VisualEffectDemo: View {
     @State private var saturationDeltaFactor: CGFloat = 1.8
     @State private var showSettings = false
 
-    private var configuration: VisualEffectConfiguration {
+    private var configuration: BackdropBlurConfiguration {
         if customMode {
-            VisualEffectConfiguration(
+            BackdropBlurConfiguration(
                 blurRadius: blurRadius,
                 colorTint: tintColor.color,
                 colorTintAlpha: tintColor == .none ? 0 : colorTintAlpha,
@@ -78,7 +78,7 @@ struct VisualEffectDemo: View {
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .bottom) {
+            ZStack {
                 SharedScrollContent()
 
                 VStack {
@@ -96,7 +96,7 @@ struct VisualEffectDemo: View {
                         }
                     }
                     .padding()
-                    .visualEffectBackground(configuration, ignoreSafeArea: false)
+                    .backdropBlurBackground(configuration, ignoreSafeArea: false)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
 
                     Spacer()
@@ -123,18 +123,12 @@ struct VisualEffectDemo: View {
                     .font(.title3)
                     .padding(.horizontal, 24)
                     .padding(.vertical, 12)
-                    .visualEffectBackground(configuration, ignoreSafeArea: false)
+                    .backdropBlurBackground(configuration, ignoreSafeArea: false)
                     .clipShape(Capsule())
                 }
                 .padding()
-
-                if showSettings {
-                    settingsPanel
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
             }
-            .animation(.easeInOut(duration: 0.25), value: showSettings)
-            .navigationTitle("Visual Effect")
+            .navigationTitle("Backdrop Blur")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -144,48 +138,50 @@ struct VisualEffectDemo: View {
                             systemName: showSettings
                                 ? "slider.horizontal.2.square.on.square"
                                 : "slider.horizontal.2.square"
-                        )
+                            )
                     }
                 }
+            }
+            .sheet(isPresented: $showSettings) {
+                settingsSheet
             }
         }
     }
 
-    private var settingsPanel: some View {
-        ScrollView {
-            VStack(spacing: 10) {
-                HStack {
-                    Text("Effect Settings")
-                        .font(.headline)
-                    Spacer()
+    private var settingsSheet: some View {
+        NavigationStack {
+            List {
+                NavigationLink("Backdrop Blur Settings") {
+                    backdropSettings
                 }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .presentationDetents([.medium, .large])
+    }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Preset").font(.caption.bold())
-                    Picker("Preset", selection: $preset) {
-                        ForEach(EffectPreset.allCases, id: \.self) { p in
-                            Text(p.label).tag(p)
-                        }
+    private var backdropSettings: some View {
+        Form {
+            Section("Preset") {
+                Picker("Preset", selection: $preset) {
+                    ForEach(EffectPreset.allCases, id: \.self) { p in
+                        Text(p.label).tag(p)
                     }
-                    .disabled(customMode)
                 }
-
-                Divider()
+                .disabled(customMode)
 
                 Toggle("Custom Mode", isOn: $customMode)
-                    .font(.subheadline)
+            }
 
-                if customMode {
+            if customMode {
+                Section("Custom") {
                     parameterSlider("Blur Radius", value: $blurRadius, range: 0...50, format: "%.1f")
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Color Tint").font(.caption.bold())
-                        Picker("Tint", selection: $tintColor) {
-                            ForEach(TintColor.allCases, id: \.self) { t in
-                                Text(t.rawValue.capitalized).tag(t)
-                            }
+                    Picker("Color Tint", selection: $tintColor) {
+                        ForEach(TintColor.allCases, id: \.self) { t in
+                            Text(t.rawValue.capitalized).tag(t)
                         }
-                        .pickerStyle(.segmented)
                     }
 
                     if tintColor != .none {
@@ -199,13 +195,9 @@ struct VisualEffectDemo: View {
                     )
                 }
             }
-            .padding()
         }
-        .frame(maxHeight: 300)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .padding(.horizontal, 8)
-        .padding(.bottom, 4)
+        .navigationTitle("Backdrop Blur")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private func parameterSlider(

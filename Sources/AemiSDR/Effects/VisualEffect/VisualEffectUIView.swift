@@ -242,7 +242,7 @@
         /// Creates a visual effect view from a full configuration.
         ///
         /// - Parameter configuration: The configuration specifying all effect properties.
-        public convenience init(configuration: VisualEffectConfiguration) {
+        public convenience init(configuration: BackdropBlurConfiguration) {
             self.init(effect: nil)
             applyConfiguration(configuration)
         }
@@ -253,13 +253,13 @@
         /// with one `prepareForChanges` / `applyChanges` cycle.
         ///
         /// - Parameter configuration: The configuration specifying all effect properties.
-        public func updateConfiguration(_ configuration: VisualEffectConfiguration) {
+        public func updateConfiguration(_ configuration: BackdropBlurConfiguration) {
             applyConfiguration(configuration)
         }
 
         // MARK: - Private Helpers
 
-        private func applyConfiguration(_ configuration: VisualEffectConfiguration) {
+        private func applyConfiguration(_ configuration: BackdropBlurConfiguration) {
             // Use prepareForChanges() to create the system backdrop hierarchy.
             // UIBlurEffect(style: .light) properly initializes the gaussianBlur
             // and colorSaturate filters with writable requestedValues dicts.

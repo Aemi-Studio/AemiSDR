@@ -1,5 +1,5 @@
 //
-//  VisualEffectView.swift
+//  BackdropBlurView.swift
 //  AemiSDR
 //
 
@@ -23,18 +23,18 @@ import SwiftUI
     ///
     /// Usage:
     /// ```swift
-    /// VisualEffectView(colorTint: .white, colorTintAlpha: 0.5, blurRadius: 18)
+    /// BackdropBlurView(colorTint: .white, colorTintAlpha: 0.5, blurRadius: 18)
     ///     .frame(width: 200, height: 100)
     /// ```
     ///
     /// Or use a full configuration with system presets:
     /// ```swift
-    /// VisualEffectView(configuration: .light)
-    /// VisualEffectView(configuration: .ultraThinMaterial)
+    /// BackdropBlurView(configuration: .light)
+    /// BackdropBlurView(configuration: .ultraThinMaterial)
     /// ```
     ///
     /// - Warning: This implementation uses private APIs and may break in future iOS versions.
-    public struct VisualEffectView: UIViewRepresentable {
+    public struct BackdropBlurView: UIViewRepresentable {
         // MARK: - Configuration Properties
 
         /// Optional tint color applied over the blur
@@ -50,11 +50,11 @@ import SwiftUI
         public let scale: CGFloat
 
         /// Full configuration, when using the configuration-based API
-        private let configuration: VisualEffectConfiguration?
+        private let configuration: BackdropBlurConfiguration?
 
         // MARK: - Initialization
 
-        /// Creates a visual effect view with customizable blur properties.
+        /// Creates a backdrop blur view with customizable blur properties.
         ///
         /// - Parameters:
         ///   - colorTint: Optional tint color applied over the blur. Default is `nil`.
@@ -74,10 +74,10 @@ import SwiftUI
             self.configuration = nil
         }
 
-        /// Creates a visual effect view from a full configuration.
+        /// Creates a backdrop blur view from a full configuration.
         ///
         /// - Parameter configuration: The configuration specifying all effect properties.
-        public init(configuration: VisualEffectConfiguration) {
+        public init(configuration: BackdropBlurConfiguration) {
             self.configuration = configuration
             self.colorTint = configuration.colorTint
             self.colorTintAlpha = configuration.colorTintAlpha
@@ -136,7 +136,7 @@ import SwiftUI
     /// On macOS, this introspects `NSVisualEffectView`'s internal `CABackdropLayer` to provide
     /// the same continuous parameter control as iOS — blur radius, saturation, brightness, and tint
     /// can all be set to arbitrary values rather than being limited to discrete materials.
-    public struct VisualEffectView: NSViewRepresentable {
+    public struct BackdropBlurView: NSViewRepresentable {
         // MARK: - Configuration Properties
 
         /// Optional tint color applied over the blur
@@ -152,11 +152,11 @@ import SwiftUI
         public let scale: CGFloat
 
         /// Full configuration, when using the configuration-based API
-        private let configuration: VisualEffectConfiguration?
+        private let configuration: BackdropBlurConfiguration?
 
         // MARK: - Initialization
 
-        /// Creates a visual effect view with customizable blur properties.
+        /// Creates a backdrop blur view with customizable blur properties.
         ///
         /// - Parameters:
         ///   - colorTint: Optional tint color applied over the blur. Default is `nil`.
@@ -176,10 +176,10 @@ import SwiftUI
             self.configuration = nil
         }
 
-        /// Creates a visual effect view from a full configuration.
+        /// Creates a backdrop blur view from a full configuration.
         ///
         /// - Parameter configuration: The configuration specifying all effect properties.
-        public init(configuration: VisualEffectConfiguration) {
+        public init(configuration: BackdropBlurConfiguration) {
             self.configuration = configuration
             self.colorTint = configuration.colorTint
             self.colorTintAlpha = configuration.colorTintAlpha
@@ -214,7 +214,7 @@ import SwiftUI
         // MARK: - Private Helpers
 
         private func configureView(_ view: NSVisualEffectView) {
-            let config = configuration ?? VisualEffectConfiguration(
+            let config = configuration ?? BackdropBlurConfiguration(
                 blurRadius: blurRadius,
                 scale: scale,
                 colorTint: colorTint,
@@ -239,7 +239,7 @@ import SwiftUI
         }
 
         private static func applyFilterValues(
-            _ config: VisualEffectConfiguration,
+            _ config: BackdropBlurConfiguration,
             to view: NSVisualEffectView
         ) {
             guard let backdrop = view.backdropLayer else { return }
@@ -257,7 +257,7 @@ import SwiftUI
         }
 
         private static func applyTintLayer(
-            _ config: VisualEffectConfiguration,
+            _ config: BackdropBlurConfiguration,
             to view: NSVisualEffectView
         ) {
             let existingTint = view.layer?.sublayers?.first { $0.name == "AemiSDR.tint" }

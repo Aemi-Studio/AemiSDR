@@ -23,7 +23,7 @@ struct AlphaMaskDemo: View {
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .bottom) {
+            ZStack {
                 LinearGradient(
                     colors: [.purple, .blue, .cyan],
                     startPoint: .topLeading,
@@ -38,13 +38,7 @@ struct AlphaMaskDemo: View {
                         transition: transition,
                         inverted: inverted
                     )
-
-                if showSettings {
-                    settingsPanel
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
             }
-            .animation(.easeInOut(duration: 0.25), value: showSettings)
             .navigationTitle("Alpha Mask")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -55,60 +49,55 @@ struct AlphaMaskDemo: View {
                             systemName: showSettings
                                 ? "slider.horizontal.2.square.on.square"
                                 : "slider.horizontal.2.square"
-                        )
+                            )
                     }
                 }
+            }
+            .sheet(isPresented: $showSettings) {
+                settingsSheet
             }
         }
     }
 
-    private var settingsPanel: some View {
-        ScrollView {
-            VStack(spacing: 10) {
-                HStack {
-                    Text("Mask Settings")
-                        .font(.headline)
-                    Spacer()
+    private var settingsSheet: some View {
+        NavigationStack {
+            List {
+                NavigationLink("Alpha Mask Settings") {
+                    alphaMaskSettings
                 }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .presentationDetents([.medium, .large])
+    }
 
+    private var alphaMaskSettings: some View {
+        Form {
+            Section("Mask") {
                 if !useFullHeight {
                     parameterSlider("Height", value: $height, range: 20...200, format: "%.0f pt")
                 }
 
                 Toggle("Full Height", isOn: $useFullHeight)
-                    .font(.subheadline)
-
-                Divider()
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Edges").font(.caption.bold())
-                    Picker("Edges", selection: $edges) {
-                        Text("Top").tag(EdgeSelection.top)
-                        Text("Bottom").tag(EdgeSelection.bottom)
-                        Text("Both").tag(EdgeSelection.both)
-                    }
-                    .pickerStyle(.segmented)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Transition").font(.caption.bold())
-                    Picker("Transition", selection: $transition) {
-                        Text("Linear").tag(TransitionAlgorithm.linear)
-                        Text("Eased").tag(TransitionAlgorithm.eased)
-                    }
-                    .pickerStyle(.segmented)
-                }
-
                 Toggle("Inverted", isOn: $inverted)
-                    .font(.subheadline)
             }
-            .padding()
+
+            Section("Shape") {
+                Picker("Edges", selection: $edges) {
+                    Text("Top").tag(EdgeSelection.top)
+                    Text("Bottom").tag(EdgeSelection.bottom)
+                    Text("Both").tag(EdgeSelection.both)
+                }
+
+                Picker("Transition", selection: $transition) {
+                    Text("Linear").tag(TransitionAlgorithm.linear)
+                    Text("Eased").tag(TransitionAlgorithm.eased)
+                }
+            }
         }
-        .frame(maxHeight: 280)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .padding(.horizontal, 8)
-        .padding(.bottom, 4)
+        .navigationTitle("Alpha Mask")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private func parameterSlider(

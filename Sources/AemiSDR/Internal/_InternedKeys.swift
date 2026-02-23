@@ -80,6 +80,23 @@ package enum _InternedKeys {
 
         // Private UIKit Properties
         @Interned static var screenCornerRadiusKey = "_displayCornerRadius"
+
+        // CABackdropLayer (private API — capture composited content behind a view)
+        @Interned static var backdropLayerClass = "CABackdropLayer"
+        @Interned static var backdropGroupNameKey = "groupName"
+
+        // Legacy keys (removed in iOS 26)
+        @Interned static var coreImageFiltersKey = "layerUsesCoreImageFilters"
+        @Interned static var windowServerAwareKey = "windowServerAware"
+
+        // iOS 26+ CABackdropLayer keys
+        @Interned static var backdropEnabledKey = "enabled"
+        @Interned static var backdropCaptureOnlyKey = "captureOnly"
+        @Interned static var backdropDisablesOccludedKey = "disablesOccludedBackdropBlurs"
+        @Interned static var backdropReducesBitDepthKey = "reducesCaptureBitDepth"
+        @Interned static var backdropAllowsInPlaceKey = "allowsInPlaceFiltering"
+        @Interned static var backdropRectKey = "backdropRect"
+        @Interned static var backdropUpdateRateKey = "updateRate"
     #endif
 
     // MARK: - macOS-Only Keys

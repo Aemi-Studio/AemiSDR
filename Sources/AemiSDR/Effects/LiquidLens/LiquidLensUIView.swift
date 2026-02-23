@@ -159,7 +159,7 @@
 
         private func renderIfNeeded() {
             guard let renderer, let sourceTexture else { return }
-            guard bounds.width > 0, bounds.height > 0 else { return }
+            guard metalLayer.drawableSize.width > 0, metalLayer.drawableSize.height > 0 else { return }
             guard let drawable = metalLayer.nextDrawable() else { return }
 
             let textureSize = SIMD2<Float>(
