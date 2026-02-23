@@ -1,13 +1,13 @@
 # AemiSDR
 
-A lightweight, App Store-safe SwiftUI library for GPU-accelerated blurs, masks, visual effects, and physics-based lens distortion.
+A lightweight, App Store-safe SwiftUI library for GPU-accelerated blurs, masks, backdrop effects, and physics-based liquid distortion.
 
 AemiSDR works seamlessly with `ScrollView` and dynamic content, providing high-performance effects through a modifier-based API.
 
 - **Variable Blur**: Gradient-driven blur with rounded rectangle and superellipse shapes (iOS)
 - **Alpha Masks**: Fade content edges with configurable mask shapes (iOS)
-- **Visual Effect**: Customizable backdrop blur with tint, saturation, and system material presets (iOS + macOS)
-- **Liquid Lens**: Physics-based refraction with chromatic aberration and Sellmeier dispersion (iOS)
+- **Backdrop Blur**: Customizable backdrop blur with tint, saturation, and system material presets (iOS + macOS)
+- **Liquid Background**: Physics-based refraction with chromatic aberration and Sellmeier dispersion (iOS)
 - **Display Corner Radius**: Retrieve the device's actual screen corner radius (iOS)
 - **Optimized**: Metal shaders compiled automatically via SPM build plugin, with result caching and zero-copy texture bridging
 
@@ -67,48 +67,44 @@ struct ContentView: View {
 ```swift
 Text("Hello")
     .padding()
-    .frostedGlassBackground(blurRadius: 20, tintOpacity: 0.15)
+    .frostedBackdropBackground(blurRadius: 20, tintOpacity: 0.15)
 ```
 
 ### System Material Blur
 
 ```swift
 // Use a system material preset
-VisualEffectView(configuration: .ultraThinMaterial)
+BackdropBlurView(configuration: .ultraThinMaterial)
 
 // Or customize fully
 Text("Overlay")
     .padding()
-    .visualEffectBackground(blurRadius: 25, colorTint: .blue, colorTintAlpha: 0.1)
+    .backdropBlurBackground(blurRadius: 25, colorTint: .blue, colorTintAlpha: 0.1)
 ```
 
-### Liquid Lens Distortion
+### Liquid Background Effect
 
 ```swift
-Image("photo")
-    .resizable()
-    .aspectRatio(contentMode: .fit)
-    .liquidLens(
-        center: SIMD2(200, 300),
-        halfSize: SIMD2(150, 150),
-        material: .flintGlass,
-        clipShape: Circle()
-    )
+VStack {
+    // your content
+}
+.padding()
+.liquidBackground(
+    .regular,
+    shape: RoundedRectangle(cornerRadius: 24, style: .continuous)
+)
 ```
 
-Or use auto-capture mode to distort live content (e.g. a scroll view underneath):
+Or use the shorthand modifier:
 
 ```swift
 ScrollView {
     // content
 }
-.liquidLens(
-    center: SIMD2(Float(position.x), Float(position.y)),
-    halfSize: SIMD2(120, 120),
-    strength: 1.5,
-    material: .diamond,
-    continuousCapture: true,
-    refreshRate: 30
+.liquid(
+    .subtle,
+    shape: Capsule(style: .continuous),
+    ignoreSafeArea: false
 )
 ```
 
@@ -129,45 +125,45 @@ ScrollView {
 | `roundedRectMask(...)` | Alpha mask shaped as a rounded rectangle or superellipse |
 | `verticalEdgeMask(...)` | Alpha mask for vertical edges, ideal for scroll views |
 
-### Visual Effect (iOS 15+ / macOS 12+)
+### Backdrop Blur (iOS 15+ / macOS 12+)
 
 | Modifier | Description |
 |---|---|
-| `visualEffectBackground(...)` | Customizable blur as a background layer |
-| `visualEffectOverlay(...)` | Customizable blur as an overlay layer |
-| `frostedGlassBackground(...)` | Convenience frosted glass effect |
-| `tintedBlurBackground(...)` | Colored blur background |
+| `backdropBlurBackground(...)` | Customizable blur as a background layer |
+| `backdropBlurOverlay(...)` | Customizable blur as an overlay layer |
+| `frostedBackdropBackground(...)` | Convenience frosted blur effect |
+| `tintedBackdropBackground(...)` | Colored blur background |
 
 Configuration-based API with system presets:
 
 ```swift
 // System presets (iOS): .light, .dark, .extraLight, .ultraThinMaterial,
 //                       .thinMaterial, .material, .thickMaterial, .chromeMaterial
-VisualEffectView(configuration: .material)
+BackdropBlurView(configuration: .material)
 
 // Custom configuration
-var config = VisualEffectConfiguration()
+var config = BackdropBlurConfiguration()
 config.blurRadius = 20
 config.saturationDeltaFactor = 1.8
 config.colorTint = .blue
 config.colorTintAlpha = 0.1
-VisualEffectView(configuration: config)
+BackdropBlurView(configuration: config)
 ```
 
-### Liquid Lens (iOS 15+)
+### Liquid Background (iOS 15+)
 
 | Modifier | Description |
 |---|---|
-| `liquidLens(configuration:...)` | Lens distortion from a `LiquidLensConfiguration` |
-| `liquidLens(center:halfSize:...)` | Lens distortion with inline parameters |
-| `liquidLens(image:...)` | Lens distortion using an explicit source image |
+| `liquid(...)` | Shorthand for applying liquid glass as a background |
+| `liquidBackground(...)` | Applies liquid glass as a background layer |
+| `liquidOverlay(...)` | Applies liquid glass as an overlay layer |
 
 Key configuration options:
 
 - **Materials**: `.crownGlass`, `.flintGlass`, `.water`, `.acrylic`, `.diamond` — each with physically-based Sellmeier dispersion coefficients
 - **Falloff curves**: `.linear`, `.easeIn`, `.easeOut`, `.easeInOut`, `.cubic`, `.exponential`
-- **Corner radius**: `.proportional(Float)` or `.points(Float)`
-- **Clip shapes**: Any SwiftUI `Shape` (iOS 16+), or use `LiquidLensClipShape.circle`, `.capsule`, `.roundedRect(cornerRadius:)`
+- **Corner radius**: `.proportional(Float)` or `.points(Float)` when you need explicit overrides
+- **Clip shapes**: Any SwiftUI `Shape` (iOS 16+) with automatic corner-radius inference via `Mirror`
 
 ### Display Corner Radius (iOS)
 
@@ -187,8 +183,8 @@ A full demo app is included in `Examples/AemiSDRDemo/` with tabbed views showcas
 
 - **Blur**: Variable blur configurations
 - **Mask**: Alpha mask examples
-- **Glass**: Visual effect presets and custom blurs
-- **Lens**: Interactive liquid lens with drag gesture
+- **Glass**: Backdrop blur presets and custom blurs
+- **Liquid**: Liquid background surface controls
 
 For Xcode development with both the package and demo app in one window, open `AemiSDR.xcworkspace` at the repository root.
 

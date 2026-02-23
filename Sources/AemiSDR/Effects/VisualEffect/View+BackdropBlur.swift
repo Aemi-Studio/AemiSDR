@@ -1,43 +1,43 @@
 //
-//  View+VisualEffect.swift
+//  View+BackdropBlur.swift
 //  AemiSDR
 //
 
 import SwiftUI
 
-// MARK: - Visual Effect View Modifiers
+// MARK: - Backdrop Blur Modifiers
 
 extension View {
-    /// Applies a visual effect configuration as a background to the view.
+    /// Applies a backdrop blur configuration as a background to the view.
     ///
     /// - Parameters:
-    ///   - configuration: The visual effect configuration to apply.
+    ///   - configuration: The backdrop blur configuration to apply.
     ///   - ignoreSafeArea: Whether to ignore safe area for the blur effect (default: true)
     /// - Returns: A view with the blur effect applied as background
     @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
-    @ViewBuilder public func visualEffectBackground(
-        _ configuration: VisualEffectConfiguration,
+    @ViewBuilder public func backdropBlurBackground(
+        _ configuration: BackdropBlurConfiguration,
         ignoreSafeArea: Bool = true
     ) -> some View {
         background {
-            VisualEffectView(configuration: configuration)
+            BackdropBlurView(configuration: configuration)
                 .conditionalIgnoreSafeArea(ignoreSafeArea)
         }
     }
 
-    /// Applies a visual effect configuration as an overlay to the view.
+    /// Applies a backdrop blur configuration as an overlay to the view.
     ///
     /// - Parameters:
-    ///   - configuration: The visual effect configuration to apply.
+    ///   - configuration: The backdrop blur configuration to apply.
     ///   - ignoreSafeArea: Whether to ignore safe area for the blur effect (default: true)
     /// - Returns: A view with the blur effect applied as overlay
     @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
-    @ViewBuilder public func visualEffectOverlay(
-        _ configuration: VisualEffectConfiguration,
+    @ViewBuilder public func backdropBlurOverlay(
+        _ configuration: BackdropBlurConfiguration,
         ignoreSafeArea: Bool = true
     ) -> some View {
         overlay {
-            VisualEffectView(configuration: configuration)
+            BackdropBlurView(configuration: configuration)
                 .conditionalIgnoreSafeArea(ignoreSafeArea)
         }
     }
@@ -55,7 +55,7 @@ extension View {
     ///   - ignoreSafeArea: Whether to ignore safe area for the blur effect (default: true)
     /// - Returns: A view with the blur effect applied as background
     @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
-    @ViewBuilder public func visualEffectBackground(
+    @ViewBuilder public func backdropBlurBackground(
         blurRadius: CGFloat = 10,
         colorTint: Color? = nil,
         colorTintAlpha: CGFloat = 0,
@@ -63,7 +63,7 @@ extension View {
         ignoreSafeArea: Bool = true
     ) -> some View {
         background {
-            VisualEffectView(
+            BackdropBlurView(
                 colorTint: colorTint,
                 colorTintAlpha: colorTintAlpha,
                 blurRadius: blurRadius,
@@ -86,7 +86,7 @@ extension View {
     ///   - ignoreSafeArea: Whether to ignore safe area for the blur effect (default: true)
     /// - Returns: A view with the blur effect applied as overlay
     @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
-    @ViewBuilder public func visualEffectOverlay(
+    @ViewBuilder public func backdropBlurOverlay(
         blurRadius: CGFloat = 10,
         colorTint: Color? = nil,
         colorTintAlpha: CGFloat = 0,
@@ -94,7 +94,7 @@ extension View {
         ignoreSafeArea: Bool = true
     ) -> some View {
         overlay {
-            VisualEffectView(
+            BackdropBlurView(
                 colorTint: colorTint,
                 colorTintAlpha: colorTintAlpha,
                 blurRadius: blurRadius,
@@ -115,13 +115,13 @@ extension View {
     ///   - ignoreSafeArea: Whether to ignore safe area for the effect (default: true)
     /// - Returns: A view with a frosted glass background effect
     @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
-    @ViewBuilder public func frostedGlassBackground(
+    @ViewBuilder public func frostedBackdropBackground(
         blurRadius: CGFloat = 18,
         tintOpacity: CGFloat = 0.2,
         ignoreSafeArea: Bool = true
     ) -> some View {
         background {
-            VisualEffectView(
+            BackdropBlurView(
                 colorTint: .white,
                 colorTintAlpha: tintOpacity,
                 blurRadius: blurRadius,
@@ -143,14 +143,14 @@ extension View {
     ///   - ignoreSafeArea: Whether to ignore safe area for the effect (default: true)
     /// - Returns: A view with a tinted blur background effect
     @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
-    @ViewBuilder public func tintedBlurBackground(
+    @ViewBuilder public func tintedBackdropBackground(
         color: Color,
         blurRadius: CGFloat = 15,
         tintOpacity: CGFloat = 0.3,
         ignoreSafeArea: Bool = true
     ) -> some View {
         background {
-            VisualEffectView(
+            BackdropBlurView(
                 colorTint: color,
                 colorTintAlpha: tintOpacity,
                 blurRadius: blurRadius,

@@ -76,7 +76,7 @@
             guard width > 0, height > 0 else { return nil }
 
             let bytesPerRow = width * 4
-            guard let context = CGContext(
+            guard let context = unsafe CGContext(
                 data: nil,
                 width: width,
                 height: height,
@@ -90,7 +90,7 @@
             }
 
             context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
-            guard let data = context.data else { return nil }
+            guard let data = unsafe context.data else { return nil }
 
             let descriptor = MTLTextureDescriptor.texture2DDescriptor(
                 pixelFormat: .bgra8Unorm,
@@ -105,7 +105,7 @@
                 return nil
             }
 
-            texture.replace(
+            unsafe texture.replace(
                 region: MTLRegionMake2D(0, 0, width, height),
                 mipmapLevel: 0,
                 withBytes: data,
@@ -145,7 +145,7 @@
             encoder.setFragmentTexture(sourceTexture, index: 0)
 
             var mutableUniforms = uniforms
-            encoder.setFragmentBytes(&mutableUniforms, length: MemoryLayout<LiquidLensUniforms>.stride, index: 0)
+            unsafe encoder.setFragmentBytes(&mutableUniforms, length: MemoryLayout<LiquidLensUniforms>.stride, index: 0)
 
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
             encoder.endEncoding()
@@ -257,7 +257,7 @@
         ) -> MTLFunction? {
             var chromatic = chromaticEnabled
             let constants = MTLFunctionConstantValues()
-            constants.setConstantValue(&chromatic, type: .bool, index: 0)
+            unsafe constants.setConstantValue(&chromatic, type: .bool, index: 0)
 
             return try? library.makeFunction(
                 name: "liquidLensFragment",

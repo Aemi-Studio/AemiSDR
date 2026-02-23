@@ -29,10 +29,9 @@
             { rect in
                 let d = min(rect.width, rect.height)
                 let origin = CGPoint(x: rect.midX - d / 2, y: rect.midY - d / 2)
-                return CGPath(
-                    ellipseIn: CGRect(origin: origin, size: CGSize(width: d, height: d)),
-                    transform: nil
-                )
+                return UIBezierPath(
+                    ovalIn: CGRect(origin: origin, size: CGSize(width: d, height: d))
+                ).cgPath
             }
         }
 

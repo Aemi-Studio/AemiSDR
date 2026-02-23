@@ -47,7 +47,7 @@
             self.device = device
 
             var cache: CVMetalTextureCache?
-            let status = CVMetalTextureCacheCreate(
+            let status = unsafe CVMetalTextureCacheCreate(
                 kCFAllocatorDefault,
                 nil,
                 device,
@@ -82,7 +82,7 @@
             ]
 
             var buffer: CVPixelBuffer?
-            let status = CVPixelBufferCreate(
+            let status = unsafe CVPixelBufferCreate(
                 kCFAllocatorDefault,
                 width,
                 height,
@@ -99,7 +99,7 @@
 
             // Create CVMetalTexture wrapping this buffer
             var metalTexture: CVMetalTexture?
-            let texStatus = CVMetalTextureCacheCreateTextureFromImage(
+            let texStatus = unsafe CVMetalTextureCacheCreateTextureFromImage(
                 kCFAllocatorDefault,
                 textureCache,
                 buffer,
@@ -122,9 +122,9 @@
 
             // Create CGContext pointing at the buffer's memory
             CVPixelBufferLockBaseAddress(buffer, [])
-            if let baseAddress = CVPixelBufferGetBaseAddress(buffer) {
+            if let baseAddress = unsafe CVPixelBufferGetBaseAddress(buffer) {
                 let bytesPerRow = CVPixelBufferGetBytesPerRow(buffer)
-                slot.context = CGContext(
+                slot.context = unsafe CGContext(
                     data: baseAddress,
                     width: width,
                     height: height,

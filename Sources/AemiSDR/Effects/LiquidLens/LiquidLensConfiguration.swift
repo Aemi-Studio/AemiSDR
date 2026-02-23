@@ -86,7 +86,10 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
     /// Optical material determining dispersion characteristics.
     public var material: LiquidLensMaterial
 
-    /// `true` for smooth radial direction, `false` for shape-aware direction.
+    /// Biases the hybrid direction field toward stronger radial influence.
+    ///
+    /// The shader always blends shape-aware and radial directions.
+    /// `false` keeps corners closer to edge normals, `true` increases radial pull.
     public var useRadialDirection: Bool
 
     /// When `true`, pixels outside the lens area are transparent instead of showing

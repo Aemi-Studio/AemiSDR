@@ -4,342 +4,217 @@ import SwiftUI
 #if os(iOS)
     import UIKit
 
-    // MARK: - Draggable Lens over ScrollView
+    struct LiquidSurfaceDemo: View {
+        private enum Preset: String, CaseIterable {
+            case subtle
+            case regular
+            case clear
 
-    struct DraggableLensScrollDemo: View {
-        // Drag state
-        @State private var lensCenter: CGPoint = CGPoint(x: 200, y: 300)
-        @State private var isDragging = false
+            var configuration: LiquidGlassConfiguration {
+                switch self {
+                case .subtle:
+                    return .subtle
+                case .regular:
+                    return .regular
+                case .clear:
+                    return .clear
+                }
+            }
 
-        // Lens settings
-        @State private var lensWidth: Float = 240
-        @State private var lensHeight: Float = 240
-        @State private var strength: Float = 0.5
-        @State private var lensCurvature: Float = 0.6
-        @State private var chromaticAmount: Float = 2.0
-        @State private var material: LiquidLensMaterial = .flintGlass
+            var label: String { rawValue.capitalized }
+        }
+
+        @State private var preset: Preset = .regular
+        @State private var strength: Double = 0.35
+        @State private var lensCurvature: Double = 0.55
+        @State private var chromaticAmount: Double = 0.6
+        @State private var material: LiquidLensMaterial = .crownGlass
         @State private var falloff: LiquidLensFalloff = .easeInOut
-        @State private var falloffLength: Float = 1.0
-        @State private var falloffIntensity: Float = 0.5
-        @State private var lensCornerRadius: Float = 0
-        @State private var cornerRadiusProportional = false
-
-        // Quality / performance
-        @State private var refreshRate: Float = 30
-        @State private var captureScale: Float = 1.0
-
-        // Panel
+        @State private var falloffLength: Double = 1.0
+        @State private var falloffIntensity: Double = 0.45
+        @State private var useRadialDirection = true
+        @State private var continuousCapture = true
+        @State private var refreshRate: Double = 30
+        @State private var captureScale: Double = 1.0
+        @State private var headerCornerRadius: Double = 16
         @State private var showSettings = false
 
-        // Demo content state
-        @State private var toggleA = true
-        @State private var toggleB = false
-        @State private var sliderValue: Double = 0.6
-        @State private var textInput = "Hello, Liquid Lens!"
-        @State private var stepperValue = 3
-        @State private var pickerSelection = 1
-
-        private var outlineCornerRadius: Float {
-            let hs = SIMD2(lensWidth / 2, lensHeight / 2)
-            return cornerRadiusProportional
-                ? (lensCornerRadius / 100) * max(hs.x, hs.y)
-                : lensCornerRadius
+        private var configuration: LiquidGlassConfiguration {
+            LiquidGlassConfiguration(
+                strength: Float(strength),
+                lensCurvature: Float(lensCurvature),
+                cornerRadius: nil,
+                falloff: falloff,
+                falloffLength: Float(falloffLength),
+                falloffIntensity: Float(falloffIntensity),
+                chromaticAmount: Float(chromaticAmount),
+                material: material,
+                useRadialDirection: useRadialDirection,
+                continuousCapture: continuousCapture,
+                refreshRate: Int(refreshRate.rounded()),
+                captureScale: CGFloat(captureScale)
+            )
         }
 
         var body: some View {
-            ZStack(alignment: .bottom) {
-                // Content + lens
-                scrollContent
-                    .liquidLens(
-                        center: SIMD2(Float(lensCenter.x), Float(lensCenter.y)),
-                        halfSize: SIMD2(lensWidth / 2, lensHeight / 2),
-                        strength: strength,
-                        lensCurvature: lensCurvature,
-                        cornerRadius: cornerRadiusProportional
-                            ? .proportional(lensCornerRadius / 100)
-                            : .points(lensCornerRadius),
-                        falloff: falloff,
-                        falloffLength: falloffLength,
-                        falloffIntensity: falloffIntensity,
-                        chromaticAmount: chromaticAmount,
-                        material: material,
-                        continuousCapture: true,
-                        refreshRate: Int(refreshRate),
-                        captureScale: CGFloat(captureScale)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: CGFloat(outlineCornerRadius))
-                            .stroke(
-                                isDragging ? Color.white : Color.white.opacity(0.4),
-                                lineWidth: isDragging ? 2 : 1
-                            )
-                            .frame(width: CGFloat(lensWidth), height: CGFloat(lensHeight))
-                            .position(lensCenter)
-                            .allowsHitTesting(false)
-                    }
-                    .overlay {
-                        Color.clear
-                            .contentShape(Rectangle())
-                            .gesture(
-                                DragGesture(minimumDistance: 0)
-                                    .onChanged { value in
-                                        isDragging = true
-                                        lensCenter = value.location
-                                    }
-                                    .onEnded { _ in
-                                        isDragging = false
-                                    }
-                            )
-                    }
+            ZStack {
+                SharedScrollContent()
 
-                // Settings panel
-                if showSettings {
-                    settingsPanel
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                VStack {
+                    topSurface
+                    Spacer()
+                    bottomSurface
                 }
+                .padding()
             }
-            .animation(.easeInOut(duration: 0.25), value: showSettings)
-            .navigationTitle("Draggable Lens")
+            .navigationTitle("Liquid Surface")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showSettings.toggle()
                     } label: {
-                        Image(systemName: showSettings ? "slider.horizontal.2.square.on.square" : "slider.horizontal.2.square")
+                        Image(
+                            systemName: showSettings
+                                ? "slider.horizontal.2.square.on.square"
+                                : "slider.horizontal.2.square"
+                        )
                     }
                 }
             }
-        }
-
-        // MARK: - Scroll Content
-
-        private var scrollContent: some View {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Drag the lens around")
-                            .font(.title2.bold())
-                        Text("The lens follows your finger and distorts the live scroll content underneath. Tap the slider icon to customize.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal)
-
-                    VStack(spacing: 0) {
-                        settingsRow { Toggle("Wi-Fi", isOn: $toggleA) }
-                        Divider().padding(.leading, 16)
-                        settingsRow { Toggle("Bluetooth", isOn: $toggleB) }
-                        Divider().padding(.leading, 16)
-                        settingsRow {
-                            HStack {
-                                Text("Brightness")
-                                Slider(value: $sliderValue)
-                            }
-                        }
-                        Divider().padding(.leading, 16)
-                        settingsRow {
-                            Stepper("Count: \(stepperValue)", value: $stepperValue, in: 0...10)
-                        }
-                    }
-                    .background(Color(.secondarySystemGroupedBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal)
-
-                    TextField("Type something...", text: $textInput)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.title3)
-                        .padding(.horizontal)
-
-                    Picker("Selection", selection: $pickerSelection) {
-                        Text("First").tag(0)
-                        Text("Second").tag(1)
-                        Text("Third").tag(2)
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal)
-
-                    HStack(spacing: 12) {
-                        Button("Primary") {}
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.large)
-                        Button("Secondary") {}
-                            .buttonStyle(.bordered)
-                            .controlSize(.large)
-                        Button(role: .destructive) {} label: { Text("Delete") }
-                            .buttonStyle(.bordered)
-                            .controlSize(.large)
-                    }
-                    .padding(.horizontal)
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Physics-Based Rendering")
-                            .font(.title2.bold())
-                        Text("Sellmeier dispersion equations model wavelength-dependent refraction indices for 5 real optical materials. Each produces unique chromatic aberration patterns visible through the lens.")
-                            .font(.body)
-                            .foregroundStyle(.secondary)
-                        HStack(spacing: 16) {
-                            Label("Crown Glass", systemImage: "drop.circle.fill")
-                                .foregroundStyle(.blue)
-                            Label("Diamond", systemImage: "sparkles")
-                                .foregroundStyle(.purple)
-                            Label("Water", systemImage: "drop.fill")
-                                .foregroundStyle(.cyan)
-                        }
-                        .font(.caption)
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(.secondarySystemGroupedBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal)
-
-                    ForEach(0..<6) { i in
-                        HStack(spacing: 12) {
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill([Color.red, .orange, .yellow, .green, .blue, .purple][i].gradient)
-                                .frame(width: 56, height: 56)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(["Ruby", "Amber", "Topaz", "Emerald", "Sapphire", "Amethyst"][i])
-                                    .font(.headline)
-                                Text("Optical material sample \(i + 1)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .foregroundStyle(.tertiary)
-                        }
-                        .padding(12)
-                        .background(Color(.secondarySystemGroupedBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .padding(.horizontal)
-                    }
-
-                    Text("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal)
-
-                    Spacer(minLength: showSettings ? 340 : 100)
-                }
-                .padding(.vertical)
+            .sheet(isPresented: $showSettings) {
+                settingsSheet
+            }
+            .onChange(of: preset) { _, value in
+                applyPreset(value)
             }
         }
 
-        // MARK: - Settings Panel
-
-        private var settingsPanel: some View {
-            ScrollView {
-                VStack(spacing: 10) {
-                    // Header
-                    HStack {
-                        Text("Lens Settings")
-                            .font(.headline)
-                        Spacer()
-                        Button("Reset") { resetDefaults() }
-                            .font(.caption)
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                    }
-
-                    // Lens geometry
-                    lensSlider("Width", value: $lensWidth, range: 60...600)
-                    lensSlider("Height", value: $lensHeight, range: 60...600)
-                    lensSlider("Strength", value: $strength, range: 0...1)
-                    lensSlider("Curvature", value: $lensCurvature, range: 0...1)
-                    HStack(spacing: 6) {
-                        Text("Corner R.")
-                            .font(.caption)
-                            .frame(width: 100, alignment: .leading)
-                        Picker("", selection: $cornerRadiusProportional) {
-                            Text("pt").tag(false)
-                            Text("%").tag(true)
-                        }
-                        .pickerStyle(.segmented)
-                        .frame(width: 70)
-                        .onChange(of: cornerRadiusProportional) { _, isProportional in
-                            // Convert current value when switching modes
-                            let hs = SIMD2(lensWidth / 2, lensHeight / 2)
-                            let maxHalf = max(hs.x, hs.y)
-                            if isProportional {
-                                lensCornerRadius = min((lensCornerRadius / maxHalf) * 100, 100)
-                            } else {
-                                lensCornerRadius = (lensCornerRadius / 100) * maxHalf
-                            }
-                        }
-                    }
-                    lensSlider(
-                        cornerRadiusProportional ? "Rounding" : "Corner Radius",
-                        value: $lensCornerRadius,
-                        range: cornerRadiusProportional ? 0...100 : 0...200,
-                        format: cornerRadiusProportional ? "%.0f%%" : "%.1f"
-                    )
-
-                    Divider()
-
-                    // Material
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Material").font(.caption.bold())
-                        Picker("Material", selection: $material) {
-                            Text("Crown").tag(LiquidLensMaterial.crownGlass)
-                            Text("Flint").tag(LiquidLensMaterial.flintGlass)
-                            Text("Water").tag(LiquidLensMaterial.water)
-                            Text("Acrylic").tag(LiquidLensMaterial.acrylic)
-                            Text("Diamond").tag(LiquidLensMaterial.diamond)
-                        }
-                        .pickerStyle(.segmented)
-                    }
-
-                    lensSlider("Chromatic", value: $chromaticAmount, range: 0...20)
-
-                    Divider()
-
-                    // Falloff
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Falloff Curve").font(.caption.bold())
-                        Picker("Falloff", selection: $falloff) {
-                            Text("Linear").tag(LiquidLensFalloff.linear)
-                            Text("In").tag(LiquidLensFalloff.easeIn)
-                            Text("Out").tag(LiquidLensFalloff.easeOut)
-                            Text("InOut").tag(LiquidLensFalloff.easeInOut)
-                            Text("Cubic").tag(LiquidLensFalloff.cubic)
-                            Text("Expo").tag(LiquidLensFalloff.exponential)
-                        }
-                        .pickerStyle(.segmented)
-                    }
-
-                    lensSlider("Falloff Length", value: $falloffLength, range: 0.01...1)
-                    lensSlider("Falloff Intensity", value: $falloffIntensity, range: 0...1)
-
-                    Divider()
-
-                    // Quality
-                    Text("Quality / Performance").font(.caption.bold()).frame(maxWidth: .infinity, alignment: .leading)
-                    lensSlider("Capture Scale", value: $captureScale, range: 0.25...1.0, format: "%.2fx")
-                    lensSlider("Refresh Rate", value: $refreshRate, range: 1...120, format: "%.0f fps")
+        private var topSurface: some View {
+            HStack {
+                Image(systemName: "sparkles")
+                Text("Floating Header")
+                    .font(.headline)
+                Spacer()
+                Button {} label: {
+                    Image(systemName: "bell.fill")
                 }
-                .padding()
+                Button {} label: {
+                    Image(systemName: "person.circle")
+                }
             }
-            .frame(maxHeight: 300)
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .padding(.horizontal, 8)
-            .padding(.bottom, 4)
+            .padding()
+            .liquidBackground(
+                configuration,
+                shape: RoundedRectangle(cornerRadius: headerCornerRadius, style: .continuous),
+                cornerRadius: .points(Float(headerCornerRadius))
+            )
+            .clipShape(RoundedRectangle(cornerRadius: headerCornerRadius, style: .continuous))
         }
 
-        // MARK: - Helpers
+        private var bottomSurface: some View {
+            HStack(spacing: 20) {
+                Button {} label: {
+                    Image(systemName: "house.fill")
+                }
+                Button {} label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                Button {} label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title2)
+                }
+                Button {} label: {
+                    Image(systemName: "heart.fill")
+                }
+                Button {} label: {
+                    Image(systemName: "person.fill")
+                }
+            }
+            .font(.title3)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
+            .liquid(configuration, shape: Capsule())
+            .clipShape(Capsule())
+        }
 
-        private func lensSlider(
+        private var settingsSheet: some View {
+            NavigationStack {
+                List {
+                    NavigationLink("Liquid Surface Settings") {
+                        liquidSettings
+                    }
+                }
+                .navigationTitle("Settings")
+                .navigationBarTitleDisplayMode(.inline)
+            }
+            .presentationDetents([.medium, .large])
+        }
+
+        private var liquidSettings: some View {
+            Form {
+                Section("Preset") {
+                    Picker("Preset", selection: $preset) {
+                        ForEach(Preset.allCases, id: \.self) { p in
+                            Text(p.label).tag(p)
+                        }
+                    }
+
+                    Button("Reset To Preset") {
+                        applyPreset(preset)
+                    }
+                }
+
+                Section("Layout") {
+                    sliderRow("Header Radius", value: $headerCornerRadius, range: 0...48, format: "%.0f")
+                }
+
+                Section("Optics") {
+                    sliderRow("Strength", value: $strength, range: 0...1)
+                    sliderRow("Curvature", value: $lensCurvature, range: 0...1)
+                    sliderRow("Chromatic", value: $chromaticAmount, range: 0...2)
+
+                    Picker("Material", selection: $material) {
+                        ForEach(LiquidLensMaterial.allCases, id: \.self) { value in
+                            Text(materialTitle(value)).tag(value)
+                        }
+                    }
+                }
+
+                Section("Falloff") {
+                    Picker("Curve", selection: $falloff) {
+                        ForEach(LiquidLensFalloff.allCases, id: \.self) { value in
+                            Text(falloffTitle(value)).tag(value)
+                        }
+                    }
+                    sliderRow("Length", value: $falloffLength, range: 0.01...1.0)
+                    sliderRow("Intensity", value: $falloffIntensity, range: 0...1)
+                }
+
+                Section("Capture") {
+                    Toggle("Extra Radial Emphasis", isOn: $useRadialDirection)
+                    Toggle("Continuous Capture", isOn: $continuousCapture)
+
+                    sliderRow("Refresh", value: $refreshRate, range: 1...120, format: "%.0f fps")
+                        .disabled(!continuousCapture)
+                        .opacity(continuousCapture ? 1 : 0.5)
+                    sliderRow("Scale", value: $captureScale, range: 0.25...1.0, format: "%.2fx")
+                }
+            }
+            .navigationTitle("Liquid Surface")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+
+        private func sliderRow(
             _ label: String,
-            value: Binding<Float>,
-            range: ClosedRange<Float>,
+            value: Binding<Double>,
+            range: ClosedRange<Double>,
             format: String = "%.2f"
         ) -> some View {
             HStack(spacing: 6) {
                 Text(label)
                     .font(.caption)
-                    .frame(width: 100, alignment: .leading)
+                    .frame(width: 80, alignment: .leading)
                 Slider(value: value, in: range)
                 Text(String(format: format, value.wrappedValue))
                     .monospacedDigit()
@@ -348,26 +223,40 @@ import SwiftUI
             }
         }
 
-        private func settingsRow<V: View>(@ViewBuilder content: () -> V) -> some View {
-            content()
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+        private func materialTitle(_ material: LiquidLensMaterial) -> String {
+            switch material {
+            case .crownGlass: return "Crown Glass"
+            case .flintGlass: return "Flint Glass"
+            case .water: return "Water"
+            case .acrylic: return "Acrylic"
+            case .diamond: return "Diamond"
+            }
         }
 
-        private func resetDefaults() {
-            lensWidth = 240
-            lensHeight = 240
-            strength = 0.5
-            lensCurvature = 0.6
-            chromaticAmount = 2.0
-            material = .flintGlass
-            falloff = .easeInOut
-            falloffLength = 1.0
-            falloffIntensity = 0.5
-            lensCornerRadius = 0
-            cornerRadiusProportional = false
-            refreshRate = 30
-            captureScale = 1.0
+        private func falloffTitle(_ falloff: LiquidLensFalloff) -> String {
+            switch falloff {
+            case .linear: return "Linear"
+            case .easeIn: return "Ease In"
+            case .easeOut: return "Ease Out"
+            case .easeInOut: return "Ease In-Out"
+            case .cubic: return "Cubic"
+            case .exponential: return "Exponential"
+            }
+        }
+
+        private func applyPreset(_ preset: Preset) {
+            let value = preset.configuration
+            strength = Double(value.strength)
+            lensCurvature = Double(value.lensCurvature)
+            chromaticAmount = Double(value.chromaticAmount)
+            material = value.material
+            falloff = value.falloff
+            falloffLength = Double(value.falloffLength)
+            falloffIntensity = Double(value.falloffIntensity)
+            useRadialDirection = value.useRadialDirection
+            continuousCapture = value.continuousCapture
+            refreshRate = Double(value.refreshRate)
+            captureScale = Double(value.captureScale)
         }
     }
 #endif
