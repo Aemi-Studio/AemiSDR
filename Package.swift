@@ -39,12 +39,13 @@ private let package = Package(
             ]
         ),
 
-        // Executable tool for compiling Metal shaders (runs on macOS during build)
+        // Executable tool invoked by the shader plugin to run xcrun metal/metallib.
+        // The plugin handles file discovery/scheduling; this tool does the compilation.
         .executableTarget(
             name: "MetalCompilerTool"
         ),
 
-        // Build tool plugin that compiles .ci.metal files
+        // Build tool plugin that discovers `.metal` sources and schedules compiler invocations.
         .plugin(
             name: "AemiSDRShaderPlugin",
             capability: .buildTool(),
