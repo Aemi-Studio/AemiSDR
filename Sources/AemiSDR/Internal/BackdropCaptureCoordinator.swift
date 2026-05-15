@@ -35,13 +35,18 @@
         /// the view tree (e.g. animated text).
         var forceCaptureEveryFrame: Bool = false
 
-        private var displayLink: CADisplayLink?
+        // These cleanup-target properties are stored `nonisolated(unsafe)` so
+        // the nonisolated `deinit` can read them. Mutation happens only on
+        // `@MainActor`, so the "unsafe" lifetime is sound. The APIs the deinit
+        // calls (CADisplayLink.invalidate, NotificationCenter.removeObserver)
+        // are documented thread-safe.
+        private nonisolated(unsafe) var displayLink: CADisplayLink?
         private var displayLinkProxy: DisplayLinkProxy?
-        private var backgroundObserver: NSObjectProtocol?
-        private var foregroundObserver: NSObjectProtocol?
-        private var reduceMotionObserver: NSObjectProtocol?
-        private var lowPowerObserver: NSObjectProtocol?
-        private var thermalObserver: NSObjectProtocol?
+        private nonisolated(unsafe) var backgroundObserver: NSObjectProtocol?
+        private nonisolated(unsafe) var foregroundObserver: NSObjectProtocol?
+        private nonisolated(unsafe) var reduceMotionObserver: NSObjectProtocol?
+        private nonisolated(unsafe) var lowPowerObserver: NSObjectProtocol?
+        private nonisolated(unsafe) var thermalObserver: NSObjectProtocol?
         private var isPaused = false
         private var bridge: ZeroCopyTextureBridge?
         private var bridgeConsumerID: BridgeConsumerID?
@@ -515,12 +520,27 @@
         // `NotificationCenter.removeObserver(_:)` are documented thread-safe,
         // so the deinit is safe whichever thread releases the last reference.
         deinit {
-            displayLink?.invalidate()
-            if let backgroundObserver { NotificationCenter.default.removeObserver(backgroundObserver) }
-            if let foregroundObserver { NotificationCenter.default.removeObserver(foregroundObserver) }
-            if let reduceMotionObserver { NotificationCenter.default.removeObserver(reduceMotionObserver) }
-            if let lowPowerObserver { NotificationCenter.default.removeObserver(lowPowerObserver) }
-            if let thermalObserver { NotificationCenter.default.removeObserver(thermalObserver) }
+            // All accessed properties are `nonisolated(unsafe) var` and their
+            // last writes happened on MainActor before the final release; by
+            // the time deinit runs the property values are stable. The two
+            // APIs called (`CADisplayLink.invalidate`, `NotificationCenter.removeObserver`)
+            // are thread-safe by Apple's contract.
+            unsafe displayLink?.invalidate()
+            if let observer = unsafe backgroundObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
+            if let observer = unsafe foregroundObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
+            if let observer = unsafe reduceMotionObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
+            if let observer = unsafe lowPowerObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
+            if let observer = unsafe thermalObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
         }
     }
 
