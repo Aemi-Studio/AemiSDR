@@ -75,17 +75,17 @@
         public var forceCaptureEveryFrame: Bool
 
         public init(
-            strength: Float = 1.0,
+            strength: Float = 0.5,
             lensCurvature: Float = 1.0,
             cornerRadius: LiquidLensCornerRadius? = nil,
             falloff: LiquidLensFalloff = .exponential,
             falloffLength: Float = 1.0,
             falloffIntensity: Float = 1.0,
-            chromaticAmount: Float = 4,
-            material: LiquidLensMaterial = .water,
+            chromaticAmount: Float = 15,
+            material: LiquidLensMaterial = .acrylic,
             continuousCapture: Bool = true,
-            refreshRate: Int = 120,
-            captureScale: CGFloat = 0.85,
+            refreshRate: Int = 40,
+            captureScale: CGFloat = 0.5,
             forceCaptureEveryFrame: Bool = true
         ) {
             self.strength = strength
