@@ -70,6 +70,7 @@ struct AlphaMaskDemo: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.medium, .large])
+        .presentationContentInteraction(.scrolls)
     }
 
     private var alphaMaskSettings: some View {

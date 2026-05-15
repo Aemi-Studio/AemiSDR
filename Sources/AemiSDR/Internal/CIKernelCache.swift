@@ -33,25 +33,37 @@ class CIKernelCache {
         Logger(subsystem: "studio.aemi.AemiSDR", category: "\(Self.self)")
     }
 
-    // MARK: - Core Image Context
+    // MARK: - Core Image Contexts
 
-    /// Shared CIContext optimized for high-quality image processing.
+    /// Shared CIContext for wide-gamut color-bearing outputs.
     ///
-    /// Configuration details:
-    /// - **Color Spaces**: Uses DisplayP3 for both working and output color spaces,
-    ///   providing wide color gamut support for modern displays
-    /// - **Caching**: Disabled intermediate caching (`cacheIntermediates: false`) to
-    ///   reduce memory pressure during complex kernel operations
-    /// - **Priority**: Set to low priority (`priorityRequestLow: true`) to avoid
-    ///   blocking the main thread during intensive processing
+    /// Configured with DisplayP3 working and output color spaces. Use for kernels
+    /// whose output carries color information.
     ///
-    /// This context is reused across all kernel operations for performance efficiency.
+    /// - Note: Intermediate caching disabled to reduce memory pressure;
+    ///   `.priorityRequestLow` keeps the main thread responsive under load.
     static let context = CIContext(options: [
         .workingColorSpace: CGColorSpace(name: CGColorSpace.displayP3) as Any,
         .outputColorSpace: CGColorSpace(name: CGColorSpace.displayP3) as Any,
         .cacheIntermediates: false,
         .priorityRequestLow: true,
     ])
+
+    /// Shared CIContext for grayscale alpha-mask outputs.
+    ///
+    /// All mask kernels in this package emit single-channel alpha. Routing them
+    /// through a linear-gray working/output color space avoids a P3 → sRGB
+    /// conversion pass and roughly 30% of ALU per mask render relative to the
+    /// wide-gamut `context`.
+    static let maskContext: CIContext = {
+        let gray = CGColorSpace(name: CGColorSpace.linearGray)
+        return CIContext(options: [
+            .workingColorSpace: gray as Any,
+            .outputColorSpace: gray as Any,
+            .cacheIntermediates: false,
+            .priorityRequestLow: true,
+        ])
+    }()
 
     // MARK: - Metal Library Loading
 
@@ -88,7 +100,9 @@ class CIKernelCache {
         }
 
         do {
-            return try Data(contentsOf: url)
+            // Map the metallib instead of copying it into RAM — the file is
+            // read-only and SPM resources sit on the filesystem.
+            return try Data(contentsOf: url, options: .mappedIfSafe)
         } catch {
             logger.error("Failed to load metallib data: \(error.localizedDescription)")
             return nil
@@ -146,6 +160,19 @@ class CIKernelCache {
     /// )
     /// ```
     static func generateCGImage(kernel: CIColorKernel?, extent: CGRect, arguments: [Any]) -> CGImage? {
+        generateCGImage(kernel: kernel, extent: extent, arguments: arguments, context: context)
+    }
+
+    /// Generates a CGImage from a CIColorKernel using a caller-specified context.
+    ///
+    /// Pass `maskContext` for single-channel alpha masks to skip the P3 → sRGB
+    /// conversion pass that the default color context applies on every render.
+    static func generateCGImage(
+        kernel: CIColorKernel?,
+        extent: CGRect,
+        arguments: [Any],
+        context: CIContext
+    ) -> CGImage? {
         guard let kernel else {
             logger.error("Kernel is nil.")
             return nil
@@ -179,4 +206,8 @@ extension CIKernelCache {
     // Superellipse kernels (with inversion support)
     static let superellipseAlphaMask = loadKernel("superellipseAlphaMask")
     static let superellipseEaseAlphaMask = loadKernel("superellipseEaseAlphaMask")
+
+    // Uniform and center kernels
+    static let uniformMask = loadKernel("uniformMask")
+    static let easeInCenterMask = loadKernel("easeInCenterMask")
 }

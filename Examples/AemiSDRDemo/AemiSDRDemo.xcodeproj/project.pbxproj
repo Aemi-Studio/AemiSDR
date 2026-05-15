@@ -11,7 +11,7 @@
 		96F19E49E674989A5C816474 /* AemiSDR in Frameworks */ = {isa = PBXBuildFile; productRef = CEA8847E49EFA98FAB92469D /* AemiSDR */; };
 		9DB1CD53D86B7214935637AE /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D86803916D55CF62A3F4C5E /* ContentView.swift */; };
 		E282175F68C72EBEC2A3CFD1 /* LiquidLensDemoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E04ABA3304FE60909C3AAF8 /* LiquidLensDemoView.swift */; };
-		A7B3E41D92C8F5A01D4E6B73 /* DraggableLensScrollDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1C94A28E53D7B6C8A0F12D5 /* DraggableLensScrollDemo.swift */; };
+		A7B3E41D92C8F5A01D4E6B73 /* LiquidSurfaceDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1C94A28E53D7B6C8A0F12D5 /* LiquidSurfaceDemo.swift */; };
 		5B2C3D4E5F6A7B8C9D0E1F2A /* SharedScrollContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1B2C3D4E5F6A7B8C9D0E1F /* SharedScrollContent.swift */; };
 		7D4E5F6A7B8C9D0E1F2A3B4C /* VariableBlurDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C3D4E5F6A7B8C9D0E1F2A3B /* VariableBlurDemo.swift */; };
 		9F6A7B8C9D0E1F2A3B4C5D6E /* AlphaMaskDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E5F6A7B8C9D0E1F2A3B4C5D /* AlphaMaskDemo.swift */; };
@@ -20,7 +20,7 @@
 
 /* Begin PBXFileReference section */
 		2E04ABA3304FE60909C3AAF8 /* LiquidLensDemoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidLensDemoView.swift; sourceTree = "<group>"; };
-		F1C94A28E53D7B6C8A0F12D5 /* DraggableLensScrollDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraggableLensScrollDemo.swift; sourceTree = "<group>"; };
+		F1C94A28E53D7B6C8A0F12D5 /* LiquidSurfaceDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidSurfaceDemo.swift; sourceTree = "<group>"; };
 		352B53E6DE749E61A7E27116 /* AemiSDRDemoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AemiSDRDemoApp.swift; sourceTree = "<group>"; };
 		3D86803916D55CF62A3F4C5E /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		933E9578A57834EE9CCC63D3 /* AemiSDR */ = {isa = PBXFileReference; lastKnownFileType = folder; name = AemiSDR; path = ../..; sourceTree = SOURCE_ROOT; };
@@ -56,7 +56,7 @@
 			children = (
 				352B53E6DE749E61A7E27116 /* AemiSDRDemoApp.swift */,
 				3D86803916D55CF62A3F4C5E /* ContentView.swift */,
-				F1C94A28E53D7B6C8A0F12D5 /* DraggableLensScrollDemo.swift */,
+				F1C94A28E53D7B6C8A0F12D5 /* LiquidSurfaceDemo.swift */,
 				2E04ABA3304FE60909C3AAF8 /* LiquidLensDemoView.swift */,
 				4A1B2C3D4E5F6A7B8C9D0E1F /* SharedScrollContent.swift */,
 				6C3D4E5F6A7B8C9D0E1F2A3B /* VariableBlurDemo.swift */,
@@ -150,7 +150,7 @@
 			files = (
 				249C00A56C14F857B23D529C /* AemiSDRDemoApp.swift in Sources */,
 				9DB1CD53D86B7214935637AE /* ContentView.swift in Sources */,
-				A7B3E41D92C8F5A01D4E6B73 /* DraggableLensScrollDemo.swift in Sources */,
+				A7B3E41D92C8F5A01D4E6B73 /* LiquidSurfaceDemo.swift in Sources */,
 				E282175F68C72EBEC2A3CFD1 /* LiquidLensDemoView.swift in Sources */,
 				5B2C3D4E5F6A7B8C9D0E1F2A /* SharedScrollContent.swift in Sources */,
 				7D4E5F6A7B8C9D0E1F2A3B4C /* VariableBlurDemo.swift in Sources */,

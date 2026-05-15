@@ -26,7 +26,8 @@
         /// Falloff transition curve.
         public var falloff: LiquidLensFalloff
 
-        /// Distance from shape edge where the effect reaches zero.
+        /// Width of the edge fade zone (0–1). At 0, the effect has sharp edges;
+        /// at 1, the fade extends to the center.
         public var falloffLength: Float
 
         /// Falloff intensity multiplier.
@@ -38,12 +39,6 @@
         /// Optical material model.
         public var material: LiquidLensMaterial
 
-        /// Biases the hybrid direction field toward stronger radial influence.
-        ///
-        /// The renderer always uses a shape-aware + radial hybrid. This flag
-        /// increases radial weighting while preserving straight-edge uniformity.
-        public var useRadialDirection: Bool
-
         /// Whether the effect continuously recaptures backdrop content.
         public var continuousCapture: Bool
 
@@ -54,18 +49,17 @@
         public var captureScale: CGFloat
 
         public init(
-            strength: Float = 0.35,
-            lensCurvature: Float = 0.55,
+            strength: Float = 1.0,
+            lensCurvature: Float = 1.0,
             cornerRadius: LiquidLensCornerRadius? = nil,
             falloff: LiquidLensFalloff = .exponential,
-            falloffLength: Float = 0.5,
+            falloffLength: Float = 1.0,
             falloffIntensity: Float = 1.0,
-            chromaticAmount: Float = 2,
-            material: LiquidLensMaterial = .acrylic,
-            useRadialDirection: Bool = true,
+            chromaticAmount: Float = 30,
+            material: LiquidLensMaterial = .water,
             continuousCapture: Bool = true,
             refreshRate: Int = 120,
-            captureScale: CGFloat = 3.0
+            captureScale: CGFloat = 0.85
         ) {
             self.strength = strength
             self.lensCurvature = lensCurvature
@@ -75,7 +69,6 @@
             self.falloffIntensity = falloffIntensity
             self.chromaticAmount = chromaticAmount
             self.material = material
-            self.useRadialDirection = useRadialDirection
             self.continuousCapture = continuousCapture
             self.refreshRate = refreshRate
             self.captureScale = captureScale
@@ -88,20 +81,20 @@
 
         /// Softer preset with reduced distortion and chromatic separation.
         public static let subtle = LiquidGlassConfiguration(
-            strength: 0.2,
-            lensCurvature: 0.5,
-            falloffIntensity: 0.35,
-            chromaticAmount: 0.25,
+            strength: 0.4,
+            lensCurvature: 0.6,
+            falloffIntensity: 0.5,
+            chromaticAmount: 8,
             material: .water
         )
 
         /// Near-clear preset with minimal distortion.
         public static let clear = LiquidGlassConfiguration(
-            strength: 0.08,
+            strength: 0.15,
             lensCurvature: 0.4,
-            falloffIntensity: 0.2,
+            falloffIntensity: 0.3,
             chromaticAmount: 0.0,
-            material: .acrylic
+            material: .water
         )
     }
 
@@ -122,8 +115,7 @@
                 falloffLength: falloffLength,
                 falloffIntensity: falloffIntensity,
                 chromaticAmount: chromaticAmount,
-                material: material,
-                useRadialDirection: useRadialDirection
+                material: material
             )
         }
 

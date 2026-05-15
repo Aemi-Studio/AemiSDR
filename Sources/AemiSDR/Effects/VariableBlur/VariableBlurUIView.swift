@@ -39,20 +39,8 @@
         private var configuredCornerRadius: CGFloat
         private var configuredFadeWidth: CGFloat
         private var variableBlurFilter: NSObject?
-        private var cachedMaskKey: MaskCacheKey?
-        private var cachedMaskImage: CGImage?
 
         private var currentScale: CGFloat { displayScale }
-
-        private struct MaskCacheKey: Equatable {
-            var widthPx: Int
-            var heightPx: Int
-            var scaleQ: Int
-            var maskType: MaskType
-            var startOffsetQ: Int
-            var cornerRadiusQ: Int
-            var fadeWidthQ: Int
-        }
 
         // MARK: - Initialization
 
@@ -150,7 +138,10 @@
                 variableBlurFilter.setValue(configuredMaxBlurRadius, forKey: _InternedKeys.radiusParam)
                 variableBlurFilter.setValue(true, forKey: _InternedKeys.normalizeParam)
 
+                // Force CA to re-evaluate by clearing then re-assigning.
+                // Re-assigning the same NSObject reference is optimized away.
                 let backdropLayer = subviews.first?.layer
+                backdropLayer?.filters = []
                 backdropLayer?.filters = [variableBlurFilter]
 
                 for subview in subviews.dropFirst() {
@@ -196,24 +187,28 @@
 
             guard size.width > 0, size.height > 0 else { return }
 
-            let key = makeMaskCacheKey(size: size, scale: currentScale)
-            let gradientImage: CGImage
-            if cachedMaskKey == key, let cachedMaskImage {
-                gradientImage = cachedMaskImage
-            } else {
-                guard let generatedMaskImage = generateMaskImage(size: size, scale: currentScale) else {
-                    logger.error("Failed to generate mask image")
-                    return
-                }
-                cachedMaskKey = key
-                cachedMaskImage = generatedMaskImage
-                gradientImage = generatedMaskImage
+            let scale = currentScale
+            let key = MaskCacheKey.make(
+                size: size,
+                scale: scale,
+                maskType: configuredMaskType,
+                startOffset: configuredStartOffset,
+                cornerRadius: configuredCornerRadius,
+                fadeWidth: configuredFadeWidth,
+                inverted: false
+            )
+
+            guard let gradientImage = MaskCache.image(for: key, generate: {
+                generateMaskImage(size: size, scale: scale)
+            }) else {
+                logger.error("Failed to generate mask image")
+                return
             }
 
             variableBlurFilter?.setValue(gradientImage, forKey: _InternedKeys.maskParam)
         }
 
-        fileprivate func generateMaskImage(size: CGSize, scale: CGFloat) -> CGImage? {
+        private func generateMaskImage(size: CGSize, scale: CGFloat) -> CGImage? {
             let scaledWidth = max(1, ceil(size.width * scale))
             let scaledHeight = max(1, ceil(size.height * scale))
             let extent = CGRect(x: 0, y: 0, width: scaledWidth, height: scaledHeight)
@@ -221,26 +216,13 @@
                 size: size, scale: scale, startOffset: configuredStartOffset,
                 cornerRadius: configuredCornerRadius, fadeWidth: configuredFadeWidth, inverted: false
             )
-            return CIKernelCache.generateCGImage(kernel: descriptor.kernel, extent: extent, arguments: descriptor.arguments)
-        }
-
-        private func makeMaskCacheKey(size: CGSize, scale: CGFloat) -> MaskCacheKey {
-            let widthPx = max(1, Int(ceil(size.width * scale)))
-            let heightPx = max(1, Int(ceil(size.height * scale)))
-
-            return MaskCacheKey(
-                widthPx: widthPx,
-                heightPx: heightPx,
-                scaleQ: quantize(scale, precision: 1000),
-                maskType: configuredMaskType,
-                startOffsetQ: quantize(configuredStartOffset, precision: 10_000),
-                cornerRadiusQ: quantize(configuredCornerRadius, precision: 1000),
-                fadeWidthQ: quantize(configuredFadeWidth, precision: 1000)
+            return CIKernelCache.generateCGImage(
+                kernel: descriptor.kernel,
+                extent: extent,
+                arguments: descriptor.arguments,
+                context: CIKernelCache.maskContext
             )
         }
 
-        private func quantize(_ value: CGFloat, precision: CGFloat) -> Int {
-            Int((value * precision).rounded())
-        }
     }
 #endif
