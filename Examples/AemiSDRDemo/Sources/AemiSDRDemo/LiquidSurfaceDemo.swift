@@ -62,14 +62,17 @@ import SwiftUI
 
         // MARK: - Header Blur State
 
-        @State private var headerBlurEnabled = false
+        @State private var headerBlurEnabled = true
         @State private var headerBlurType: HeaderBlurType = .backdrop
 
-        // Backdrop blur
-        @State private var bdBlurRadius: Double = 20
+        // Backdrop blur (sits below the lens to provide an opaque base
+        // layer — without it the lens output is transparent in non-active
+        // regions and the un-refracted scene shows through, doubling the
+        // visible content). Default to a pure blur (no colour tint).
+        @State private var bdBlurRadius: Double = 24
         @State private var bdColorTint: Color = .white
-        @State private var bdColorTintAlpha: Double = 0.12
-        @State private var bdSaturation: Double = 1.8
+        @State private var bdColorTintAlpha: Double = 0
+        @State private var bdSaturation: Double = 1.6
         @State private var bdScale: Double = 1.0
 
         // Variable blur
@@ -153,16 +156,16 @@ import SwiftUI
 
         private var topSurface: some View {
             headerContent
-                .background { headerBlurLayer }
                 .liquidBackground(
                     liquidConfig,
                     shape: RoundedRectangle(cornerRadius: headerCornerRadius, style: .continuous),
                     cornerRadius: .points(Float(headerCornerRadius))
                 )
+                .background { headerBlurLayer }
                 .clipShape(RoundedRectangle(cornerRadius: headerCornerRadius, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: headerCornerRadius, style: .continuous)
-                        .strokeBorder(.white.opacity(0.35), lineWidth: 1)
+                        .strokeBorder(.black.opacity(0.2), lineWidth: 1)
                 }
                 .shadow(color: .black.opacity(0.18), radius: 24, y: 10)
         }
@@ -249,12 +252,12 @@ import SwiftUI
             .font(.title3)
             .padding(.horizontal, 24)
             .padding(.vertical, 12)
-            .background { headerBlurLayer }
             .liquidBackground(liquidConfig, shape: Capsule())
+            .background { headerBlurLayer }
             .clipShape(Capsule())
             .overlay {
                 Capsule()
-                    .strokeBorder(.white.opacity(0.35), lineWidth: 1)
+                    .strokeBorder(.black.opacity(0.2), lineWidth: 1)
             }
             .shadow(color: .black.opacity(0.18), radius: 24, y: 10)
         }
