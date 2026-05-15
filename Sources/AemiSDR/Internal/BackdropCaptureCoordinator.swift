@@ -4,6 +4,7 @@
 //
 
 #if os(iOS)
+    import OSLog
     import QuartzCore
     import UIKit
 
@@ -22,6 +23,11 @@
     /// to their specific rendering pipeline.
     @MainActor
     class BackdropCaptureCoordinator {
+        nonisolated private static let logger = Logger(
+            subsystem: "studio.aemi.AemiSDR",
+            category: "BackdropCapture"
+        )
+
         /// The effect view this coordinator manages capture for.
         /// Set by the owning `UIViewRepresentable`.
         weak var effectView: UIView?
@@ -293,8 +299,15 @@
         /// overlay/background container and capture it directly via `drawHierarchy`.
         @available(iOS 26, *)
         private func performContentSiblingCapture() {
-            guard let effectView else { return }
-            guard let contentView = cachedOrResolvedContentSibling(for: effectView) else { return }
+            guard let effectView else {
+                Self.logger.debug("performContentSiblingCapture: effectView is nil")
+                return
+            }
+            guard let contentView = cachedOrResolvedContentSibling(for: effectView) else {
+                Self.logger.error("performContentSiblingCapture: findContentSibling returned nil — capture will be blank")
+                return
+            }
+            Self.logger.debug("Capturing into \(type(of: contentView)) (\(contentView.bounds.debugDescription))")
 
             let screenScale = effectView.displayScale
             let scale = screenScale * captureScale
@@ -320,11 +333,18 @@
             }
 
             ensureBridge(width: pixelWidth, height: pixelHeight)
-            guard let bridge, let consumerID = bridgeConsumerID else { return }
+            guard let bridge, let consumerID = bridgeConsumerID else {
+                Self.logger.error("performContentSiblingCapture: bridge or consumerID nil (device unavailable?)")
+                return
+            }
 
             let bgColor = cachedOrResolvedBackgroundColor(for: contentView)
 
-            if let captured = bridge.render(consumer: consumerID, width: pixelWidth, height: pixelHeight, actions: { ctx in
+            let captured = bridge.render(
+                consumer: consumerID,
+                width: pixelWidth,
+                height: pixelHeight
+            ) { ctx in
                 ctx.saveGState()
                 // Pre-fill with resolved background to avoid black through transparent areas
                 ctx.setFillColor(bgColor)
@@ -339,8 +359,11 @@
                 contentView.drawHierarchy(in: contentView.bounds, afterScreenUpdates: false)
                 UIGraphicsPopContext()
                 ctx.restoreGState()
-            }) {
+            }
+            if let captured {
                 processTexture(captured)
+            } else {
+                Self.logger.error("bridge.render returned nil — all slots in-flight or device failure")
             }
         }
 
@@ -382,22 +405,24 @@
         /// capturing only the content sibling, we avoid a feedback loop where the
         /// effect's output is re-captured as input.
         ///
-        /// When a container has multiple subviews but none satisfy the
-        /// non-descendant predicate (every sibling is an ancestor-or-equal of
-        /// `view`), the walk continues up rather than returning `parent` — capturing
-        /// the parent would include the effect view itself and feed its own output
-        /// back as the next frame's source.
+        /// Fallback strategy: if no sibling at any level satisfies the
+        /// non-descendant predicate, return the closest parent that has
+        /// multiple subviews. This can technically include the effect view's
+        /// subtree (theoretical feedback loop), but in practice produces a
+        /// usable capture; returning nil leaves the lens blank.
         private func findContentSibling(for view: UIView) -> UIView? {
+            var fallback: UIView?
             var current = view.superview
             while let parent = current {
                 if parent.subviews.count >= 2 {
+                    if fallback == nil { fallback = parent }
                     for sibling in parent.subviews where !view.isDescendant(of: sibling) {
                         return sibling
                     }
                 }
                 current = parent.superview
             }
-            return nil
+            return fallback
         }
 
         /// Walks the view hierarchy to find the first non-clear background color.
