@@ -15,7 +15,10 @@ import SwiftUI
                     liquidOverlaySection
                     capsuleAutoRadiusSection
                     backdropBlurSection
-                    mpsBlurSection
+                    uniformBlurSection
+                    variableBlurSection
+                    centerBlurSection
+                    alphaMaskSection
                     stackedEffectsSection
                     stackedStickyHeaderSection
                 }
@@ -103,7 +106,7 @@ import SwiftUI
                 .foregroundStyle(.white)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
-                .liquid(.subtle, shape: LiquidLensClipShape.capsule)
+                .liquidBackground(.subtle, shape: LiquidLensClipShape.capsule)
                 .clipShape(Capsule())
             }
         }
@@ -153,9 +156,9 @@ import SwiftUI
             }
         }
 
-        private var mpsBlurSection: some View {
+        private var uniformBlurSection: some View {
             VStack(alignment: .leading, spacing: 10) {
-                Text("MPS Gaussian Blur")
+                Text("Uniform Blur")
                     .font(.headline)
                     .foregroundStyle(.white)
 
@@ -170,13 +173,13 @@ import SwiftUI
                         )
 
                     VStack(spacing: 12) {
-                        Image(systemName: "wand.and.rays")
+                        Image(systemName: "circle.hexagongrid.fill")
                             .font(.system(size: 34))
                             .foregroundStyle(.white)
-                        Text("GPU Gaussian Blur")
+                        Text("Even Blur")
                             .font(.title3.bold())
                             .foregroundStyle(.white)
-                        Text("Pure Metal Performance Shaders blur — no UIKit blur view.")
+                        Text("Constant blur intensity across the entire surface.")
                             .font(.caption)
                             .multilineTextAlignment(.center)
                             .foregroundStyle(.white.opacity(0.9))
@@ -184,7 +187,115 @@ import SwiftUI
                     }
                 }
                 .frame(height: 200)
-                .mpsBlurOverlay(.standard)
+                .uniformBlur(maxBlurRadius: 6)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            }
+        }
+
+        private var variableBlurSection: some View {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Variable Blur")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+
+                ZStack {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [.indigo, .purple, .pink],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+
+                    VStack(spacing: 12) {
+                        Image(systemName: "aqi.medium")
+                            .font(.system(size: 34))
+                            .foregroundStyle(.white)
+                        Text("Edge Blur")
+                            .font(.title3.bold())
+                            .foregroundStyle(.white)
+                        Text("Smooth directional blur that fades content at vertical edges.")
+                            .font(.caption)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(.white.opacity(0.9))
+                            .padding(.horizontal, 22)
+                    }
+                }
+                .frame(height: 200)
+                .verticalEdgeBlur(height: 80, maxBlurRadius: 4)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            }
+        }
+
+        private var centerBlurSection: some View {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Center Blur")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+
+                ZStack {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [.teal, .blue, .purple],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+
+                    VStack(spacing: 12) {
+                        Image(systemName: "circle.dashed.inset.filled")
+                            .font(.system(size: 34))
+                            .foregroundStyle(.white)
+                        Text("Center Focus")
+                            .font(.title3.bold())
+                            .foregroundStyle(.white)
+                        Text("Blur peaks at the center while edges stay sharp.")
+                            .font(.caption)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(.white.opacity(0.9))
+                            .padding(.horizontal, 22)
+                    }
+                }
+                .frame(height: 200)
+                .verticalCenterBlur(maxBlurRadius: 4)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            }
+        }
+
+        private var alphaMaskSection: some View {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Alpha Mask")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+
+                ZStack {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [.green, .teal, .cyan],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+
+                    VStack(spacing: 12) {
+                        Image(systemName: "square.on.circle")
+                            .font(.system(size: 34))
+                            .foregroundStyle(.white)
+                        Text("Edge Mask")
+                            .font(.title3.bold())
+                            .foregroundStyle(.white)
+                        Text("Alpha mask that fades content to transparent at vertical edges.")
+                            .font(.caption)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(.white.opacity(0.9))
+                            .padding(.horizontal, 22)
+                    }
+                }
+                .frame(height: 200)
+                .verticalEdgeMask(height: 80)
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             }
         }
@@ -212,7 +323,7 @@ import SwiftUI
                         Text("Blur + Liquid Lens")
                             .font(.title3.bold())
                             .foregroundStyle(.white)
-                        Text("MPS blur and liquid lens composed on the same content.")
+                        Text("Uniform blur and liquid lens composed on the same content.")
                             .font(.caption)
                             .multilineTextAlignment(.center)
                             .foregroundStyle(.white.opacity(0.9))
@@ -220,7 +331,7 @@ import SwiftUI
                     }
                 }
                 .frame(height: 200)
-                .mpsBlurBackground(.frosted)
+                .uniformBlur(maxBlurRadius: 20)
                 .liquidOverlay(
                     .subtle,
                     shape: LiquidLensClipShape.roundedRect(cornerRadius: 22)
@@ -256,11 +367,7 @@ import SwiftUI
                         ignoreSafeArea: false
                     )
                     .liquidBackground(
-                        LiquidGlassConfiguration(
-                            strength: 0.3,
-                            lensCurvature: 0.55,
-                            chromaticAmount: 0.45
-                        ),
+                        .regular,
                         shape: LiquidLensClipShape.roundedRect(cornerRadius: 18),
                         cornerRadius: .points(18),
                         ignoreSafeArea: false

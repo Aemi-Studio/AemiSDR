@@ -39,6 +39,10 @@
             return effectClass.init()
         }()
 
+        /// Last configuration applied via `applyConfiguration(_:)`.
+        /// Used to short-circuit no-op repeated calls from `updateUIView` cascades.
+        private var lastConfiguration: BackdropBlurConfiguration?
+
         // MARK: - Public Properties
 
         /// The tint color applied over the blur.
@@ -49,6 +53,7 @@
                 sourceOver?.value(forKeyPath: _InternedKeys.colorKey) as? UIColor
             }
             set {
+                lastConfiguration = nil
                 prepareForChanges()
                 sourceOver?.setValue(newValue, forKeyPath: _InternedKeys.colorKey)
                 _ = unsafe sourceOver?.perform(Selector(_InternedKeys.applyEffectSelector), with: overlayView)
@@ -74,6 +79,7 @@
                 gaussianBlur?.requestedValues?[_InternedKeys.radiusParam] as? CGFloat ?? 0
             }
             set {
+                lastConfiguration = nil
                 prepareForChanges()
                 gaussianBlur?.requestedValues?[_InternedKeys.radiusParam] = newValue
                 applyChanges()
@@ -98,6 +104,7 @@
                     ?? blurEffectValue(forKey: .saturationDeltaFactor) ?? 1.0
             }
             set {
+                lastConfiguration = nil
                 blurEffect?.setValue(newValue, forKeyPath: BlurEffectKey.saturationDeltaFactor.rawValue)
                 prepareForChanges()
                 colorSaturate?.requestedValues?[_InternedKeys.amountParam] = newValue
@@ -260,6 +267,12 @@
         // MARK: - Private Helpers
 
         private func applyConfiguration(_ configuration: BackdropBlurConfiguration) {
+            // Short-circuit when nothing changed. SwiftUI state cascades call
+            // `updateUIView` on every transient ancestor change; without this
+            // guard every cascade ran a full prepare/apply cycle.
+            if lastConfiguration == configuration { return }
+            lastConfiguration = configuration
+
             // Use prepareForChanges() to create the system backdrop hierarchy.
             // UIBlurEffect(style: .light) properly initializes the gaussianBlur
             // and colorSaturate filters with writable requestedValues dicts.
@@ -269,15 +282,25 @@
             gaussianBlur?.requestedValues?[_InternedKeys.radiusParam] = configuration.blurRadius
             colorSaturate?.requestedValues?[_InternedKeys.amountParam] = configuration.saturationDeltaFactor
 
-            // Color tint via overlay mechanism
+            // Resolve effective tint once so we set it on both the sourceOver
+            // filter and the overlay's backgroundColor below.
+            let resolvedTint: UIColor?
             if let tint = configuration.colorTint {
-                let uiColor = UIColor(tint).withAlphaComponent(configuration.colorTintAlpha)
-                sourceOver?.setValue(uiColor, forKeyPath: _InternedKeys.colorKey)
-                _ = unsafe sourceOver?.perform(Selector(_InternedKeys.applyEffectSelector), with: overlayView)
-                overlayView?.backgroundColor = uiColor
+                resolvedTint = UIColor(tint).withAlphaComponent(configuration.colorTintAlpha)
+            } else {
+                resolvedTint = nil
             }
+            sourceOver?.setValue(resolvedTint, forKeyPath: _InternedKeys.colorKey)
+            _ = unsafe sourceOver?.perform(Selector(_InternedKeys.applyEffectSelector), with: overlayView)
 
             applyChanges()
+
+            // Set `backgroundColor` AFTER `applyChanges()` to match the public
+            // `colorTint` property setter's ordering — without this, a
+            // configuration that flips tint state between renders could leave
+            // a one-frame stale tint while the private effect-tree flush
+            // races the layer-side backgroundColor change.
+            overlayView?.backgroundColor = resolvedTint
         }
     }
 
@@ -308,6 +331,7 @@
 
         /// Sets a KVC value on the `_UICustomBlurEffect` and rebuilds.
         fileprivate func setBlurEffectValue(_ value: (some Any)?, forKey key: BlurEffectKey) {
+            lastConfiguration = nil
             blurEffect?.setValue(value, forKeyPath: key.rawValue)
             prepareForChanges()
             applyChanges()

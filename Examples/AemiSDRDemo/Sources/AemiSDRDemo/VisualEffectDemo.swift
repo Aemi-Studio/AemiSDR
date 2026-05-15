@@ -159,6 +159,7 @@ struct VisualEffectDemo: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.medium, .large])
+            .presentationContentInteraction(.scrolls)
     }
 
     private var backdropSettings: some View {

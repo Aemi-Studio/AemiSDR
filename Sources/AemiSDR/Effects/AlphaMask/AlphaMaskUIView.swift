@@ -44,20 +44,7 @@
 
         /// Current display scale, used for pixel-accurate mask generation
         private var currentScale: CGFloat { displayScale }
-        private var cachedMaskKey: MaskCacheKey?
-        private var cachedMaskImage: CGImage?
         private var reusableMaskLayer: CALayer?
-
-        private struct MaskCacheKey: Equatable {
-            var widthPx: Int
-            var heightPx: Int
-            var scaleQ: Int
-            var maskType: MaskType
-            var startOffsetQ: Int
-            var cornerRadiusQ: Int
-            var fadeWidthQ: Int
-            var inverted: Bool
-        }
 
         // MARK: - Initialization
 
@@ -149,17 +136,19 @@
         private func updateMask(for size: CGSize) {
             guard size.width > 0, size.height > 0 else { return }
 
-            let key = makeMaskCacheKey(size: size, scale: currentScale)
-            let maskImage: CGImage?
-            if cachedMaskKey == key, let cachedMaskImage {
-                maskImage = cachedMaskImage
-            } else {
-                let generatedMaskImage = generateAlphaMask(size: size, scale: currentScale)
-                if let generatedMaskImage {
-                    cachedMaskKey = key
-                    cachedMaskImage = generatedMaskImage
-                }
-                maskImage = generatedMaskImage
+            let scale = currentScale
+            let key = MaskCacheKey.make(
+                size: size,
+                scale: scale,
+                maskType: configuredMaskType,
+                startOffset: configuredStartOffset,
+                cornerRadius: configuredCornerRadius,
+                fadeWidth: configuredFadeWidth,
+                inverted: configuredInverted
+            )
+
+            let maskImage = MaskCache.image(for: key) {
+                generateAlphaMask(size: size, scale: scale)
             }
 
             // Apply the generated mask to the layer
@@ -187,27 +176,12 @@
                 cornerRadius: configuredCornerRadius, fadeWidth: configuredFadeWidth,
                 inverted: configuredInverted
             )
-            return CIKernelCache.generateCGImage(kernel: descriptor.kernel, extent: extent, arguments: descriptor.arguments)
-        }
-
-        private func makeMaskCacheKey(size: CGSize, scale: CGFloat) -> MaskCacheKey {
-            let widthPx = max(1, Int(ceil(size.width * scale)))
-            let heightPx = max(1, Int(ceil(size.height * scale)))
-
-            return MaskCacheKey(
-                widthPx: widthPx,
-                heightPx: heightPx,
-                scaleQ: quantize(scale, precision: 1000),
-                maskType: configuredMaskType,
-                startOffsetQ: quantize(configuredStartOffset, precision: 10_000),
-                cornerRadiusQ: quantize(configuredCornerRadius, precision: 1000),
-                fadeWidthQ: quantize(configuredFadeWidth, precision: 1000),
-                inverted: configuredInverted
+            return CIKernelCache.generateCGImage(
+                kernel: descriptor.kernel,
+                extent: extent,
+                arguments: descriptor.arguments,
+                context: CIKernelCache.maskContext
             )
-        }
-
-        private func quantize(_ value: CGFloat, precision: CGFloat) -> Int {
-            Int((value * precision).rounded())
         }
 
         // MARK: - UIView Overrides

@@ -2,6 +2,12 @@ import AemiSDR
 import SwiftUI
 
 struct VariableBlurDemo: View {
+    enum BlurMode: String, CaseIterable {
+        case edgeBlur = "Edge Blur"
+        case uniformBlur = "Uniform Blur"
+        case centerBlur = "Center Blur"
+    }
+
     enum EdgeSelection: String, CaseIterable {
         case top, bottom, both
 
@@ -14,6 +20,7 @@ struct VariableBlurDemo: View {
         }
     }
 
+    @State private var blurMode: BlurMode = .edgeBlur
     @State private var maxBlurRadius: CGFloat = 3
     @State private var height: CGFloat = 100
     @State private var useFullHeight = false
@@ -23,6 +30,31 @@ struct VariableBlurDemo: View {
 
     var body: some View {
         NavigationStack {
+            blurredContent
+                .navigationTitle("Variable Blur")
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            showSettings.toggle()
+                        } label: {
+                            Image(
+                                systemName: showSettings
+                                    ? "slider.horizontal.2.square.on.square"
+                                    : "slider.horizontal.2.square"
+                            )
+                        }
+                    }
+                }
+                .sheet(isPresented: $showSettings) {
+                    settingsSheet
+                }
+        }
+    }
+
+    @ViewBuilder
+    private var blurredContent: some View {
+        switch blurMode {
+        case .edgeBlur:
             SharedScrollContent()
                 .verticalEdgeBlur(
                     height: useFullHeight ? .infinity : height,
@@ -30,66 +62,57 @@ struct VariableBlurDemo: View {
                     edges: edges.edgeSet,
                     transition: transition
                 )
-            .navigationTitle("Variable Blur")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showSettings.toggle()
-                    } label: {
-                        Image(
-                            systemName: showSettings
-                                ? "slider.horizontal.2.square.on.square"
-                                : "slider.horizontal.2.square"
-                            )
-                    }
-                }
-            }
-            .sheet(isPresented: $showSettings) {
-                settingsSheet
-            }
+        case .uniformBlur:
+            SharedScrollContent()
+                .uniformBlur(maxBlurRadius: maxBlurRadius)
+        case .centerBlur:
+            SharedScrollContent()
+                .verticalCenterBlur(
+                    height: useFullHeight ? .infinity : height,
+                    maxBlurRadius: maxBlurRadius
+                )
         }
     }
 
     private var settingsSheet: some View {
-        NavigationStack {
-            List {
-                NavigationLink("Variable Blur Settings") {
-                    variableBlurSettings
+        Form {
+            Section("Mode") {
+                Picker("Blur Mode", selection: $blurMode) {
+                    ForEach(BlurMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
                 }
             }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-        }
-        .presentationDetents([.medium, .large])
-    }
 
-    private var variableBlurSettings: some View {
-        Form {
             Section("Blur") {
                 parameterSlider("Max Radius", value: $maxBlurRadius, range: 1...20, format: "%.1f")
 
-                if !useFullHeight {
-                    parameterSlider("Height", value: $height, range: 20...200, format: "%.0f pt")
+                if blurMode != .uniformBlur {
+                    if !useFullHeight {
+                        parameterSlider("Height", value: $height, range: 20...200, format: "%.0f pt")
+                    }
+                    Toggle("Full Height", isOn: $useFullHeight)
                 }
-
-                Toggle("Full Height", isOn: $useFullHeight)
             }
 
-            Section("Shape") {
-                Picker("Edges", selection: $edges) {
-                    Text("Top").tag(EdgeSelection.top)
-                    Text("Bottom").tag(EdgeSelection.bottom)
-                    Text("Both").tag(EdgeSelection.both)
-                }
+            if blurMode == .edgeBlur {
+                Section("Shape") {
+                    Picker("Edges", selection: $edges) {
+                        Text("Top").tag(EdgeSelection.top)
+                        Text("Bottom").tag(EdgeSelection.bottom)
+                        Text("Both").tag(EdgeSelection.both)
+                    }
 
-                Picker("Transition", selection: $transition) {
-                    Text("Linear").tag(TransitionAlgorithm.linear)
-                    Text("Eased").tag(TransitionAlgorithm.eased)
+                    Picker("Transition", selection: $transition) {
+                        Text("Linear").tag(TransitionAlgorithm.linear)
+                        Text("Eased").tag(TransitionAlgorithm.eased)
+                    }
                 }
             }
         }
-        .navigationTitle("Variable Blur")
-        .navigationBarTitleDisplayMode(.inline)
+        .presentationDetents([.medium, .large])
+            .presentationContentInteraction(.scrolls)
+        .presentationBackgroundInteraction(.enabled)
     }
 
     private func parameterSlider(

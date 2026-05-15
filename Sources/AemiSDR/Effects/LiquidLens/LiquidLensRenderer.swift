@@ -56,12 +56,15 @@
         // MARK: - Texture Creation
 
         func makeTexture(from cgImage: CGImage) -> MTLTexture? {
-            // Try MTKTextureLoader first (fastest path for file-backed images)
+            // Try MTKTextureLoader first (fastest path for file-backed images).
+            // Load as sRGB so the GPU sampler linearises on read — matches the
+            // sRGB drawable format and avoids double-gamma when the lens is
+            // composited over wide-gamut backdrops.
             if let texture = try? textureLoader.newTexture(
                 cgImage: cgImage,
                 options: [
                     .textureUsage: NSNumber(value: MTLTextureUsage.shaderRead.rawValue),
-                    .SRGB: false,
+                    .SRGB: true,
                 ]
             ) {
                 return texture
@@ -120,9 +123,15 @@
         func render(
             sourceTexture: MTLTexture,
             uniforms: LiquidLensUniforms,
-            drawable: CAMetalDrawable
+            drawable: CAMetalDrawable,
+            onCompleted: (@Sendable () -> Void)? = nil
         ) {
-            guard let commandBuffer = commandQueue.makeCommandBuffer() else { return }
+            guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+                // Even on early failure, fire the consumer's completion so the
+                // ZeroCopyTextureBridge slot doesn't stay in-flight forever.
+                onCompleted?()
+                return
+            }
             commandBuffer.label = "AemiSDR.LiquidLens.CommandBuffer"
 
             let passDescriptor = MTLRenderPassDescriptor()
@@ -134,6 +143,7 @@
             )
 
             guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: passDescriptor) else {
+                onCompleted?()
                 return
             }
             encoder.label = "AemiSDR.LiquidLens.RenderEncoder"
@@ -152,13 +162,14 @@
 
             commandBuffer.present(drawable)
 
-            #if DEBUG
+            // Completion handler fires off the main thread; route the bridge
+            // slot release plus error logging from here in all builds.
             commandBuffer.addCompletedHandler { buffer in
                 if let error = buffer.error {
                     Self.logger.error("GPU command buffer error: \(error.localizedDescription)")
                 }
+                onCompleted?()
             }
-            #endif
 
             commandBuffer.commit()
         }
@@ -272,7 +283,8 @@
             let descriptor = MTLRenderPipelineDescriptor()
             descriptor.vertexFunction = vertexFunction
             descriptor.fragmentFunction = fragmentFunction
-            descriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
+            // Must match `metalLayer.pixelFormat` in `LiquidLensUIView`.
+            descriptor.colorAttachments[0].pixelFormat = .bgra10_xr_srgb
             descriptor.colorAttachments[0].isBlendingEnabled = true
             descriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
             descriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha

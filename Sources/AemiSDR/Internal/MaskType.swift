@@ -3,7 +3,9 @@
 //  AemiSDR
 //
 
+import CoreGraphics
 import CoreImage
+import Foundation
 
 /// Mask shapes and gradients used for variable blur and alpha masking.
 /// Each case maps to a dedicated, optimized shader.
@@ -32,6 +34,12 @@ public enum MaskType: Sendable, Equatable, Hashable, CaseIterable {
     /// Quadratic ease-in gradient: bottom is masked/blurred; top is clear.
     case easeInBottomToTop
 
+    /// Constant alpha mask (all 1.0) for uniform blur intensity.
+    case uniform
+
+    /// Quadratic ease-in center gradient: center is masked/blurred; both edges are clear.
+    case easeInCenterVertical
+
     // MARK: - Convenience Initializer
 
     /// Creates a MaskType from a corner style and transition algorithm.
@@ -45,7 +53,7 @@ public enum MaskType: Sendable, Equatable, Hashable, CaseIterable {
         case (.circular, .eased): .easedRoundedRectangle
         case (.continuous, .linear): .superellipseSquircle
         case (.continuous, .eased): .easedSuperellipseSquircle
-        case (_, _): .easedSuperellipseSquircle
+        @unknown default: .easedSuperellipseSquircle
         }
     }
 }
@@ -117,6 +125,103 @@ extension MaskType {
             let fw = fadeWidth * scale
             return (CIKernelCache.superellipseEaseAlphaMask,
                     [scaledWidth, scaledHeight, cr, fw, 2, inv])
+
+        case .uniform:
+            return (CIKernelCache.uniformMask,
+                    [scaledWidth, scaledHeight])
+
+        case .easeInCenterVertical:
+            return (CIKernelCache.easeInCenterMask,
+                    [scaledWidth, scaledHeight, startOffset, inv])
         }
+    }
+}
+
+// MARK: - Shared Mask Cache
+
+/// Hashable description of a generated mask image.
+///
+/// Shared between `AlphaMaskUIView` and `VariableBlurUIView` so two views with
+/// identical configuration (a list of cells, for example) reuse a single
+/// rendered `CGImage` instead of regenerating per-instance.
+///
+/// Floating-point fields are quantised to integer ticks at a uniform precision
+/// of `10_000`. For the typical input ranges (`[0, 1]` for offsets/scales and
+/// pixel-bounded values for dimensions/radii) this is well below visual
+/// significance and below the noise floor of `CGRect` jitter.
+struct MaskCacheKey: Hashable {
+    var widthPx: Int
+    var heightPx: Int
+    var scaleQ: Int
+    var maskType: MaskType
+    var startOffsetQ: Int
+    var cornerRadiusQ: Int
+    var fadeWidthQ: Int
+    var inverted: Bool
+
+    static func make(
+        size: CGSize,
+        scale: CGFloat,
+        maskType: MaskType,
+        startOffset: CGFloat,
+        cornerRadius: CGFloat,
+        fadeWidth: CGFloat,
+        inverted: Bool
+    ) -> MaskCacheKey {
+        let widthPx = max(1, Int(ceil(size.width * scale)))
+        let heightPx = max(1, Int(ceil(size.height * scale)))
+        return MaskCacheKey(
+            widthPx: widthPx,
+            heightPx: heightPx,
+            scaleQ: quantize(scale),
+            maskType: maskType,
+            startOffsetQ: quantize(startOffset),
+            cornerRadiusQ: quantize(cornerRadius),
+            fadeWidthQ: quantize(fadeWidth),
+            inverted: inverted
+        )
+    }
+
+    private static let quantizePrecision: CGFloat = 10_000
+
+    private static func quantize(_ value: CGFloat) -> Int {
+        Int((value * quantizePrecision).rounded())
+    }
+}
+
+/// Object wrapper so `MaskCacheKey` can serve as an `NSCache` key.
+final class MaskCacheKeyBox: NSObject {
+    let key: MaskCacheKey
+    init(_ key: MaskCacheKey) { self.key = key }
+
+    override var hash: Int { key.hashValue }
+    override func isEqual(_ object: Any?) -> Bool {
+        guard let other = object as? MaskCacheKeyBox else { return false }
+        return other.key == key
+    }
+}
+
+/// Process-wide mask cache.
+///
+/// `NSCache` evicts under memory pressure and is thread-safe by contract.
+/// A modest count limit caps worst-case retention; mask images are small
+/// (single-channel alpha, bounded by view size) so the upper bound on
+/// memory is comfortable.
+enum MaskCache {
+    nonisolated(unsafe) static let storage: NSCache<MaskCacheKeyBox, CGImage> = {
+        let cache = NSCache<MaskCacheKeyBox, CGImage>()
+        cache.countLimit = 32
+        return cache
+    }()
+
+    /// Returns the cached image for `key`, generating and inserting one on miss.
+    static func image(for key: MaskCacheKey, generate: () -> CGImage?) -> CGImage? {
+        let box = MaskCacheKeyBox(key)
+        // `NSCache` is documented thread-safe; the strict-memory-safety check
+        // can't see that contract, so opt in explicitly here.
+        if let cached = unsafe storage.object(forKey: box) { return cached }
+        guard let image = generate() else { return nil }
+        unsafe storage.setObject(image, forKey: box)
+        return image
     }
 }

@@ -449,6 +449,66 @@ extern "C" { namespace coreimage {
     }
     
     // --------------------------------------------------------------
+    // MARK: Uniform mask (constant alpha)
+    // --------------------------------------------------------------
+    /**
+     * Creates a uniform mask with constant alpha 1.0 everywhere.
+     *
+     * Used with the variable blur filter to produce even blur across the
+     * entire view surface, as an alternative to gradient-based masks.
+     *
+     * @param widthPx Width in pixels (unused, required for kernel signature)
+     * @param heightPx Height in pixels (unused, required for kernel signature)
+     * @param dest Pixel coordinates
+     * @return Solid white RGBA (all channels 1.0)
+     */
+    float4 uniformMask(float widthPx,
+                       float heightPx,
+                       coreimage::destination dest)
+    {
+        return float4(1.0f);
+    }
+
+    // --------------------------------------------------------------
+    // MARK: Center vertical mask with quadratic ease
+    // --------------------------------------------------------------
+    /**
+     * Creates a vertical gradient that peaks at the center and fades to
+     * zero at both top and bottom edges.
+     *
+     * This is the inverse of the edge blur pattern: edges are clear (no blur)
+     * and the center region receives maximum blur intensity.
+     *
+     * @param widthPx Width in pixels (unused, required for kernel signature)
+     * @param heightPx Height in pixels
+     * @param startOffset Fraction of the half-height that remains at zero before
+     *                    the gradient begins (0.0 = gradient from edge, 0.5 = flat center plateau)
+     * @param inverted 0 = center blurred / edges clear, 1 = center clear / edges blurred
+     * @param dest Pixel coordinates
+     * @return half4 for memory efficiency
+     */
+    half4 easeInCenterMask(float widthPx,
+                           float heightPx,
+                           float startOffset,
+                           float inverted,
+                           coreimage::destination dest)
+    {
+        float h     = max(heightPx, 1.0f);
+        float yNorm = dest.coord().y / h;
+
+        // Proximity to vertical center: 1.0 at center, 0.0 at edges
+        float proximity = 1.0f - abs(2.0f * yNorm - 1.0f);
+
+        float s = clamp(startOffset, 0.0f, 0.999f);
+        float t = clamp((proximity - s) / (1.0f - s), 0.0f, 1.0f);
+        float eased = t * t;
+
+        half a = half(eased);
+        if (inverted > 0.5f) a = half(1.0f) - a;
+        return half4(a, a, a, a);
+    }
+
+    // --------------------------------------------------------------
     // MARK: Superellipse with quadratic ease and optional inversion
     // --------------------------------------------------------------
     /**

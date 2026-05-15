@@ -114,38 +114,4 @@
         }
     }
 
-    // MARK: - UICornerDiscoverable Conformances
-
-    extension UICornerDiscoverable where Self: UIView {
-        /// Get the corner radius for the screen containing this view.
-        ///
-        /// Traverses the view hierarchy to find the containing window and screen.
-        /// Returns 0 if no screen context can be determined.
-        var screenCornerRadius: CGFloat {
-            UIScreen.getDisplayCornerRadius(from: .view(self))
-        }
-    }
-
-    extension UICornerDiscoverable where Self: UIViewController {
-        /// Get the corner radius for the screen containing this view controller.
-        ///
-        /// Uses the view controller's view to determine the screen context.
-        /// Returns 0 if no screen context can be determined.
-        var screenCornerRadius: CGFloat {
-            UIScreen.getDisplayCornerRadius(from: .view(view))
-        }
-    }
-
-    extension UICornerDiscoverable where Self: UIWindow {
-        /// Get the corner radius for this window's screen.
-        var screenCornerRadius: CGFloat {
-            UIScreen.getDisplayCornerRadius(from: .window(self))
-        }
-    }
-
-    // MARK: - Default Conformances
-
-    extension UIView: UICornerDiscoverable {}
-
-    extension UIViewController: UICornerDiscoverable {}
 #endif

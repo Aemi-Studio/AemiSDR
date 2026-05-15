@@ -101,7 +101,7 @@ Or use the shorthand modifier:
 ScrollView {
     // content
 }
-.liquid(
+.liquidBackground(
     .subtle,
     shape: Capsule(style: .continuous),
     ignoreSafeArea: false

@@ -10,10 +10,13 @@
     /// Base coordinator that manages `CADisplayLink`-driven backdrop capture via
     /// `BackdropCaptureView` and `ZeroCopyTextureBridge`.
     ///
-    /// Inserts a `BackdropCaptureView` (backed by `CABackdropLayer`) as a sibling
-    /// below the effect view. On pre-iOS 26, `drawHierarchy` on the backdrop view
-    /// yields the composited content; on iOS 26+ where `drawHierarchy` returns
-    /// blank, `layer.render(in:)` reads the model tree directly.
+    /// On pre-iOS 26, inserts a `BackdropCaptureView` (backed by `CABackdropLayer`)
+    /// as a sibling below the effect view and rasterizes it via `drawHierarchy`.
+    ///
+    /// On iOS 26+, `CABackdropLayer` no longer exposes captured content through
+    /// `drawHierarchy` or `layer.render(in:)`. The coordinator falls back to
+    /// capturing the content sibling view directly — the SwiftUI view behind the
+    /// effect in the `.background`/`.overlay` container.
     ///
     /// Subclasses override `processTexture(_:)` to route the captured `MTLTexture`
     /// to their specific rendering pipeline.
@@ -29,6 +32,7 @@
         var captureScale: CGFloat = 1.0
 
         private var displayLink: CADisplayLink?
+        private var displayLinkProxy: DisplayLinkProxy?
         private var backgroundObserver: NSObjectProtocol?
         private var foregroundObserver: NSObjectProtocol?
         private var isPaused = false
@@ -37,12 +41,24 @@
         private var captureViewHasRendered = false
         private var isCapturing = false
 
+        // Cheap content-change signature for the iOS 26 capture path.
+        // When the captured content sibling hasn't visibly changed since the
+        // last capture, the (expensive) `drawHierarchy` raster pass is skipped.
+        private var lastContentSignature: ContentSignature?
+
+        private struct ContentSignature: Equatable {
+            let bounds: CGRect
+            let subviewCount: Int
+            let sublayerCount: Int
+            let contentsIdentifier: ObjectIdentifier?
+        }
+
         init() {
             backgroundObserver = NotificationCenter.default.addObserver(
                 forName: UIApplication.didEnterBackgroundNotification,
                 object: nil, queue: .main
             ) { [weak self] _ in
-                Task { @MainActor in
+                MainActor.assumeIsolated {
                     self?.pauseDisplayLink()
                 }
             }
@@ -50,7 +66,7 @@
                 forName: UIApplication.willEnterForegroundNotification,
                 object: nil, queue: .main
             ) { [weak self] _ in
-                Task { @MainActor in
+                MainActor.assumeIsolated {
                     self?.resumeDisplayLink()
                 }
             }
@@ -58,13 +74,16 @@
 
         // MARK: - Override Point
 
-        /// Called with the captured `MTLTexture` each frame. Subclasses must override
-        /// to route the texture to their rendering pipeline.
-        func processTexture(_ texture: MTLTexture) {
+        /// Called with a captured texture each frame. Subclasses must override to
+        /// route `captured.texture` to their rendering pipeline AND to invoke
+        /// `captured.onConsumed` (typically via `MTLCommandBuffer.addCompletedHandler`)
+        /// once the GPU finishes reading. Failing to invoke `onConsumed` will
+        /// eventually stall the bridge's slot ring.
+        func processTexture(_ captured: ConsumableTexture) {
             // Subclasses override
         }
 
-        // MARK: - BackdropCaptureView Management
+        // MARK: - BackdropCaptureView Management (pre-iOS 26)
 
         /// Inserts or updates the `BackdropCaptureView` as a sibling below the effect view.
         private func ensureCaptureView() {
@@ -72,11 +91,9 @@
 
             if captureView == nil {
                 let view = BackdropCaptureView()
-                // Use reduced bit depth when capturing at less than full scale
                 if captureScale < 1.0 {
                     view.setReducedBitDepth(true)
                 }
-                // Forward the capture scale to the backdrop layer
                 view.setCaptureScale(captureScale)
                 captureView = view
                 captureViewHasRendered = false
@@ -86,7 +103,6 @@
 
             if captureView.superview !== superview {
                 captureView.removeFromSuperview()
-                // Insert below the effect view so it captures everything behind it
                 superview.insertSubview(captureView, belowSubview: effectView)
             }
             captureView.frame = effectView.frame
@@ -104,15 +120,22 @@
                 updateDisplayLinkRate()
                 return
             }
-            let link = CADisplayLink(target: self, selector: #selector(displayLinkFired))
+            // Route the display-link callback through a weak proxy so the link
+            // does not retain the coordinator. If `tearDown()` is missed (e.g.
+            // SwiftUI replaces the representable mid-flight), the coordinator
+            // can still deallocate and the proxy's weak target becomes nil.
+            let proxy = DisplayLinkProxy(target: self)
+            let link = unsafe CADisplayLink(target: proxy, selector: #selector(DisplayLinkProxy.fire(_:)))
             applyFrameRate(to: link)
             link.add(to: .main, forMode: .common)
             displayLink = link
+            displayLinkProxy = proxy
         }
 
         func stopDisplayLink() {
             displayLink?.invalidate()
             displayLink = nil
+            displayLinkProxy = nil
         }
 
         func updateDisplayLinkRate() {
@@ -143,7 +166,7 @@
             displayLink?.isPaused = false
         }
 
-        @objc private func displayLinkFired(_ link: CADisplayLink) {
+        fileprivate func displayLinkFired(_ link: CADisplayLink) {
             guard let effectView, effectView.window != nil else { return }
             guard effectView.bounds.width > 0, effectView.bounds.height > 0 else { return }
             performCapture()
@@ -166,6 +189,109 @@
             isCapturing = true
             defer { isCapturing = false }
 
+            if #available(iOS 26, *) {
+                performContentSiblingCapture()
+            } else {
+                performBackdropLayerCapture()
+            }
+        }
+
+        // MARK: - iOS 26+ Content Sibling Capture
+
+        /// On iOS 26, CABackdropLayer no longer exposes captured content through any
+        /// CPU-accessible path. Instead, find the content sibling in the SwiftUI
+        /// overlay/background container and capture it directly via `drawHierarchy`.
+        @available(iOS 26, *)
+        private func performContentSiblingCapture() {
+            guard let effectView else { return }
+            guard let contentView = findContentSibling(for: effectView) else { return }
+
+            let screenScale = effectView.displayScale
+            let scale = screenScale * captureScale
+            let frameInContent = effectView.convert(effectView.bounds, to: contentView)
+
+            let pixelWidth = Int(frameInContent.width * scale)
+            let pixelHeight = Int(frameInContent.height * scale)
+            guard pixelWidth > 0, pixelHeight > 0 else { return }
+
+            // Skip the (expensive) drawHierarchy raster when the captured view's
+            // cheap visual signature is unchanged. A typical app screen is static
+            // between user inputs; this saves a full hierarchy rasterisation per
+            // display-link tick.
+            let signature = ContentSignature(
+                bounds: contentView.bounds,
+                subviewCount: contentView.subviews.count,
+                sublayerCount: contentView.layer.sublayers?.count ?? 0,
+                contentsIdentifier: contentView.layer.contents.map { ObjectIdentifier($0 as AnyObject) }
+            )
+            if signature == lastContentSignature && hasCaptured { return }
+            lastContentSignature = signature
+
+            ensureBridge()
+
+            let bgColor = resolveBackgroundColor(for: contentView, traitCollection: contentView.traitCollection)
+
+            if let captured = bridge?.render(width: pixelWidth, height: pixelHeight, actions: { ctx in
+                ctx.saveGState()
+                // Pre-fill with resolved background to avoid black through transparent areas
+                ctx.setFillColor(bgColor)
+                ctx.fill(CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight))
+                // Flip Quartz (bottom-left origin) → UIKit (top-left origin)
+                ctx.translateBy(x: 0, y: CGFloat(pixelHeight))
+                ctx.scaleBy(x: 1, y: -1)
+                ctx.scaleBy(x: scale, y: scale)
+                // Offset to capture only the effect view's portion
+                ctx.translateBy(x: -frameInContent.origin.x, y: -frameInContent.origin.y)
+                UIGraphicsPushContext(ctx)
+                contentView.drawHierarchy(in: contentView.bounds, afterScreenUpdates: false)
+                UIGraphicsPopContext()
+                ctx.restoreGState()
+            }) {
+                processTexture(captured)
+            }
+        }
+
+        /// Finds the content sibling view in a SwiftUI background/overlay container.
+        ///
+        /// SwiftUI `.background`/`.overlay` creates a container with the content view
+        /// as the first child and the modifier view(s) as subsequent children. By
+        /// capturing only the content sibling, we avoid a feedback loop where the
+        /// effect's output is re-captured as input.
+        private func findContentSibling(for view: UIView) -> UIView? {
+            var current = view.superview
+            while let parent = current {
+                if parent.subviews.count >= 2 {
+                    for sibling in parent.subviews where !view.isDescendant(of: sibling) {
+                        return sibling
+                    }
+                    return parent
+                }
+                current = parent.superview
+            }
+            return nil
+        }
+
+        /// Walks the view hierarchy to find the first non-clear background color.
+        ///
+        /// Resolves dynamic colors against the captured view's trait collection so
+        /// the fill reflects the current dark/light appearance rather than the
+        /// caller's environment.
+        private func resolveBackgroundColor(for view: UIView, traitCollection: UITraitCollection) -> CGColor {
+            var current: UIView? = view
+            while let v = current {
+                if let bg = v.backgroundColor, bg != .clear {
+                    return bg.resolvedColor(with: traitCollection).cgColor
+                }
+                current = v.superview
+            }
+            return UIColor.systemBackground.resolvedColor(with: traitCollection).cgColor
+        }
+
+        // MARK: - Pre-iOS 26 BackdropLayer Capture
+
+        /// Pre-iOS 26: use `CABackdropLayer`-backed capture view for efficient
+        /// window-server-level compositing via `drawHierarchy`.
+        private func performBackdropLayerCapture() {
             guard let effectView else { return }
 
             ensureCaptureView()
@@ -180,28 +306,19 @@
 
             ensureBridge()
 
-            if let texture = bridge?.render(width: pixelWidth, height: pixelHeight, actions: { ctx in
+            if let captured = bridge?.render(width: pixelWidth, height: pixelHeight, actions: { ctx in
                 ctx.saveGState()
                 ctx.translateBy(x: 0, y: CGFloat(pixelHeight))
                 ctx.scaleBy(x: 1, y: -1)
                 ctx.scaleBy(x: scale, y: scale)
-
-                if #available(iOS 26, *) {
-                    // On iOS 26, CABackdropLayer no longer composites captured content
-                    // into the drawable for drawHierarchy. layer.render(in:) reads the
-                    // model tree directly, bypassing the broken drawable path.
-                    captureView.layer.render(in: ctx)
-                } else {
-                    let needsScreenUpdate = !self.captureViewHasRendered
-                    UIGraphicsPushContext(ctx)
-                    captureView.drawHierarchy(in: captureView.bounds, afterScreenUpdates: needsScreenUpdate)
-                    UIGraphicsPopContext()
-                    self.captureViewHasRendered = true
-                }
-
+                let needsScreenUpdate = !self.captureViewHasRendered
+                UIGraphicsPushContext(ctx)
+                captureView.drawHierarchy(in: captureView.bounds, afterScreenUpdates: needsScreenUpdate)
+                UIGraphicsPopContext()
+                self.captureViewHasRendered = true
                 ctx.restoreGState()
             }) {
-                processTexture(texture)
+                processTexture(captured)
             }
         }
 
@@ -229,6 +346,39 @@
             if let foregroundObserver { NotificationCenter.default.removeObserver(foregroundObserver) }
             backgroundObserver = nil
             foregroundObserver = nil
+        }
+
+        // Defense-in-depth for missed `tearDown()` (e.g. SwiftUI replacing the
+        // representable mid-flight without invoking `dismantleUIView`). Without
+        // this, the `CADisplayLink` keeps firing into the no-op weak-proxy
+        // forever and the notification observers accumulate over the app's
+        // lifetime. Both `CADisplayLink.invalidate()` and
+        // `NotificationCenter.removeObserver(_:)` are documented thread-safe,
+        // so the deinit is safe whichever thread releases the last reference.
+        deinit {
+            displayLink?.invalidate()
+            if let backgroundObserver { NotificationCenter.default.removeObserver(backgroundObserver) }
+            if let foregroundObserver { NotificationCenter.default.removeObserver(foregroundObserver) }
+        }
+    }
+
+    /// Weak forwarding target for `CADisplayLink`.
+    ///
+    /// `CADisplayLink` retains its `target` strongly. When the coordinator is
+    /// the direct target, missing a `tearDown()` keeps the coordinator alive
+    /// indefinitely and the display link keeps firing. Routing through this
+    /// proxy means the link retains the proxy (cheap, no observers) while the
+    /// coordinator may deallocate normally.
+    @MainActor
+    private final class DisplayLinkProxy: NSObject {
+        weak var target: BackdropCaptureCoordinator?
+
+        init(target: BackdropCaptureCoordinator) {
+            self.target = target
+        }
+
+        @objc func fire(_ link: CADisplayLink) {
+            target?.displayLinkFired(link)
         }
     }
 #endif

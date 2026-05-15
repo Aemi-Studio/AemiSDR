@@ -10,53 +10,6 @@
         /// Applies a full-surface liquid glass effect as a background.
         @available(iOS 15.0, *)
         @ViewBuilder
-        public func liquid(
-            _ configuration: LiquidGlassConfiguration = .regular,
-            chromaticIntensity: Float? = nil,
-            shape: ShapePathProvider? = nil,
-            cornerRadius: LiquidLensCornerRadius? = nil,
-            ignoreSafeArea: Bool = false
-        ) -> some View {
-            let resolvedConfiguration = resolvedLiquidConfiguration(
-                configuration,
-                chromaticIntensity: chromaticIntensity
-            )
-            liquidBackground(
-                resolvedConfiguration,
-                shape: shape,
-                cornerRadius: cornerRadius,
-                ignoreSafeArea: ignoreSafeArea
-            )
-        }
-
-        /// Applies a full-surface liquid glass effect as a background using a SwiftUI shape.
-        @available(iOS 16.0, *)
-        @ViewBuilder
-        public func liquid<S: Shape>(
-            _ configuration: LiquidGlassConfiguration = .regular,
-            chromaticIntensity: Float? = nil,
-            shape: S,
-            cornerRadius: LiquidLensCornerRadius? = nil,
-            ignoreSafeArea: Bool = false
-        ) -> some View {
-            let resolvedConfiguration = resolvedLiquidConfiguration(
-                configuration,
-                chromaticIntensity: chromaticIntensity
-            )
-            let resolvedCornerRadius = cornerRadius
-                ?? LiquidShapeCornerRadiusResolver.inferCornerRadius(from: shape)
-
-            liquidBackground(
-                resolvedConfiguration,
-                shape: { rect in shape.path(in: rect).cgPath },
-                cornerRadius: resolvedCornerRadius,
-                ignoreSafeArea: ignoreSafeArea
-            )
-        }
-
-        /// Applies a full-surface liquid glass effect as a background.
-        @available(iOS 15.0, *)
-        @ViewBuilder
         public func liquidBackground(
             _ configuration: LiquidGlassConfiguration = .regular,
             chromaticIntensity: Float? = nil,

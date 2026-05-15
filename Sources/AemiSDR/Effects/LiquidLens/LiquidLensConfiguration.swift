@@ -3,6 +3,7 @@
 //  AemiSDR
 //
 
+import Foundation
 import simd
 
 /// How corner radius is specified for the liquid lens shape.
@@ -43,11 +44,16 @@ public struct LiquidLensUniforms: Sendable, Equatable {
     public var falloffIntensity: Float
     public var chromaticAmount: Float
     public var materialType: Int32
-    public var useRadialDirection: Int32
     public var overlayMode: Int32
     public var refractiveIndexRed: Float
     public var refractiveIndexGreen: Float
     public var refractiveIndexBlue: Float
+    /// Precomputed Snell deviation (radians) for the red channel. Equal to
+    /// `snell(asin(lensCurvature), kAir, refractiveIndexRed)`. The shader uses
+    /// this directly instead of evaluating `sin`/`asin` per fragment.
+    public var deviationRed: Float
+    public var deviationGreen: Float
+    public var deviationBlue: Float
 }
 
 /// Configuration for the liquid lens distortion effect.
@@ -74,23 +80,26 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
     /// Falloff transition curve.
     public var falloff: LiquidLensFalloff
 
-    /// Distance from edge where falloff reaches zero (0–1, fraction of min(halfSize)).
+    /// Width of the edge fade region as a fraction of min(halfSize).
+    /// At 0, the effect has sharp edges; at 1, the fade extends to the center.
     public var falloffLength: Float
 
     /// Falloff strength multiplier (0 = no falloff, 1 = full).
     public var falloffIntensity: Float
 
-    /// Chromatic aberration strength (0 = none, 1 = full physics).
+    /// Chromatic aberration amplifier.
+    ///
+    /// `0` disables chromatic separation. `30` (the default) is the calibrated
+    /// baseline producing visible color fringing at strength 1.0. Higher values
+    /// exaggerate the effect; lower values reduce it. Clamped to `[0, 30]` internally.
+    ///
+    /// This is an artistic amplifier rather than a physical [0, 1] interpolation:
+    /// the shader uses `mix(green, channel, amount)` where `amount > 1` extrapolates
+    /// beyond the physically-correct displacement.
     public var chromaticAmount: Float
 
     /// Optical material determining dispersion characteristics.
     public var material: LiquidLensMaterial
-
-    /// Biases the hybrid direction field toward stronger radial influence.
-    ///
-    /// The shader always blends shape-aware and radial directions.
-    /// `false` keeps corners closer to edge normals, `true` increases radial pull.
-    public var useRadialDirection: Bool
 
     /// When `true`, pixels outside the lens area are transparent instead of showing
     /// the undistorted source. Use this when the lens is an overlay on live content.
@@ -100,14 +109,13 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
         center: SIMD2<Float> = .zero,
         halfSize: SIMD2<Float> = SIMD2(150, 150),
         strength: Float = 1.0,
-        lensCurvature: Float = 0.5,
+        lensCurvature: Float = 1.0,
         cornerRadius: LiquidLensCornerRadius = .points(0),
-        falloff: LiquidLensFalloff = .easeInOut,
+        falloff: LiquidLensFalloff = .exponential,
         falloffLength: Float = 1.0,
-        falloffIntensity: Float = 0.5,
-        chromaticAmount: Float = 1.0,
-        material: LiquidLensMaterial = .crownGlass,
-        useRadialDirection: Bool = true,
+        falloffIntensity: Float = 1,
+        chromaticAmount: Float = 30.0,
+        material: LiquidLensMaterial = .water,
         overlayMode: Bool = false
     ) {
         self.center = center
@@ -120,7 +128,6 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
         self.falloffIntensity = falloffIntensity
         self.chromaticAmount = chromaticAmount
         self.material = material
-        self.useRadialDirection = useRadialDirection
         self.overlayMode = overlayMode
     }
 
@@ -133,9 +140,21 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
     public func toUniforms(textureSize: SIMD2<Float>, scale: Float = 1.0) -> LiquidLensUniforms {
         let coefficients = Self.sellmeierCoefficients(for: material)
         assert(
-            MemoryLayout<LiquidLensUniforms>.stride == 80,
-            "LiquidLensUniforms layout mismatch — Metal expects 80-byte stride, got \(MemoryLayout<LiquidLensUniforms>.stride)"
+            MemoryLayout<LiquidLensUniforms>.stride == 88,
+            "LiquidLensUniforms layout mismatch — Metal expects 88-byte stride, got \(MemoryLayout<LiquidLensUniforms>.stride)"
         )
+
+        let nRed = Self.sellmeierIndex(wavelength: Self.redWavelength, coefficients: coefficients)
+        let nGreen = Self.sellmeierIndex(wavelength: Self.greenWavelength, coefficients: coefficients)
+        let nBlue = Self.sellmeierIndex(wavelength: Self.blueWavelength, coefficients: coefficients)
+
+        // `surfaceAngle = sphericalSurfaceAngle(1.0, clampedCurvature)
+        //               = asin(clamp(lensCurvature, 0, 1))`.
+        // Constant across all fragments — moving the six per-pixel
+        // `sin`/`asin` evaluations CPU-side is the dominant GPU saving.
+        let clampedCurvature = min(max(lensCurvature, 0), 1)
+        let surfaceAngle = asin(clampedCurvature)
+
         return LiquidLensUniforms(
             center: center * scale,
             textureSize: textureSize,
@@ -148,20 +167,13 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
             falloffIntensity: falloffIntensity,
             chromaticAmount: chromaticAmount,
             materialType: Int32(material.rawValue),
-            useRadialDirection: useRadialDirection ? 1 : 0,
             overlayMode: overlayMode ? 1 : 0,
-            refractiveIndexRed: Self.sellmeierIndex(
-                wavelength: Self.redWavelength,
-                coefficients: coefficients
-            ),
-            refractiveIndexGreen: Self.sellmeierIndex(
-                wavelength: Self.greenWavelength,
-                coefficients: coefficients
-            ),
-            refractiveIndexBlue: Self.sellmeierIndex(
-                wavelength: Self.blueWavelength,
-                coefficients: coefficients
-            )
+            refractiveIndexRed: nRed,
+            refractiveIndexGreen: nGreen,
+            refractiveIndexBlue: nBlue,
+            deviationRed: Self.snellDeviation(incidentAngle: surfaceAngle, n1: Self.airRefractiveIndex, n2: nRed),
+            deviationGreen: Self.snellDeviation(incidentAngle: surfaceAngle, n1: Self.airRefractiveIndex, n2: nGreen),
+            deviationBlue: Self.snellDeviation(incidentAngle: surfaceAngle, n1: Self.airRefractiveIndex, n2: nBlue)
         )
     }
 }
@@ -169,11 +181,11 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
 // MARK: - Layout Verification
 
 extension LiquidLensUniforms {
-    /// Compile-time sanity check — Metal shader expects exactly 80 bytes.
+    /// Compile-time sanity check — Metal shader expects exactly 88 bytes.
     @usableFromInline
     static let _stride: Int = {
         let s = MemoryLayout<LiquidLensUniforms>.stride
-        assert(s == 80, "LiquidLensUniforms stride changed to \(s) — update Metal struct to match")
+        assert(s == 88, "LiquidLensUniforms stride changed to \(s) — update Metal struct to match")
         return s
     }()
 }
@@ -193,6 +205,21 @@ private extension LiquidLensConfiguration {
     static let redWavelength: Float = 0.6563
     static let greenWavelength: Float = 0.5461
     static let blueWavelength: Float = 0.4861
+
+    /// Refractive index of air at standard conditions. Matches
+    /// `kAirRefractiveIndex` in `LiquidLens.metal`.
+    static let airRefractiveIndex: Float = 1.000293
+
+    /// CPU equivalent of the shader's `snellDeviation`. Returns the angular
+    /// deviation between incident and refracted rays at the lens surface, in
+    /// radians. Total internal reflection collapses to zero deviation.
+    static func snellDeviation(incidentAngle: Float, n1: Float, n2: Float) -> Float {
+        let sinIncident = sin(incidentAngle)
+        let sinRefracted = (n1 / n2) * sinIncident
+        guard abs(sinRefracted) < 1.0 else { return 0 }
+        let refractedAngle = asin(sinRefracted)
+        return refractedAngle - incidentAngle
+    }
 
     static func sellmeierCoefficients(for material: LiquidLensMaterial) -> SellmeierCoefficients {
         switch material {
