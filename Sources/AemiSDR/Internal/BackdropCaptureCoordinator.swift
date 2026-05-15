@@ -61,18 +61,21 @@
             let contentsIdentifier: ObjectIdentifier?
         }
 
-        // Cached result of the superview-walk performed every capture frame.
-        // `findContentSibling` walks up the SwiftUI host hierarchy (10-30
-        // levels typical) on every display-link tick — at 120Hz that's
-        // thousands of subview reads/second. Cache the resolved sibling and
-        // invalidate explicitly when the hierarchy changes.
+        // Cached results of the superview-walk performed every capture frame.
+        // Both `findContentSibling` and `resolveBackgroundColor` walk up the
+        // SwiftUI host hierarchy (10-30 levels typical) on every display-link
+        // tick — at 120Hz that's thousands of subview reads/second. Cache the
+        // resolved sibling and the resolved background CGColor; invalidate
+        // explicitly when the hierarchy or appearance changes.
         private weak var cachedContentSibling: UIView?
+        private var cachedBackgroundColor: CGColor?
 
-        /// Bumped whenever the effect view's superview chain may have
-        /// changed. Capture path consults this before reusing the cached
-        /// sibling.
+        /// Bumped whenever the effect view's superview chain or trait
+        /// collection may have changed. Capture path consults this before
+        /// reusing cached sibling/background.
         func invalidateContentLookupCaches() {
             cachedContentSibling = nil
+            cachedBackgroundColor = nil
         }
 
         init() {
@@ -319,18 +322,22 @@
             ensureBridge(width: pixelWidth, height: pixelHeight)
             guard let bridge, let consumerID = bridgeConsumerID else { return }
 
+            let bgColor = cachedOrResolvedBackgroundColor(for: contentView)
+
             let captured = bridge.render(
                 consumer: consumerID,
                 width: pixelWidth,
                 height: pixelHeight
             ) { ctx in
                 ctx.saveGState()
-                // Clear to transparent so stale pixels from previous frames
-                // in the pooled bridge slot don't bleed through, and so
-                // regions the captured sibling doesn't paint over stay
-                // genuinely transparent — the lens then refracts the
-                // backdrop without imposing a colour tint of its own.
-                ctx.clear(CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight))
+                // Pre-fill with the resolved sibling background so regions
+                // the captured view doesn't paint over (gaps between cards,
+                // window system background, etc.) carry an opaque base
+                // colour. Without this, transparent capture pixels make the
+                // lens output transparent, and the un-refracted scene
+                // beneath the lens shows through, doubling the content.
+                ctx.setFillColor(bgColor)
+                ctx.fill(CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight))
                 // Flip Quartz (bottom-left origin) → UIKit (top-left origin)
                 ctx.translateBy(x: 0, y: CGFloat(pixelHeight))
                 ctx.scaleBy(x: 1, y: -1)
@@ -362,7 +369,36 @@
             }
             let resolved = findContentSibling(for: effectView)
             cachedContentSibling = resolved
+            // Background colour is hierarchy-dependent; invalidate it too.
+            cachedBackgroundColor = nil
             return resolved
+        }
+
+        /// Returns the cached background CGColor if available, otherwise
+        /// walks the hierarchy. The trait-collection-aware resolution
+        /// happens once per (sibling, traitCollection) pair; the caller
+        /// should call `invalidateContentLookupCaches()` on
+        /// `traitCollectionDidChange`.
+        private func cachedOrResolvedBackgroundColor(for view: UIView) -> CGColor {
+            if let cached = cachedBackgroundColor { return cached }
+            let resolved = resolveBackgroundColor(for: view, traitCollection: view.traitCollection)
+            cachedBackgroundColor = resolved
+            return resolved
+        }
+
+        /// Walks the view hierarchy to find the first non-clear background
+        /// colour. Resolves dynamic colours against the captured view's
+        /// trait collection so the fill reflects the current dark/light
+        /// appearance rather than the caller's environment.
+        private func resolveBackgroundColor(for view: UIView, traitCollection: UITraitCollection) -> CGColor {
+            var current: UIView? = view
+            while let v = current {
+                if let bg = v.backgroundColor, bg != .clear {
+                    return bg.resolvedColor(with: traitCollection).cgColor
+                }
+                current = v.superview
+            }
+            return UIColor.systemBackground.resolvedColor(with: traitCollection).cgColor
         }
 
         /// Finds the content sibling view in a SwiftUI background/overlay container.
