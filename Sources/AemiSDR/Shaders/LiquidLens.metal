@@ -246,20 +246,26 @@ inline float2 computeSDFGradient(float2 p, float2 halfSize, float cornerRadius) 
     float corner = clamp(cornerRadius, 0.0f, min(halfSize.x, halfSize.y));
     float2 absP = abs(p);
 
-    // Smoothed sign: tapers each gradient component to zero across the
-    // shape's medial axis (p.x = 0 or p.y = 0). The hard `sign()` produces
-    // an instantaneous flip across the axis — for a wide capsule where the
-    // medial axis lies in the flat-edge region, this manifests as a visible
-    // seam down the middle of the lens. The smoothstep width is a small
-    // fraction of the half-extent (or 0.5 px, whichever is larger) so
-    // boundary normals are unaffected while the seam pixels see a smoothly
-    // vanishing displacement — physically correct for a glass slab whose
-    // midplane has no net refraction.
-    const float kMedialSeamWidth = 0.05f;
-    float2 seamScale = max(halfSize * kMedialSeamWidth, float2(0.5f));
+    // Smoothed sign: tapers each gradient component from zero at the
+    // shape's medial axis (p.x = 0 or p.y = 0) up to ±1 at the closest
+    // boundary along that axis. The transition spans the SHORT dimension
+    // of the shape so wide capsules / tall pills get a wide soft band
+    // around the medial axis (where the gradient direction is
+    // mathematically ambiguous) while square / circular lenses see only
+    // the natural center-to-edge ramp.
+    //
+    // Without this, a hard `sign()` produces an instantaneous flip across
+    // the medial axis. For elongated shapes that materialises as either a
+    // visible seam (when intensity is non-zero at the axis) or a mirrored
+    // double image (when the upper and lower halves refract at full
+    // magnitude in opposite directions). Tapering the gradient magnitude
+    // across the short dimension eliminates both: at the medial axis the
+    // displacement is exactly zero, and neighbouring pixels smoothly
+    // transition into the rim's refraction.
+    float seamWidth = max(min(halfSize.x, halfSize.y), 0.5f);
     float2 signP = float2(
-        (p.x >= 0.0f ? 1.0f : -1.0f) * smoothstep(0.0f, seamScale.x, absP.x),
-        (p.y >= 0.0f ? 1.0f : -1.0f) * smoothstep(0.0f, seamScale.y, absP.y)
+        (p.x >= 0.0f ? 1.0f : -1.0f) * smoothstep(0.0f, seamWidth, absP.x),
+        (p.y >= 0.0f ? 1.0f : -1.0f) * smoothstep(0.0f, seamWidth, absP.y)
     );
 
     float2 inner = halfSize - corner;
@@ -342,40 +348,30 @@ fragment half4 liquidLensFragment(
     float normalizedRadius = 1.0f - (distFromEdge / minHalf);
     normalizedRadius = clamp(normalizedRadius, 0.0f, 1.0f);
 
-    // Edge-concentrated effect with a soft interior baseline. The baseline
-    // ensures the lens body has subtle uniform refraction throughout so
-    // there's no abrupt boundary between a pass-through centre and the
-    // refracting rim. The curve-shaped boost rides on top of the baseline,
-    // peaking at the boundary. This matches Apple's iOS 26 Liquid Glass:
-    // the panel reads as glass everywhere with visibly stronger diffraction
-    // at the curved rim.
+    // Edge-concentrated effect: intensity ramps from 0 at the centre up to
+    // the curve-shaped peak at the rim. The visible "rectangle" boundary
+    // that this model produced on its own (the inner pass-through region
+    // meeting the refracting rim) is eliminated by the medial-axis
+    // smoothstep in `computeSDFGradient`: the gradient magnitude itself
+    // tapers from 0 at the centre to 1 at the rim across the short
+    // dimension, so the displacement field has no sharp transition.
     //
-    //   falloffLength    = width of the active edge-boost zone as a
-    //                       fraction of the lens radius. 1.0 = boost ramps
-    //                       across the entire lens (default); 0.3 = only
-    //                       the outer 30 % carries the boost on top of
-    //                       the baseline.
-    //   falloff curve    = shape of the 0→1 ramp within the active zone
-    //                       (exponential = baseline dominates the interior
-    //                       and the boost concentrates sharply at the rim).
-    //   falloffIntensity = overall [0, 1] multiplier on the final
-    //                       intensity (both baseline and edge boost scale
-    //                       together so 0 disables the effect entirely).
+    // Combined: both intensity AND gradient magnitude ramp smoothly across
+    // the lens body. The medial-axis seam and the mirrored double-image
+    // disappear because adjacent pixels in the interior see near-zero
+    // displacement regardless of which half of the lens they sit in.
     //
-    // The previous "full in interior, fade at edge" model produced visible
-    // seams down the medial axis of elongated shapes because adjacent
-    // pixels straddling the SDF gradient discontinuity refracted strongly
-    // in opposite directions. The edge-concentrated peak with baseline
-    // places strong refraction where the gradient direction is locally
-    // consistent (perpendicular to the boundary) and keeps the interior
-    // smoothly continuous with the rim.
-    const float kInteriorBaseline = 0.15f;
+    //   falloffLength    = width of the active zone as a fraction of the
+    //                       lens radius. 1.0 = ramp spans the entire lens
+    //                       (default); 0.3 = only the outer 30 % carries
+    //                       the effect.
+    //   falloff curve    = shape of the 0→1 ramp within the active zone.
+    //   falloffIntensity = overall [0, 1] multiplier on the peak.
     float effectIntensity = 0.0f;
     if (clampedFalloffLength > 0.0f && clampedFalloffIntensity > 0.0f) {
         float activeStart = 1.0f - clampedFalloffLength;
         float t = clamp((normalizedRadius - activeStart) / clampedFalloffLength, 0.0f, 1.0f);
-        float edgePeak = applyFalloff(t, falloffCurve);
-        effectIntensity = mix(kInteriorBaseline, 1.0f, edgePeak) * clampedFalloffIntensity;
+        effectIntensity = applyFalloff(t, falloffCurve) * clampedFalloffIntensity;
     }
 
     // Anti-alias at the SDF boundary (1.5 px soft edge) — prevents the
