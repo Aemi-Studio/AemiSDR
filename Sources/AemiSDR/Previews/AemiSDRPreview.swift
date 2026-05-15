@@ -141,9 +141,9 @@ import SwiftUI
                         .padding(.vertical, 10)
                         .backdropBlurBackground(
                             BackdropBlurConfiguration(
-                                blurRadius: 26,
                                 colorTint: .white,
                                 colorTintAlpha: 0.16,
+                                blurRadius: 26,
                                 saturationDeltaFactor: 1.8
                             ),
                             ignoreSafeArea: false
@@ -359,9 +359,9 @@ import SwiftUI
                     .padding(.vertical, 12)
                     .backdropBlurBackground(
                         BackdropBlurConfiguration(
-                            blurRadius: 20,
                             colorTint: .white,
                             colorTintAlpha: 0.12,
+                            blurRadius: 20,
                             saturationDeltaFactor: 1.8
                         ),
                         ignoreSafeArea: false
