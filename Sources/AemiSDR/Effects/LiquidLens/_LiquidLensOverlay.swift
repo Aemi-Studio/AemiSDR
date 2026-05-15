@@ -36,10 +36,15 @@
             context.coordinator.refreshRate = refreshRate
             context.coordinator.captureScale = captureScale
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                context.coordinator.captureOnce()
-                if continuousCapture {
-                    context.coordinator.startDisplayLink()
+            // Trigger the initial capture from the UIView's lifecycle once it
+            // has a window and a non-zero size. Avoids the previous
+            // `asyncAfter(0.1)` timing hack which popped on fast devices and
+            // misaligned on slow ones.
+            let shouldStartContinuous = continuousCapture
+            view.onReadyForFirstCapture = { [weak coordinator = context.coordinator] in
+                coordinator?.captureOnce()
+                if shouldStartContinuous {
+                    coordinator?.startDisplayLink()
                 }
             }
             return view
@@ -82,8 +87,11 @@
             var lastConfiguration: LiquidLensConfiguration?
             var clipShapePath: ShapePathProvider?
 
-            override func processTexture(_ texture: MTLTexture) {
-                (effectView as? LiquidLensUIView)?.setSourceTexture(texture)
+            override func processTexture(_ captured: ConsumableTexture) {
+                (effectView as? LiquidLensUIView)?.setSourceTexture(
+                    captured.texture,
+                    onConsumed: captured.onConsumed
+                )
             }
         }
     }

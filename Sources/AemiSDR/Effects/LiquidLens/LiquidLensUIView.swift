@@ -34,10 +34,23 @@
         private var sourceTexture: MTLTexture?
         private var configuration: LiquidLensConfiguration
 
+        /// Closure to fire from each `MTLCommandBuffer` completion handler so the
+        /// `ZeroCopyTextureBridge` slot backing the current source texture can be
+        /// reclaimed. Set by `setSourceTexture(_:onConsumed:)` and re-used by any
+        /// follow-up render driven by `layoutSubviews` until a new texture arrives.
+        private var sourceTextureOnConsumed: (@Sendable () -> Void)?
+
         /// Optional shape path provider for masking the Metal layer to match the parent view's clip shape.
         var clipShapePath: ShapePathProvider? {
             didSet { updateClipMask() }
         }
+
+        /// Fired once when the view first becomes ready for capture (has a window
+        /// and a non-zero size). Used by `_LiquidLensOverlay` to trigger the
+        /// initial capture exactly when the SwiftUI hierarchy has laid out,
+        /// replacing a hard-coded `asyncAfter(0.1)` timing hack.
+        var onReadyForFirstCapture: (() -> Void)?
+        private var didFireReady = false
 
         override open class var layerClass: AnyClass { CAMetalLayer.self }
 
@@ -57,7 +70,13 @@
             }
 
             metalLayer.device = device
-            metalLayer.pixelFormat = .bgra8Unorm
+            // 10-bit per channel, sRGB transfer, P3 color space: preserves
+            // wide-gamut backdrop content (P3 photos, vivid UI tints) instead
+            // of clamping to sRGB and desaturating. The drawable still presents
+            // through sRGB gamma so the rest of the system composites it
+            // correctly.
+            metalLayer.pixelFormat = .bgra10_xr_srgb
+            metalLayer.colorspace = CGColorSpace(name: CGColorSpace.displayP3)
             metalLayer.isOpaque = false
             metalLayer.framebufferOnly = true
 
@@ -90,8 +109,15 @@
         /// Sets a pre-existing Metal texture as the source, bypassing `makeTexture` conversion.
         ///
         /// Use this with ``ZeroCopyTextureBridge`` to avoid per-frame texture allocations.
-        public func setSourceTexture(_ texture: MTLTexture) {
+        ///
+        /// - Parameters:
+        ///   - texture: The Metal texture to render with.
+        ///   - onConsumed: Optional closure invoked from the command-buffer
+        ///     completion handler of every render driven by this texture. Used by
+        ///     `ZeroCopyTextureBridge` to reclaim its slot once the GPU is done.
+        public func setSourceTexture(_ texture: MTLTexture, onConsumed: (@Sendable () -> Void)? = nil) {
             sourceTexture = texture
+            sourceTextureOnConsumed = onConsumed
             renderIfNeeded()
         }
 
@@ -126,6 +152,7 @@
             )
             updateClipMask()
             renderIfNeeded()
+            fireReadyIfPossible()
         }
 
         override open func didMoveToWindow() {
@@ -137,6 +164,17 @@
                 height: bounds.height * displayScale
             )
             renderIfNeeded()
+            fireReadyIfPossible()
+        }
+
+        private func fireReadyIfPossible() {
+            guard !didFireReady,
+                  window != nil,
+                  bounds.width > 0,
+                  bounds.height > 0
+            else { return }
+            didFireReady = true
+            onReadyForFirstCapture?()
         }
 
         // MARK: - Clip Masking
@@ -171,10 +209,20 @@
                 scale: Float(metalLayer.contentsScale)
             )
 
+            // The bridge's per-frame consumer must fire exactly once. The first
+            // successful render of a freshly captured texture wires it into a
+            // command-buffer completion handler; subsequent `renderIfNeeded`
+            // calls (driven by `layoutSubviews`, `didMoveToWindow`, etc.) reuse
+            // the same `sourceTexture` but pass `nil` so they don't queue a
+            // second `markCompleted` against the same slot.
+            let consumed = sourceTextureOnConsumed
+            sourceTextureOnConsumed = nil
+
             renderer.render(
                 sourceTexture: sourceTexture,
                 uniforms: uniforms,
-                drawable: drawable
+                drawable: drawable,
+                onCompleted: consumed
             )
         }
     }

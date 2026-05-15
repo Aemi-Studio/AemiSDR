@@ -12,7 +12,7 @@
 //   - Lens surface modeled as spherical cap with configurable curvature
 //   - Chromatic aberration from wavelength-dependent refractive index
 //   - Snell's law applied at each point based on local surface normal
-//   - Falloff controls effect intensity from center to edge
+//   - Falloff controls edge fade from full effect to transparent
 //
 // Dispersion Reference: Sellmeier equation (1871)
 //   n²(λ) = 1 + Σ(Bᵢ·λ²)/(λ² - Cᵢ)
@@ -37,11 +37,17 @@ struct LiquidLensUniforms {
     float falloffIntensity;
     float chromaticAmount;
     int materialType;
-    int useRadialDirection;
     int overlayMode;  // 1 = transparent outside lens (for overlay on live content)
     float refractiveIndexRed;
     float refractiveIndexGreen;
     float refractiveIndexBlue;
+    // Snell deviations precomputed CPU-side (radians). These depend only on
+    // lensCurvature and refractive indices — all uniform across the lens — so
+    // computing them per fragment wasted 6 transcendentals (sin/asin) per
+    // chromatic pixel.
+    float deviationRed;
+    float deviationGreen;
+    float deviationBlue;
 };
 
 // MARK: - Vertex Types
@@ -220,96 +226,45 @@ inline float sdRoundedRect(float2 p, float2 halfSize, float cornerRadius) {
     return outsideDist + insideDist - corner;
 }
 
-// MARK: - Outward Direction Functions
-
-inline float2 computeRadialDirection(float2 p) {
-    float len = length(p);
-    if (len < 0.0001f) {
-        return float2(1.0f, 0.0f);
-    }
-    return p / len;
-}
+// MARK: - SDF Gradient (Surface Normal)
+//
+// The SDF gradient is the physically correct refraction direction for a glass
+// pane whose cross-section follows the SDF contour. At flat edges it points
+// perpendicular to the edge; at rounded corners it points radially from the
+// arc center. This is used directly as the displacement direction — no hybrid
+// blending needed.
 
 inline float2 computeSDFGradient(float2 p, float2 halfSize, float cornerRadius) {
     float corner = clamp(cornerRadius, 0.0f, min(halfSize.x, halfSize.y));
     float2 absP = abs(p);
     float2 signP = float2(p.x >= 0.0f ? 1.0f : -1.0f, p.y >= 0.0f ? 1.0f : -1.0f);
 
-    // Rounded-rectangle corner frame in the first quadrant.
     float2 inner = halfSize - corner;
     float2 q = absP - inner;
     float2 qp = max(q, float2(0.0f));
 
     float2 gradLocal;
     if (corner > 0.0001f && qp.x > 0.0f && qp.y > 0.0f) {
-        // Exact corner arc normal for SDF in corner sectors.
+        // Corner arc sector: exact radial gradient from arc center.
         float qLen = length(qp);
         gradLocal = (qLen > 0.0001f) ? (qp / qLen) : float2(0.707107f, 0.707107f);
+    } else if (q.x <= 0.0f && q.y <= 0.0f) {
+        // Interior region (both inside inner frame).
+        // The true SDF gradient is discontinuous along q.x = q.y (the medial
+        // axis between two equidistant edges). Smooth the transition with a
+        // scaled smoothstep so the displacement field has no visible seam.
+        float diff = q.x - q.y;
+        float sharpness = 1.0f / max(corner, 1.0f);
+        float blend = clamp(0.5f + diff * sharpness, 0.0f, 1.0f);
+        blend = blend * blend * (3.0f - 2.0f * blend);
+        gradLocal = normalize(float2(blend, 1.0f - blend));
     } else {
-        // Exact nearest straight-edge normal for non-corner sectors.
-        float dx = max(halfSize.x - absP.x, 0.0f);
-        float dy = max(halfSize.y - absP.y, 0.0f);
-        gradLocal = (dx <= dy) ? float2(1.0f, 0.0f) : float2(0.0f, 1.0f);
+        // Flat-edge region: one component past the inner frame, the other not.
+        // Direction is unambiguously toward the closer boundary.
+        gradLocal = (q.y > q.x) ? float2(0.0f, 1.0f) : float2(1.0f, 0.0f);
     }
 
     return gradLocal * signP;
-}
-
-inline float2 computeShapeAwareDirection(float2 p, float2 halfSize, float cornerRadius) {
-    return computeSDFGradient(p, halfSize, cornerRadius);
-}
-
-inline float2 safeNormalize(float2 v, float2 fallback) {
-    float len = length(v);
-    if (len > 0.0001f) {
-        return v / len;
-    }
-    return fallback;
-}
-
-inline float cornerRadialBlendFactor(float2 p, float2 halfSize, float cornerRadius) {
-    float corner = clamp(cornerRadius, 0.0f, min(halfSize.x, halfSize.y));
-    if (corner <= 0.0001f) {
-        return 0.0f;
-    }
-
-    float2 inner = halfSize - corner;
-    float2 q = abs(p) - inner;
-    float2 qp = max(q, float2(0.0f));
-
-    // Keep straight edges shape-aware. Radial contribution is only for rounded corners.
-    if (qp.x <= 0.0f || qp.y <= 0.0f) {
-        return 0.0f;
-    }
-
-    float cornerRadiusLocal = length(qp);
-    if (cornerRadiusLocal <= 0.0001f) {
-        return 0.0f;
-    }
-
-    // Angular term: sin(2*theta) = 2*sin(theta)*cos(theta), zero on straight-edge tangents.
-    float2 cornerUnit = qp / cornerRadiusLocal;
-    float angularBlend = clamp(2.0f * cornerUnit.x * cornerUnit.y, 0.0f, 1.0f);
-
-    // Radial term: increases from inner-corner start to the outer corner arc.
-    float radialBlend = clamp(cornerRadiusLocal / corner, 0.0f, 1.0f);
-
-    return smoothstep(0.0f, 1.0f, radialBlend) * smoothstep(0.0f, 1.0f, angularBlend);
-}
-
-inline float2 computeHybridDirection(
-    float2 p,
-    float2 halfSize,
-    float cornerRadius,
-    float radialBoost
-) {
-    float2 radialDir = computeRadialDirection(p);
-    float2 shapeDir = safeNormalize(
-        computeShapeAwareDirection(p, halfSize, cornerRadius),
-        radialDir
-    );
-    float cornerBlend = cornerRadialBlendFactor(p, halfSize, cornerRadius) * radialBoost;
-    return safeNormalize(mix(shapeDir, radialDir, cornerBlend), shapeDir);
 }
 
 // MARK: - Fragment Shader
@@ -341,9 +296,11 @@ fragment half4 liquidLensFragment(
     float clampedCurvature = clamp(uniforms.lensCurvature, 0.0f, 1.0f);
     float clampedFalloffLength = clamp(uniforms.falloffLength, 0.01f, 1.0f);
     float clampedFalloffIntensity = clamp(uniforms.falloffIntensity, 0.0f, 1.0f);
-    float clampedChromatic = clamp(uniforms.chromaticAmount, 0.0f, 10.0f);
+    // chromaticAmount is an artistic amplifier (not a physical [0,1] mix).
+    // 0 disables chromatic separation; 30 is the calibrated baseline; values
+    // above 1 extrapolate beyond physical correctness for stylistic emphasis.
+    float clampedChromatic = clamp(uniforms.chromaticAmount, 0.0f, 30.0f);
     int falloffCurve = uniforms.falloffType;
-    bool radialMode = uniforms.useRadialDirection != 0;
 
     // Calculate distance to outer boundary
     float dOuter = sdRoundedRect(toPixel, halfSize, clampedCorner);
@@ -358,49 +315,42 @@ fragment half4 liquidLensFragment(
     float normalizedRadius = 1.0f - (distFromEdge / minHalf);
     normalizedRadius = clamp(normalizedRadius, 0.0f, 1.0f);
 
-    float innerBoundary = 1.0f - clampedFalloffLength;
+    // Edge fade: full effect in the interior, smoothly fading near the boundary.
+    // falloffLength  = fraction of the shape radius devoted to the fade zone.
+    // falloffIntensity = blend between uniform (1.0) and faded edge.
+    float effectIntensity = 1.0f;
+    if (clampedFalloffIntensity > 0.0f) {
+        float fadeStart = 1.0f - clampedFalloffLength;
+        if (normalizedRadius > fadeStart) {
+            float fadeT = (normalizedRadius - fadeStart) / clampedFalloffLength;
+            fadeT = clamp(fadeT, 0.0f, 1.0f);
+            float faded = 1.0f - applyFalloff(fadeT, falloffCurve);
+            effectIntensity = mix(1.0f, faded, clampedFalloffIntensity);
+        }
+    }
 
-    // Inside the no-effect zone
-    if (normalizedRadius < innerBoundary && clampedFalloffIntensity > 0.0f) {
+    // Anti-alias at the SDF boundary (1.5 px soft edge)
+    effectIntensity *= clamp(-dOuter, 0.0f, 1.5f) / 1.5f;
+
+    if (effectIntensity < 0.0001f) {
         return isOverlay ? half4(0.0h) : sourceTexture.sample(texSampler, in.texCoord);
     }
 
-    // Remap normalizedRadius to falloff range [0, 1]
-    float falloffT = (normalizedRadius - innerBoundary) / clampedFalloffLength;
-    falloffT = clamp(falloffT, 0.0f, 1.0f);
+    // SDF gradient as refraction direction — physically correct for a glass pane
+    // whose cross-section follows the SDF contour.
+    float2 outwardDir = computeSDFGradient(toPixel, halfSize, clampedCorner);
 
-    float falloffValue = applyFalloff(falloffT, falloffCurve);
-    float effectIntensity = mix(1.0f, falloffValue, clampedFalloffIntensity);
-
-    float surfaceAngle = sphericalSurfaceAngle(normalizedRadius, clampedCurvature);
-
-    if (surfaceAngle < 0.0001f || effectIntensity < 0.0001f) {
-        return isOverlay ? half4(0.0h) : sourceTexture.sample(texSampler, in.texCoord);
-    }
-
-    // Hybrid direction field:
-    // - shape-aware normal on straight edges (uniform edge response),
-    // - radial influence in rounded-corner sectors,
-    // - smooth geometric blend from tangent lines to corner arcs.
-    float radialBoost = radialMode ? 1.0f : 0.75f;
-    float2 outwardDir = computeHybridDirection(toPixel, halfSize, clampedCorner, radialBoost);
-
-    // Calculate refraction deviation using precomputed refractive indices.
-    // These values are computed on CPU and passed in uniforms to avoid
-    // repeated Sellmeier evaluation per fragment.
+    // Snell deviations and surfaceAngle are uniform across the lens; precomputed
+    // CPU-side in `LiquidLensConfiguration.toUniforms`. When `lensCurvature` is
+    // ~0 the CPU passes deviations near zero, so displacement vanishes naturally
+    // without a per-pixel early-out branch.
     float signFactor = (uniforms.strength >= 0.0f) ? 1.0f : -1.0f;
     float absStrength = abs(uniforms.strength);
-
-    float deviationGreen = snellDeviation(
-        surfaceAngle,
-        kAirRefractiveIndex,
-        uniforms.refractiveIndexGreen
-    );
 
     // Convert angular deviation to pixel displacement
     float displacementScale = minHalf * absStrength * effectIntensity * 2.0f;
 
-    float dispGreen = deviationGreen * displacementScale * signFactor;
+    float dispGreen = uniforms.deviationGreen * displacementScale * signFactor;
 
     // Non-chromatic specialization path (function constant = false).
     if (!kEnableChromatic) {
@@ -414,19 +364,8 @@ fragment half4 liquidLensFragment(
         return sourceTexture.sample(texSampler, uv);
     }
 
-    float deviationRed = snellDeviation(
-        surfaceAngle,
-        kAirRefractiveIndex,
-        uniforms.refractiveIndexRed
-    );
-    float deviationBlue = snellDeviation(
-        surfaceAngle,
-        kAirRefractiveIndex,
-        uniforms.refractiveIndexBlue
-    );
-
-    float dispRed   = mix(dispGreen, deviationRed * displacementScale * signFactor, clampedChromatic);
-    float dispBlue  = mix(dispGreen, deviationBlue * displacementScale * signFactor, clampedChromatic);
+    float dispRed   = mix(dispGreen, uniforms.deviationRed * displacementScale * signFactor, clampedChromatic);
+    float dispBlue  = mix(dispGreen, uniforms.deviationBlue * displacementScale * signFactor, clampedChromatic);
 
     // Calculate sample positions in pixel space, then convert to normalized UV
     float2 invSize = 1.0f / uniforms.textureSize;

@@ -1,0 +1,23 @@
+name: CAPrivateAPIProbe
+options:
+  bundleIdPrefix: studio.aemi
+  deploymentTarget:
+    iOS: "16.0"
+
+targets:
+  CAPrivateAPIProbe:
+    type: application
+    platform: iOS
+    sources:
+      - CAPrivateAPIProbeApp.swift
+      - CARuntimeProbe.m
+      - CARuntimeProbe.h
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        SWIFT_OBJC_BRIDGING_HEADER: CAPrivateAPIProbe-Bridging-Header.h
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: NP94WB3P75
+        GENERATE_INFOPLIST_FILE: true
+        INFOPLIST_KEY_UILaunchScreen_Generation: true
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
