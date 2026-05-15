@@ -77,12 +77,19 @@
                 context.coordinator.updateDisplayLinkRate()
             }
 
-            if configChanged || !context.coordinator.hasCaptured {
-                // updateUIView runs on MainActor; capturing directly avoids the
-                // one-runloop-tick lag of an async dispatch and prevents a
-                // double-fire alongside `onReadyForFirstCapture`.
-                context.coordinator.captureOnce()
+            if configChanged {
+                // Defer to the next runloop tick: `updateUIView` runs inside
+                // SwiftUI's commit phase, and `captureOnce` ultimately calls
+                // `drawHierarchy(in:afterScreenUpdates:)` which is documented
+                // as unsafe to invoke during a layout pass — XCPreviewAgent
+                // asserts on re-entrant hierarchy traversal.
+                DispatchQueue.main.async {
+                    context.coordinator.captureOnce()
+                }
             }
+            // Note: the !hasCaptured initial-capture path is intentionally
+            // omitted — `onReadyForFirstCapture` (wired in makeUIView) already
+            // fires `captureOnce` exactly once when the view is laid out.
         }
 
         static func dismantleUIView(_: LiquidLensUIView, coordinator: Coordinator) {
