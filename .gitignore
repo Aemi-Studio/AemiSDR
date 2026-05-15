@@ -26,3 +26,7 @@ xcuserdata/
 
 # Logs and generated files
 *.log
+
+# Profiling output from `swift test --enable-code-coverage` / `xctrace`
+*.profraw
+*.profdata
