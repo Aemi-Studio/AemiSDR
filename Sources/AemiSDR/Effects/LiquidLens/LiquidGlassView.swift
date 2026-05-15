@@ -46,15 +46,17 @@
                     Float(proxy.size.height * 0.5)
                 )
                 _LiquidLensOverlay(
-                    configuration: configuration.overlayLensConfiguration(
+                    configuration: configuration.lensConfiguration(
                         center: halfSize,
                         halfSize: halfSize,
-                        cornerRadiusOverride: cornerRadius
+                        cornerRadiusOverride: cornerRadius,
+                        overlayMode: true
                     ),
                     clipShapePath: clipShapePath,
                     continuousCapture: configuration.continuousCapture,
-                    refreshRate: configuration.clampedRefreshRate,
-                    captureScale: configuration.clampedCaptureScale
+                    refreshRate: configuration.refreshRate,
+                    captureScale: configuration.captureScale,
+                    forceCaptureEveryFrame: configuration.forceCaptureEveryFrame
                 )
                 .allowsHitTesting(false)
             }

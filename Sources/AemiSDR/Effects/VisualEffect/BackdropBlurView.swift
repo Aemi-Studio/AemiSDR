@@ -35,22 +35,10 @@ import SwiftUI
     ///
     /// - Warning: This implementation uses private APIs and may break in future iOS versions.
     public struct BackdropBlurView: UIViewRepresentable {
-        // MARK: - Configuration Properties
 
-        /// Optional tint color applied over the blur
-        public let colorTint: Color?
-
-        /// Alpha value for the tint color (0.0 to 1.0)
-        public let colorTintAlpha: CGFloat
-
-        /// The blur radius in points
-        public let blurRadius: CGFloat
-
-        /// Scale factor for the effect
-        public let scale: CGFloat
-
-        /// Full configuration, when using the configuration-based API
-        private let configuration: BackdropBlurConfiguration?
+        /// Single source of truth for the effect state. The scalar-parameter
+        /// init below funnels into this via a synthesised configuration.
+        private let configuration: BackdropBlurConfiguration
 
         // MARK: - Initialization
 
@@ -67,11 +55,12 @@ import SwiftUI
             blurRadius: CGFloat = 0,
             scale: CGFloat = 1
         ) {
-            self.colorTint = colorTint
-            self.colorTintAlpha = colorTintAlpha
-            self.blurRadius = blurRadius
-            self.scale = scale
-            self.configuration = nil
+            self.configuration = BackdropBlurConfiguration(
+                colorTint: colorTint,
+                colorTintAlpha: colorTintAlpha,
+                blurRadius: blurRadius,
+                scale: scale
+            )
         }
 
         /// Creates a backdrop blur view from a full configuration.
@@ -79,50 +68,20 @@ import SwiftUI
         /// - Parameter configuration: The configuration specifying all effect properties.
         public init(configuration: BackdropBlurConfiguration) {
             self.configuration = configuration
-            self.colorTint = configuration.colorTint
-            self.colorTintAlpha = configuration.colorTintAlpha
-            self.blurRadius = configuration.blurRadius
-            self.scale = configuration.scale
         }
 
         // MARK: - UIViewRepresentable Implementation
 
         /// Creates the underlying UIView instance.
-        ///
-        /// - Parameter context: The representable context provided by SwiftUI
-        /// - Returns: A configured VisualEffectUIView instance
         public func makeUIView(context _: Context) -> VisualEffectUIView {
-            let view: VisualEffectUIView
-            if let configuration {
-                view = VisualEffectUIView(configuration: configuration)
-            } else {
-                view = VisualEffectUIView(
-                    colorTint: colorTint.map { UIColor($0) },
-                    colorTintAlpha: colorTintAlpha,
-                    blurRadius: blurRadius,
-                    scale: scale
-                )
-            }
+            let view = VisualEffectUIView(configuration: configuration)
             view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             return view
         }
 
         /// Updates the UIView when SwiftUI state changes.
-        ///
-        /// - Parameters:
-        ///   - uiView: The existing VisualEffectUIView instance to update
-        ///   - context: The representable context provided by SwiftUI
         public func updateUIView(_ uiView: VisualEffectUIView, context _: Context) {
-            if let configuration {
-                uiView.updateConfiguration(configuration)
-            } else {
-                uiView.updateConfiguration(
-                    colorTint: colorTint.map { UIColor($0) },
-                    colorTintAlpha: colorTintAlpha,
-                    blurRadius: blurRadius,
-                    scale: scale
-                )
-            }
+            uiView.updateConfiguration(configuration)
         }
     }
 
@@ -137,22 +96,8 @@ import SwiftUI
     /// the same continuous parameter control as iOS — blur radius, saturation, brightness, and tint
     /// can all be set to arbitrary values rather than being limited to discrete materials.
     public struct BackdropBlurView: NSViewRepresentable {
-        // MARK: - Configuration Properties
 
-        /// Optional tint color applied over the blur
-        public let colorTint: Color?
-
-        /// Alpha value for the tint color (0.0 to 1.0)
-        public let colorTintAlpha: CGFloat
-
-        /// The blur radius in points
-        public let blurRadius: CGFloat
-
-        /// Scale factor for the effect
-        public let scale: CGFloat
-
-        /// Full configuration, when using the configuration-based API
-        private let configuration: BackdropBlurConfiguration?
+        private let configuration: BackdropBlurConfiguration
 
         // MARK: - Initialization
 
@@ -169,30 +114,21 @@ import SwiftUI
             blurRadius: CGFloat = 0,
             scale: CGFloat = 1
         ) {
-            self.colorTint = colorTint
-            self.colorTintAlpha = colorTintAlpha
-            self.blurRadius = blurRadius
-            self.scale = scale
-            self.configuration = nil
+            self.configuration = BackdropBlurConfiguration(
+                colorTint: colorTint,
+                colorTintAlpha: colorTintAlpha,
+                blurRadius: blurRadius,
+                scale: scale
+            )
         }
 
         /// Creates a backdrop blur view from a full configuration.
-        ///
-        /// - Parameter configuration: The configuration specifying all effect properties.
         public init(configuration: BackdropBlurConfiguration) {
             self.configuration = configuration
-            self.colorTint = configuration.colorTint
-            self.colorTintAlpha = configuration.colorTintAlpha
-            self.blurRadius = configuration.blurRadius
-            self.scale = configuration.scale
         }
 
         // MARK: - NSViewRepresentable Implementation
 
-        /// Creates the underlying NSView instance.
-        ///
-        /// - Parameter context: The representable context provided by SwiftUI
-        /// - Returns: A configured NSVisualEffectView instance
         public func makeNSView(context _: Context) -> NSVisualEffectView {
             let view = NSVisualEffectView()
             view.autoresizingMask = [.width, .height]
@@ -202,11 +138,6 @@ import SwiftUI
             return view
         }
 
-        /// Updates the NSView when SwiftUI state changes.
-        ///
-        /// - Parameters:
-        ///   - nsView: The existing NSVisualEffectView instance to update
-        ///   - context: The representable context provided by SwiftUI
         public func updateNSView(_ nsView: NSVisualEffectView, context _: Context) {
             configureView(nsView)
         }
@@ -214,21 +145,28 @@ import SwiftUI
         // MARK: - Private Helpers
 
         private func configureView(_ view: NSVisualEffectView) {
-            let config = configuration ?? BackdropBlurConfiguration(
-                blurRadius: blurRadius,
-                scale: scale,
-                colorTint: colorTint,
-                colorTintAlpha: colorTintAlpha
-            )
+            let config = configuration
 
             // Defer filter application to avoid re-entrant constraint updates.
             // SwiftUI calls updateNSView during layout passes; modifying the
             // layer tree at that point crashes on macOS 26+.
             DispatchQueue.main.async { [config] in
-                // If the backdrop layer isn't available yet (view not in
-                // a window), skip — the material's default blur is fine
-                // and we'll apply on the next updateNSView cycle.
-                guard view.backdropLayer != nil else { return }
+                // If the backdrop layer isn't available yet (view not in a
+                // window), schedule another attempt on a subsequent runloop
+                // tick. Without this retry, a view whose first configure cycle
+                // fired before window attach would never apply the config until
+                // SwiftUI happens to update the representable again.
+                guard view.backdropLayer != nil else {
+                    DispatchQueue.main.async { [config] in
+                        guard view.backdropLayer != nil else { return }
+                        CATransaction.begin()
+                        CATransaction.setDisableActions(true)
+                        Self.applyFilterValues(config, to: view)
+                        Self.applyTintLayer(config, to: view)
+                        CATransaction.commit()
+                    }
+                    return
+                }
 
                 CATransaction.begin()
                 CATransaction.setDisableActions(true)

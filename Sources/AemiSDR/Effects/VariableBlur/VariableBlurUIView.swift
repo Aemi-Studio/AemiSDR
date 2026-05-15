@@ -151,15 +151,25 @@
             }
 
             guard let filterClass = NSClassFromString(_InternedKeys.caLayerFilterClass) as? NSObject.Type else {
-                logger.error("Failed to locate filter class.")
+                _PrivateAPIDiagnostics.logOnce(
+                    key: "caLayerFilterClass",
+                    "Private class `\(_InternedKeys.caLayerFilterClass)` not found; variable blur disabled. The host iOS version may have renamed this class."
+                )
+                return
+            }
+
+            let sel = NSSelectorFromString(_InternedKeys.filterCreationSelector)
+            guard filterClass.responds(to: sel) else {
+                _PrivateAPIDiagnostics.logOnce(
+                    key: "filterCreationSelector",
+                    "Private selector `\(_InternedKeys.filterCreationSelector)` not implemented by \(filterClass); variable blur disabled."
+                )
                 return
             }
 
             guard
-                let variableBlur = unsafe filterClass.perform(
-                    NSSelectorFromString(_InternedKeys.filterCreationSelector),
-                    with: _InternedKeys.maskedBlurFilterID
-                ).takeUnretainedValue() as? NSObject
+                let variableBlur = unsafe filterClass.perform(sel, with: _InternedKeys.maskedBlurFilterID)
+                    .takeUnretainedValue() as? NSObject
             else {
                 logger.error("Failed to create variable blur filter instance.")
                 return

@@ -22,6 +22,7 @@
         var continuousCapture: Bool
         var refreshRate: Int
         var captureScale: CGFloat = 1.0
+        var forceCaptureEveryFrame: Bool = false
 
         func makeCoordinator() -> Coordinator {
             Coordinator()
@@ -35,6 +36,7 @@
             context.coordinator.continuousCapture = continuousCapture
             context.coordinator.refreshRate = refreshRate
             context.coordinator.captureScale = captureScale
+            context.coordinator.forceCaptureEveryFrame = forceCaptureEveryFrame
 
             // Trigger the initial capture from the UIView's lifecycle once it
             // has a window and a non-zero size. Avoids the previous
@@ -46,6 +48,9 @@
                 if shouldStartContinuous {
                     coordinator?.startDisplayLink()
                 }
+            }
+            view.onContentHierarchyChanged = { [weak coordinator = context.coordinator] in
+                coordinator?.invalidateContentLookupCaches()
             }
             return view
         }
@@ -62,6 +67,7 @@
             context.coordinator.continuousCapture = continuousCapture
             context.coordinator.refreshRate = refreshRate
             context.coordinator.captureScale = captureScale
+            context.coordinator.forceCaptureEveryFrame = forceCaptureEveryFrame
 
             if continuousCapture && !wasCapturing {
                 context.coordinator.startDisplayLink()
@@ -72,9 +78,10 @@
             }
 
             if configChanged || !context.coordinator.hasCaptured {
-                DispatchQueue.main.async {
-                    context.coordinator.captureOnce()
-                }
+                // updateUIView runs on MainActor; capturing directly avoids the
+                // one-runloop-tick lag of an async dispatch and prevents a
+                // double-fire alongside `onReadyForFirstCapture`.
+                context.coordinator.captureOnce()
             }
         }
 

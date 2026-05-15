@@ -20,7 +20,12 @@
     @MainActor
     final class BackdropCaptureView: UIView {
         override class var layerClass: AnyClass {
-            NSClassFromString(_InternedKeys.backdropLayerClass) ?? CALayer.self
+            if let cls = NSClassFromString(_InternedKeys.backdropLayerClass) { return cls }
+            _PrivateAPIDiagnostics.logOnce(
+                key: "backdropLayerClass",
+                "Private class `\(_InternedKeys.backdropLayerClass)` not found; backdrop capture degrades to a plain CALayer (effect will render blank). The host iOS version may have renamed this class."
+            )
+            return CALayer.self
         }
 
         init() {

@@ -29,6 +29,20 @@
         private let pipelineStateMonochrome: MTLRenderPipelineState
         private let textureLoader: MTKTextureLoader
 
+        /// Reusable render pass descriptor; only the color attachment's texture
+        /// is mutated per `render(...)`. The static fields (load/store action,
+        /// clear color) are initialised once. Drops one allocation per render
+        /// frame.
+        private let passDescriptor: MTLRenderPassDescriptor = {
+            let descriptor = MTLRenderPassDescriptor()
+            descriptor.colorAttachments[0].loadAction = .clear
+            descriptor.colorAttachments[0].storeAction = .store
+            descriptor.colorAttachments[0].clearColor = MTLClearColor(
+                red: 0, green: 0, blue: 0, alpha: 0
+            )
+            return descriptor
+        }()
+
         // MARK: - Initialization
 
         init?() {
@@ -37,12 +51,12 @@
                 return nil
             }
 
-            guard let commandQueue = device.makeCommandQueue() else {
+            guard let commandQueue = LiquidLensRenderer.sharedCommandQueue(for: device) else {
                 Self.logger.error("Failed to create Metal command queue.")
                 return nil
             }
 
-            guard let pipelines = Self.buildPipelines(device: device) else {
+            guard let pipelines = LiquidLensRenderer.sharedPipelines(for: device) else {
                 return nil
             }
 
@@ -50,7 +64,7 @@
             self.commandQueue = commandQueue
             self.pipelineStateChromatic = pipelines.chromatic
             self.pipelineStateMonochrome = pipelines.monochrome
-            self.textureLoader = MTKTextureLoader(device: device)
+            self.textureLoader = LiquidLensRenderer.sharedTextureLoader(for: device)
         }
 
         // MARK: - Texture Creation
@@ -102,6 +116,10 @@
                 mipmapped: false
             )
             descriptor.usage = .shaderRead
+            // Explicit storage mode: `texture.replace(...)` below requires
+            // `.shared` (or `.managed` on macOS). The factory's default is
+            // `.private` on iOS, which would silently corrupt the texture.
+            descriptor.storageMode = .shared
 
             guard let texture = device.makeTexture(descriptor: descriptor) else {
                 Self.logger.error("Failed to create MTLTexture descriptor.")
@@ -134,13 +152,10 @@
             }
             commandBuffer.label = "AemiSDR.LiquidLens.CommandBuffer"
 
-            let passDescriptor = MTLRenderPassDescriptor()
+            // Reuse the cached descriptor; only the drawable's texture changes
+            // per frame. Static fields (load/store action, clear color) were
+            // configured once at init.
             passDescriptor.colorAttachments[0].texture = drawable.texture
-            passDescriptor.colorAttachments[0].loadAction = .clear
-            passDescriptor.colorAttachments[0].storeAction = .store
-            passDescriptor.colorAttachments[0].clearColor = MTLClearColor(
-                red: 0, green: 0, blue: 0, alpha: 0
-            )
 
             guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: passDescriptor) else {
                 onCompleted?()
@@ -153,6 +168,30 @@
                 : pipelineStateMonochrome
             encoder.setRenderPipelineState(pipelineState)
             encoder.setFragmentTexture(sourceTexture, index: 0)
+
+            // Bound the rasterised region to the lens's AABB in overlay mode.
+            // The fragment shader returns transparent outside the SDF, but the
+            // GPU still runs the shader for every fragment without a scissor.
+            // For a small lens on a large drawable, scissoring cuts fragment
+            // count by orders of magnitude. Include a 2px margin to preserve
+            // SDF antialiasing at the lens edge.
+            if uniforms.overlayMode != 0 {
+                let drawableW = Int(uniforms.textureSize.x)
+                let drawableH = Int(uniforms.textureSize.y)
+                if drawableW > 0, drawableH > 0 {
+                    let margin: Float = 2
+                    let minX = max(0, Int((uniforms.center.x - uniforms.halfSize.x - margin).rounded(.down)))
+                    let minY = max(0, Int((uniforms.center.y - uniforms.halfSize.y - margin).rounded(.down)))
+                    let maxX = min(drawableW, Int((uniforms.center.x + uniforms.halfSize.x + margin).rounded(.up)))
+                    let maxY = min(drawableH, Int((uniforms.center.y + uniforms.halfSize.y + margin).rounded(.up)))
+                    if maxX > minX, maxY > minY {
+                        encoder.setScissorRect(MTLScissorRect(
+                            x: minX, y: minY,
+                            width: maxX - minX, height: maxY - minY
+                        ))
+                    }
+                }
+            }
 
             var mutableUniforms = uniforms
             unsafe encoder.setFragmentBytes(&mutableUniforms, length: MemoryLayout<LiquidLensUniforms>.stride, index: 0)
@@ -172,6 +211,55 @@
             }
 
             commandBuffer.commit()
+        }
+
+        // MARK: - Per-device Shared Caches
+
+        /// Process-wide caches keyed by `ObjectIdentifier(device)`. Multiple
+        /// `LiquidLensUIView` instances sharing the same `MTLDevice` reuse the
+        /// same pipeline states, command queue, and texture loader instead of
+        /// allocating a fresh set per view. This avoids the synchronous
+        /// pipeline-state compilation (single-digit milliseconds) on every
+        /// `LiquidLensUIView.init` — material for scroll-on of a list with N
+        /// glass cells.
+        ///
+        /// `MTLRenderPipelineState`, `MTLCommandQueue`, and `MTKTextureLoader`
+        /// are documented thread-safe; sharing across instances is sound.
+        nonisolated(unsafe) private static var pipelineCache: [ObjectIdentifier: (chromatic: MTLRenderPipelineState, monochrome: MTLRenderPipelineState)] = [:]
+        nonisolated(unsafe) private static var commandQueueCache: [ObjectIdentifier: MTLCommandQueue] = [:]
+        nonisolated(unsafe) private static var textureLoaderCache: [ObjectIdentifier: MTKTextureLoader] = [:]
+        nonisolated private static let cacheLock = NSLock()
+
+        static func sharedPipelines(
+            for device: MTLDevice
+        ) -> (chromatic: MTLRenderPipelineState, monochrome: MTLRenderPipelineState)? {
+            let key = ObjectIdentifier(device)
+            cacheLock.lock()
+            defer { cacheLock.unlock() }
+            if let cached = unsafe pipelineCache[key] { return cached }
+            guard let built = buildPipelines(device: device) else { return nil }
+            unsafe pipelineCache[key] = built
+            return built
+        }
+
+        static func sharedCommandQueue(for device: MTLDevice) -> MTLCommandQueue? {
+            let key = ObjectIdentifier(device)
+            cacheLock.lock()
+            defer { cacheLock.unlock() }
+            if let cached = unsafe commandQueueCache[key] { return cached }
+            guard let queue = device.makeCommandQueue() else { return nil }
+            unsafe commandQueueCache[key] = queue
+            return queue
+        }
+
+        static func sharedTextureLoader(for device: MTLDevice) -> MTKTextureLoader {
+            let key = ObjectIdentifier(device)
+            cacheLock.lock()
+            defer { cacheLock.unlock() }
+            if let cached = unsafe textureLoaderCache[key] { return cached }
+            let loader = MTKTextureLoader(device: device)
+            unsafe textureLoaderCache[key] = loader
+            return loader
         }
 
         // MARK: - Pipeline Construction

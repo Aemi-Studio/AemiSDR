@@ -195,6 +195,12 @@ inline float applyFalloff(float t, int falloffType) {
 
 // MARK: - Lens Surface Geometry
 
+// `sphericalSurfaceAngle` and `snellDeviation` are no longer called from the
+// fragment shader (since the Snell deviations are precomputed CPU-side in
+// `LiquidLensConfiguration.toUniforms` to save six per-fragment transcendentals
+// in chromatic mode). Kept here as documentation of the CPU equivalent — the
+// Metal compiler dead-code-eliminates them from the metallib.
+
 inline float sphericalSurfaceAngle(float normalizedRadius, float curvature) {
     float r = clamp(normalizedRadius, 0.0f, 1.0f);
     float c = clamp(curvature, 0.0f, 1.0f);

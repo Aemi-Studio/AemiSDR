@@ -30,13 +30,21 @@
         var continuousCapture = false
         var refreshRate: Int = 30
         var captureScale: CGFloat = 1.0
+        /// When true, bypass the `ContentSignature` skip and rasterize every
+        /// frame. Used for backdrops whose pixels change without restructuring
+        /// the view tree (e.g. animated text).
+        var forceCaptureEveryFrame: Bool = false
 
         private var displayLink: CADisplayLink?
         private var displayLinkProxy: DisplayLinkProxy?
         private var backgroundObserver: NSObjectProtocol?
         private var foregroundObserver: NSObjectProtocol?
+        private var reduceMotionObserver: NSObjectProtocol?
+        private var lowPowerObserver: NSObjectProtocol?
+        private var thermalObserver: NSObjectProtocol?
         private var isPaused = false
         private var bridge: ZeroCopyTextureBridge?
+        private var bridgeConsumerID: BridgeConsumerID?
         private var captureView: BackdropCaptureView?
         private var captureViewHasRendered = false
         private var isCapturing = false
@@ -51,6 +59,23 @@
             let subviewCount: Int
             let sublayerCount: Int
             let contentsIdentifier: ObjectIdentifier?
+        }
+
+        // Cached results of the superview-walk performed every capture frame.
+        // Both `findContentSibling` and `resolveBackgroundColor` walk up the
+        // SwiftUI host hierarchy (10-30 levels typical) on every display-link
+        // tick — at 120Hz that's thousands of subview reads/second. Cache the
+        // resolved sibling and the resolved background CGColor; invalidate
+        // explicitly when the hierarchy or appearance changes.
+        private weak var cachedContentSibling: UIView?
+        private var cachedBackgroundColor: CGColor?
+
+        /// Bumped whenever the effect view's superview chain or trait
+        /// collection may have changed. Capture path consults this before
+        /// reusing cached sibling/background.
+        func invalidateContentLookupCaches() {
+            cachedContentSibling = nil
+            cachedBackgroundColor = nil
         }
 
         init() {
@@ -70,6 +95,53 @@
                     self?.resumeDisplayLink()
                 }
             }
+            // System-state observers: each just bumps the display-link rate via
+            // `updateDisplayLinkRate`, which reads `effectiveRefreshRate`.
+            reduceMotionObserver = NotificationCenter.default.addObserver(
+                forName: UIAccessibility.reduceMotionStatusDidChangeNotification,
+                object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.updateDisplayLinkRate()
+                }
+            }
+            lowPowerObserver = NotificationCenter.default.addObserver(
+                forName: Notification.Name.NSProcessInfoPowerStateDidChange,
+                object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.updateDisplayLinkRate()
+                }
+            }
+            thermalObserver = NotificationCenter.default.addObserver(
+                forName: ProcessInfo.thermalStateDidChangeNotification,
+                object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.updateDisplayLinkRate()
+                }
+            }
+        }
+
+        // MARK: - Effective Refresh Rate
+
+        /// The frame rate the display link should actually run at, derived from
+        /// the configured `refreshRate` plus system state:
+        /// - Reduce Motion → 0 (paused; one initial capture only)
+        /// - Thermal `.critical` → 0 (paused)
+        /// - Thermal `.serious` → 30
+        /// - Low Power Mode → 30 (cap)
+        ///
+        /// Returns 0 to signal "fully pause"; otherwise an fps value bounded
+        /// by `refreshRate`.
+        private var effectiveRefreshRate: Int {
+            if UIAccessibility.isReduceMotionEnabled { return 0 }
+            let thermal = ProcessInfo.processInfo.thermalState
+            if thermal == .critical { return 0 }
+            var cap = refreshRate
+            if thermal == .serious { cap = min(cap, 30) }
+            if ProcessInfo.processInfo.isLowPowerModeEnabled { cap = min(cap, 30) }
+            return max(0, cap)
         }
 
         // MARK: - Override Point
@@ -144,7 +216,16 @@
         }
 
         private func applyFrameRate(to link: CADisplayLink) {
-            let fps = refreshRate
+            let fps = effectiveRefreshRate
+            // 0 fps = "should pause"; toggle `isPaused` rather than the rate.
+            if fps <= 0 {
+                link.isPaused = true
+                return
+            }
+            // Reactivate if we were previously paused for accessibility/thermal.
+            if !isPaused, link.isPaused {
+                link.isPaused = false
+            }
             if #available(iOS 15.0, *) {
                 let fpsFloat = Float(fps)
                 link.preferredFrameRateRange = CAFrameRateRange(
@@ -204,7 +285,7 @@
         @available(iOS 26, *)
         private func performContentSiblingCapture() {
             guard let effectView else { return }
-            guard let contentView = findContentSibling(for: effectView) else { return }
+            guard let contentView = cachedOrResolvedContentSibling(for: effectView) else { return }
 
             let screenScale = effectView.displayScale
             let scale = screenScale * captureScale
@@ -218,20 +299,23 @@
             // cheap visual signature is unchanged. A typical app screen is static
             // between user inputs; this saves a full hierarchy rasterisation per
             // display-link tick.
-            let signature = ContentSignature(
-                bounds: contentView.bounds,
-                subviewCount: contentView.subviews.count,
-                sublayerCount: contentView.layer.sublayers?.count ?? 0,
-                contentsIdentifier: contentView.layer.contents.map { ObjectIdentifier($0 as AnyObject) }
-            )
-            if signature == lastContentSignature && hasCaptured { return }
-            lastContentSignature = signature
+            if !forceCaptureEveryFrame {
+                let signature = ContentSignature(
+                    bounds: contentView.bounds,
+                    subviewCount: contentView.subviews.count,
+                    sublayerCount: contentView.layer.sublayers?.count ?? 0,
+                    contentsIdentifier: contentView.layer.contents.map { ObjectIdentifier($0 as AnyObject) }
+                )
+                if signature == lastContentSignature && hasCaptured { return }
+                lastContentSignature = signature
+            }
 
-            ensureBridge()
+            ensureBridge(width: pixelWidth, height: pixelHeight)
+            guard let bridge, let consumerID = bridgeConsumerID else { return }
 
-            let bgColor = resolveBackgroundColor(for: contentView, traitCollection: contentView.traitCollection)
+            let bgColor = cachedOrResolvedBackgroundColor(for: contentView)
 
-            if let captured = bridge?.render(width: pixelWidth, height: pixelHeight, actions: { ctx in
+            if let captured = bridge.render(consumer: consumerID, width: pixelWidth, height: pixelHeight, actions: { ctx in
                 ctx.saveGState()
                 // Pre-fill with resolved background to avoid black through transparent areas
                 ctx.setFillColor(bgColor)
@@ -251,12 +335,49 @@
             }
         }
 
+        /// Returns the cached content sibling if still valid, otherwise resolves
+        /// via the superview walk. Cache validity is verified cheaply:
+        /// - the cached sibling is still in the same window as the effect view
+        /// - the effect view is not a descendant of the cached sibling
+        ///   (i.e. the hierarchy hasn't been restructured to nest us under it)
+        private func cachedOrResolvedContentSibling(for effectView: UIView) -> UIView? {
+            if let cached = cachedContentSibling,
+               cached.window === effectView.window,
+               !effectView.isDescendant(of: cached),
+               cached.superview != nil
+            {
+                return cached
+            }
+            let resolved = findContentSibling(for: effectView)
+            cachedContentSibling = resolved
+            // Background color is hierarchy-dependent; invalidate it too.
+            cachedBackgroundColor = nil
+            return resolved
+        }
+
+        /// Returns the cached background CGColor if available, otherwise walks
+        /// the hierarchy. The trait-collection-aware resolution happens once
+        /// per (sibling, traitCollection) pair; consumer should call
+        /// `invalidateContentLookupCaches()` on `traitCollectionDidChange`.
+        private func cachedOrResolvedBackgroundColor(for view: UIView) -> CGColor {
+            if let cached = cachedBackgroundColor { return cached }
+            let resolved = resolveBackgroundColor(for: view, traitCollection: view.traitCollection)
+            cachedBackgroundColor = resolved
+            return resolved
+        }
+
         /// Finds the content sibling view in a SwiftUI background/overlay container.
         ///
         /// SwiftUI `.background`/`.overlay` creates a container with the content view
         /// as the first child and the modifier view(s) as subsequent children. By
         /// capturing only the content sibling, we avoid a feedback loop where the
         /// effect's output is re-captured as input.
+        ///
+        /// When a container has multiple subviews but none satisfy the
+        /// non-descendant predicate (every sibling is an ancestor-or-equal of
+        /// `view`), the walk continues up rather than returning `parent` — capturing
+        /// the parent would include the effect view itself and feed its own output
+        /// back as the next frame's source.
         private func findContentSibling(for view: UIView) -> UIView? {
             var current = view.superview
             while let parent = current {
@@ -264,7 +385,6 @@
                     for sibling in parent.subviews where !view.isDescendant(of: sibling) {
                         return sibling
                     }
-                    return parent
                 }
                 current = parent.superview
             }
@@ -304,9 +424,10 @@
             let pixelHeight = Int(captureView.bounds.height * scale)
             guard pixelWidth > 0, pixelHeight > 0 else { return }
 
-            ensureBridge()
+            ensureBridge(width: pixelWidth, height: pixelHeight)
+            guard let bridge, let consumerID = bridgeConsumerID else { return }
 
-            if let captured = bridge?.render(width: pixelWidth, height: pixelHeight, actions: { ctx in
+            if let captured = bridge.render(consumer: consumerID, width: pixelWidth, height: pixelHeight, actions: { ctx in
                 ctx.saveGState()
                 ctx.translateBy(x: 0, y: CGFloat(pixelHeight))
                 ctx.scaleBy(x: 1, y: -1)
@@ -324,17 +445,41 @@
 
         // MARK: - Bridge
 
-        private func ensureBridge() {
-            guard bridge == nil, let effectView else { return }
+        /// The captured dimensions this coordinator most recently rendered at.
+        /// Used to size-bucket the pooled bridge.
+        private var bridgeWidth: Int = 0
+        private var bridgeHeight: Int = 0
+
+        /// Lazily acquires (or rebuckets) a pooled bridge sized for the given
+        /// capture dimensions. Subsequent calls with similar dimensions reuse
+        /// the same physical IOSurface ring; consumers with different
+        /// dimensions sit in different buckets.
+        private func ensureBridge(width: Int, height: Int) {
+            guard let effectView else { return }
             let device: MTLDevice?
             if let metalLayer = effectView.layer as? CAMetalLayer {
                 device = metalLayer.device
             } else {
                 device = MTLCreateSystemDefaultDevice()
             }
-            if let device {
-                bridge = ZeroCopyTextureBridge(device: device)
+            guard let device else { return }
+
+            // Same bucket as last time — reuse current bridge handle.
+            if let existing = bridge, width == bridgeWidth, height == bridgeHeight {
+                _ = existing
+                return
             }
+
+            // Dimensions changed (or first call): unregister from the old
+            // bridge, acquire one from the pool for the new bucket, register.
+            if let oldBridge = bridge, let oldID = bridgeConsumerID {
+                oldBridge.unregister(oldID)
+            }
+            let pooled = ZeroCopyTextureBridgePool.bridge(for: device, width: width, height: height)
+            bridge = pooled
+            bridgeConsumerID = pooled.register()
+            bridgeWidth = width
+            bridgeHeight = height
         }
 
         // MARK: - Cleanup
@@ -342,10 +487,24 @@
         func tearDown() {
             stopDisplayLink()
             removeCaptureView()
+            // Release this coordinator's slot bookkeeping from the pooled bridge
+            // so other consumers of the same bucket don't pay for our stale
+            // in-flight set.
+            if let bridge, let id = bridgeConsumerID {
+                bridge.unregister(id)
+            }
+            bridge = nil
+            bridgeConsumerID = nil
             if let backgroundObserver { NotificationCenter.default.removeObserver(backgroundObserver) }
             if let foregroundObserver { NotificationCenter.default.removeObserver(foregroundObserver) }
+            if let reduceMotionObserver { NotificationCenter.default.removeObserver(reduceMotionObserver) }
+            if let lowPowerObserver { NotificationCenter.default.removeObserver(lowPowerObserver) }
+            if let thermalObserver { NotificationCenter.default.removeObserver(thermalObserver) }
             backgroundObserver = nil
             foregroundObserver = nil
+            reduceMotionObserver = nil
+            lowPowerObserver = nil
+            thermalObserver = nil
         }
 
         // Defense-in-depth for missed `tearDown()` (e.g. SwiftUI replacing the
@@ -359,6 +518,9 @@
             displayLink?.invalidate()
             if let backgroundObserver { NotificationCenter.default.removeObserver(backgroundObserver) }
             if let foregroundObserver { NotificationCenter.default.removeObserver(foregroundObserver) }
+            if let reduceMotionObserver { NotificationCenter.default.removeObserver(reduceMotionObserver) }
+            if let lowPowerObserver { NotificationCenter.default.removeObserver(lowPowerObserver) }
+            if let thermalObserver { NotificationCenter.default.removeObserver(thermalObserver) }
         }
     }
 

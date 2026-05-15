@@ -10,6 +10,17 @@
     import OSLog
     import UIKit
 
+    /// Opaque token identifying a consumer of a shared `ZeroCopyTextureBridge`.
+    ///
+    /// Multiple `BackdropCaptureCoordinator`s can share a single bridge (and
+    /// therefore a single IOSurface ring) when their target capture dimensions
+    /// fall into the same bucket. Each consumer tracks its own in-flight set
+    /// and generation independently, so completion handlers from different
+    /// consumers don't interfere.
+    struct BridgeConsumerID: Hashable, Sendable {
+        let raw: UInt
+    }
+
     /// A texture handed back by `ZeroCopyTextureBridge.render(...)` along with a
     /// closure the GPU consumer must invoke (typically from
     /// `MTLCommandBuffer.addCompletedHandler`) when it has finished reading.
@@ -21,17 +32,14 @@
     /// Bridges CPU drawing (`CGContext`) and GPU reading (`MTLTexture`) through shared
     /// IOSurface-backed `CVPixelBuffer`s, eliminating per-frame allocations and texture uploads.
     ///
-    /// ## Slot ring
+    /// ## Multi-consumer slot ring
     ///
-    /// The bridge holds a 3-slot ring. Each `render(...)` writes into the next slot
-    /// that the GPU is not currently reading and returns a `ConsumableTexture`. The
-    /// caller MUST fire its `onConsumed` closure (typically wired through
-    /// `MTLCommandBuffer.addCompletedHandler`) so the slot becomes reclaimable.
-    ///
-    /// 3 slots are sufficient at any sustainable frame rate: at most one slot is
-    /// in-flight on the GPU, one is being written by the CPU, and one is the safety
-    /// fallback for spikes. If the GPU ever falls behind enough that all 3 slots
-    /// are in-flight, the bridge returns `nil` and the caller can skip the frame.
+    /// The bridge holds an N-slot ring sized to `max(registeredConsumers + 2, 3)`
+    /// so that each consumer can always find a slot the GPU isn't currently
+    /// reading. Each `render(consumer:...)` writes that consumer's content into
+    /// a slot not held by any consumer, marks it in-flight on behalf of the
+    /// consumer, and returns a `ConsumableTexture` whose `onConsumed` closure
+    /// releases it back when the GPU finishes.
     ///
     /// ## CGContext lifetime
     ///
@@ -60,27 +68,22 @@
 
         private var textureCache: CVMetalTextureCache?
 
-        // 3-slot ring. The GPU can be reading any one slot while the CPU writes
-        // another; the third absorbs short scheduling bursts.
-        private static let slotCount = 3
-        private var slots: [BufferSlot] = Array(repeating: BufferSlot(), count: ZeroCopyTextureBridge.slotCount)
+        // Slot ring. Sized dynamically: `max(registeredConsumers + 2, 3)`.
+        // The +2 buffer absorbs short scheduling spikes (one slot in CPU draw,
+        // one freshly returned to GPU but not yet completed) on top of the per-
+        // consumer in-flight allowance.
+        private var slots: [BufferSlot] = []
         private var nextWriteIndex: Int = 0
         private var currentWidth: Int = 0
         private var currentHeight: Int = 0
 
-        // Slots currently held by the GPU. Mutated under `inFlightLock` from
-        // arbitrary threads (Metal completion handlers) and from `@MainActor`
-        // code that reads it under the same lock.
-        private nonisolated let inFlightLock = NSLock()
-        private nonisolated(unsafe) var inFlight = Set<Int>()
-
-        // Bumped whenever the backing slots are reallocated. Each
-        // `ConsumableTexture` captures the generation at the time it was
-        // produced; `markCompleted` only releases the slot if the generation
-        // still matches. This prevents an in-flight completion from a
-        // previous-size frame from freeing a slot in the freshly-allocated
-        // ring (where slot IDs would collide).
-        private nonisolated(unsafe) var generation: UInt = 0
+        // Per-consumer state. Mutated under `stateLock` from arbitrary threads
+        // (Metal completion handlers) and from `@MainActor` code that reads
+        // under the same lock.
+        private nonisolated let stateLock = NSLock()
+        private nonisolated(unsafe) var inFlight: [BridgeConsumerID: Set<Int>] = [:]
+        private nonisolated(unsafe) var generation: [BridgeConsumerID: UInt] = [:]
+        nonisolated(unsafe) private static var nextConsumerID: UInt = 0
 
         private struct BufferSlot {
             var pixelBuffer: CVPixelBuffer?
@@ -105,6 +108,47 @@
             self.textureCache = cache
         }
 
+        // MARK: - Consumer Lifecycle
+
+        /// Registers a new consumer of this bridge. The returned ID must be
+        /// passed to subsequent `render(consumer:...)` calls and to
+        /// `unregister(_:)` when the consumer is torn down.
+        func register() -> BridgeConsumerID {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            unsafe Self.nextConsumerID &+= 1
+            let id = unsafe BridgeConsumerID(raw: Self.nextConsumerID)
+            unsafe inFlight[id] = []
+            unsafe generation[id] = 0
+            // Grow the ring so even with all consumers maximally in-flight we
+            // still have a writable slot.
+            let target = max(unsafe inFlight.count + 2, 3)
+            if slots.count < target {
+                let needed = target - slots.count
+                let blank = (0..<needed).map { _ in BufferSlot() }
+                slots.append(contentsOf: blank)
+                // Re-create the just-added slots if dimensions are already set.
+                if currentWidth > 0, currentHeight > 0 {
+                    for i in (slots.count - needed)..<slots.count {
+                        slots[i] = createSlot(width: currentWidth, height: currentHeight)
+                    }
+                }
+            }
+            return id
+        }
+
+        /// Removes a consumer's bookkeeping. Slots that were in-flight on its
+        /// behalf are freed immediately — by contract the consumer must not
+        /// invoke `markCompleted` after unregistering.
+        func unregister(_ consumer: BridgeConsumerID) {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            unsafe inFlight.removeValue(forKey: consumer)
+            unsafe generation.removeValue(forKey: consumer)
+        }
+
+        // MARK: - Slot ring
+
         /// Ensures the ring's backing buffers match the requested dimensions,
         /// reallocating only when the size changes.
         private func ensureBuffers(width: Int, height: Int) {
@@ -114,15 +158,16 @@
                 slots[i] = createSlot(width: width, height: height)
             }
             // After a size change every previous in-flight slot is stale.
-            // Bump the generation under the same lock so any concurrent
+            // Bump every consumer's generation under the lock so any concurrent
             // `markCompleted` either sees the old `inFlight` (its slot id is
             // still there and gets removed) or the new generation (its check
-            // fails and it no-ops). The bump must happen with the lock held
-            // so completion handlers can't see a half-updated state.
-            inFlightLock.lock()
-            inFlight.removeAll()
-            generation &+= 1
-            inFlightLock.unlock()
+            // fails and it no-ops).
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            for (id, _) in unsafe inFlight {
+                unsafe inFlight[id] = []
+                unsafe generation[id] = unsafe (generation[id] ?? 0) &+ 1
+            }
             nextWriteIndex = 0
             currentWidth = width
             currentHeight = height
@@ -179,43 +224,57 @@
             return slot
         }
 
-        /// Picks the next slot the GPU is not currently reading, advancing the
-        /// ring pointer. Returns `nil` only when every slot is in-flight, which
-        /// implies the GPU has fallen >2 frames behind the CPU.
+        /// Picks a slot not currently in-flight on behalf of ANY consumer.
+        /// Returns `nil` when every slot is in-flight (the GPU has fallen
+        /// further behind than the ring can absorb).
+        ///
+        /// Also skips slots whose backing storage is permanently broken
+        /// (initial CVPixelBuffer/MTLTexture allocation failed).
         private func acquireWriteSlot() -> Int? {
-            inFlightLock.lock()
-            defer { inFlightLock.unlock() }
-            for _ in 0..<slots.count {
-                let candidate = nextWriteIndex
-                nextWriteIndex = (nextWriteIndex + 1) % slots.count
-                if !inFlight.contains(candidate) { return candidate }
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            // Union of every consumer's in-flight set: the slot is unavailable
+            // for write if any consumer's GPU might still be reading it.
+            var globallyInFlight = Set<Int>()
+            for set in unsafe inFlight.values {
+                globallyInFlight.formUnion(set)
+            }
+            for offset in 0..<slots.count {
+                let candidate = (nextWriteIndex + offset) % slots.count
+                if globallyInFlight.contains(candidate) { continue }
+                let slot = slots[candidate]
+                if slot.pixelBuffer == nil || slot.texture == nil { continue }
+                nextWriteIndex = (candidate + 1) % slots.count
+                return candidate
             }
             return nil
         }
 
-        /// Marks a slot as occupied by the GPU. Callers must invoke
-        /// `markCompleted(_:)` from the matching `MTLCommandBuffer` completion
-        /// handler so the slot can be reclaimed.
-        private func markInFlight(_ slotID: Int) {
-            inFlightLock.lock()
-            inFlight.insert(slotID)
-            inFlightLock.unlock()
+        private func markInFlight(_ slotID: Int, consumer: BridgeConsumerID) {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            unsafe inFlight[consumer, default: []].insert(slotID)
         }
 
-        /// Signals that the GPU has finished reading the given slot. Safe to call
-        /// from any thread (`MTLCommandBuffer.addCompletedHandler` runs off the
-        /// main thread).
+        /// Signals that the GPU has finished reading the given slot. Safe to
+        /// call from any thread (`MTLCommandBuffer.addCompletedHandler` runs
+        /// off the main thread).
         ///
         /// The `generation` argument is the value captured when the slot was
         /// handed out. A mismatch means the slot ring was reallocated since,
-        /// so the slot ID no longer refers to the same physical buffer and
-        /// the completion must no-op.
-        nonisolated func markCompleted(_ slotID: Int, generation: UInt) {
-            inFlightLock.lock()
-            defer { inFlightLock.unlock() }
-            guard self.generation == generation else { return }
-            inFlight.remove(slotID)
+        /// so the slot ID no longer refers to the same physical buffer.
+        nonisolated func markCompleted(
+            _ slotID: Int,
+            generation: UInt,
+            consumer: BridgeConsumerID
+        ) {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            guard unsafe self.generation[consumer] == generation else { return }
+            unsafe inFlight[consumer]?.remove(slotID)
         }
+
+        // MARK: - Render
 
         /// Renders into the next available buffer via a `CGContext` and returns
         /// a `ConsumableTexture` that bundles the GPU-visible `MTLTexture` with
@@ -223,9 +282,10 @@
         /// invoke `onConsumed` (typically from `MTLCommandBuffer.addCompletedHandler`)
         /// after the GPU finishes reading, or subsequent renders may stall.
         ///
-        /// Returns `nil` if every slot is in-flight (GPU is more than two frames
-        /// behind) — caller should skip this frame.
+        /// Returns `nil` if every slot is in-flight — caller should skip this
+        /// frame.
         func render(
+            consumer: BridgeConsumerID,
             width: Int,
             height: Int,
             actions: (CGContext) -> Void
@@ -261,16 +321,74 @@
 
             actions(context)
 
-            // Capture the current generation synchronously so the consumer
-            // closure can detect a post-resize ring reallocation and no-op.
-            let capturedGeneration = generation
-            markInFlight(slotID)
+            // Capture this consumer's current generation so the consumer's
+            // completion can detect a post-resize ring reallocation and no-op.
+            stateLock.lock()
+            let capturedGeneration = unsafe generation[consumer] ?? 0
+            unsafe inFlight[consumer, default: []].insert(slotID)
+            stateLock.unlock()
+
             return ConsumableTexture(
                 texture: texture,
                 onConsumed: { [weak self] in
-                    self?.markCompleted(slotID, generation: capturedGeneration)
+                    self?.markCompleted(slotID, generation: capturedGeneration, consumer: consumer)
                 }
             )
+        }
+    }
+
+    // MARK: - Bridge Pool
+
+    /// Process-wide pool of `ZeroCopyTextureBridge` instances keyed on
+    /// `(device, bucketed-size)`. Multiple coordinators capturing at similar
+    /// dimensions reuse the same physical IOSurface ring instead of each
+    /// allocating ~26 MB.
+    ///
+    /// Buckets round up to the next power-of-two with a minimum of 256. A
+    /// coordinator capturing at 1002×2173 lands in the (1024, 2176) bucket
+    /// along with anything else in the same range; mixed-dimension scenes
+    /// allocate one bridge per cluster.
+    ///
+    /// Storage is `weak`-referenced: a bridge is released when no consumer
+    /// holds a strong reference, freeing its IOSurface ring.
+    @MainActor
+    enum ZeroCopyTextureBridgePool {
+
+        private struct Key: Hashable {
+            let device: ObjectIdentifier
+            let widthBucket: Int
+            let heightBucket: Int
+        }
+
+        private final class WeakBridge {
+            weak var bridge: ZeroCopyTextureBridge?
+        }
+
+        private static var pool: [Key: WeakBridge] = [:]
+
+        /// Returns a bridge sized for the given dimensions on the given
+        /// device. The bridge may be freshly constructed or reused.
+        static func bridge(for device: MTLDevice, width: Int, height: Int) -> ZeroCopyTextureBridge {
+            let key = Key(
+                device: ObjectIdentifier(device),
+                widthBucket: bucket(width),
+                heightBucket: bucket(height)
+            )
+            if let existing = pool[key]?.bridge { return existing }
+            let fresh = ZeroCopyTextureBridge(device: device)
+            let box = WeakBridge()
+            box.bridge = fresh
+            pool[key] = box
+            return fresh
+        }
+
+        /// Next power-of-two ≥ value, minimum 256. Caps growth at 8192 (any
+        /// requested dimension above that bucket to itself).
+        private static func bucket(_ value: Int) -> Int {
+            guard value > 0 else { return 256 }
+            var b = 256
+            while b < value, b < 8192 { b <<= 1 }
+            return max(b, value)
         }
     }
 #endif
