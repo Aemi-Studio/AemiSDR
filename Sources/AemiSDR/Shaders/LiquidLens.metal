@@ -348,30 +348,37 @@ fragment half4 liquidLensFragment(
     float normalizedRadius = 1.0f - (distFromEdge / minHalf);
     normalizedRadius = clamp(normalizedRadius, 0.0f, 1.0f);
 
-    // Edge-concentrated effect: intensity ramps from 0 at the centre up to
-    // the curve-shaped peak at the rim. The visible "rectangle" boundary
-    // that this model produced on its own (the inner pass-through region
-    // meeting the refracting rim) is eliminated by the medial-axis
-    // smoothstep in `computeSDFGradient`: the gradient magnitude itself
-    // tapers from 0 at the centre to 1 at the rim across the short
-    // dimension, so the displacement field has no sharp transition.
+    // Edge-concentrated effect with a small interior floor.
     //
-    // Combined: both intensity AND gradient magnitude ramp smoothly across
-    // the lens body. The medial-axis seam and the mirrored double-image
-    // disappear because adjacent pixels in the interior see near-zero
-    // displacement regardless of which half of the lens they sit in.
+    // The floor (~5 %) gives every pixel inside the lens a tiny non-zero
+    // intensity so the centre is never pure pass-through and the
+    // refraction ramps continuously from the interior to the rim. Without
+    // it, the abrupt transition between an inert centre and a refracting
+    // rim reads as a visible "rectangle" boundary in elongated shapes.
     //
-    //   falloffLength    = width of the active zone as a fraction of the
-    //                       lens radius. 1.0 = ramp spans the entire lens
-    //                       (default); 0.3 = only the outer 30 % carries
-    //                       the effect.
-    //   falloff curve    = shape of the 0→1 ramp within the active zone.
-    //   falloffIntensity = overall [0, 1] multiplier on the peak.
+    // The floor by itself would risk reintroducing the mirrored double
+    // image at the medial axis, but `computeSDFGradient` now tapers the
+    // gradient magnitude from 0 at the medial axis to 1 at the rim across
+    // the SHORT dimension of the shape. With the gradient near zero in
+    // the interior, even a non-zero intensity produces only sub-pixel
+    // displacement — invisible to the eye but enough to soften the
+    // transition into the rim's full-strength refraction.
+    //
+    //   falloffLength    = width of the active edge-boost zone as a
+    //                       fraction of the lens radius. 1.0 = ramp spans
+    //                       the entire lens (default); 0.3 = only the
+    //                       outer 30 % carries the boost on top of floor.
+    //   falloff curve    = shape of the 0→1 ramp within the active zone
+    //                       (exponential = floor dominates the interior
+    //                       and the boost concentrates at the rim).
+    //   falloffIntensity = overall [0, 1] multiplier on the final value.
+    const float kInteriorFloor = 0.05f;
     float effectIntensity = 0.0f;
     if (clampedFalloffLength > 0.0f && clampedFalloffIntensity > 0.0f) {
         float activeStart = 1.0f - clampedFalloffLength;
         float t = clamp((normalizedRadius - activeStart) / clampedFalloffLength, 0.0f, 1.0f);
-        effectIntensity = applyFalloff(t, falloffCurve) * clampedFalloffIntensity;
+        float edgePeak = applyFalloff(t, falloffCurve);
+        effectIntensity = mix(kInteriorFloor, 1.0f, edgePeak) * clampedFalloffIntensity;
     }
 
     // Anti-alias at the SDF boundary (1.5 px soft edge) — prevents the
