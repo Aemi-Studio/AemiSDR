@@ -245,7 +245,22 @@ inline float sdRoundedRect(float2 p, float2 halfSize, float cornerRadius) {
 inline float2 computeSDFGradient(float2 p, float2 halfSize, float cornerRadius) {
     float corner = clamp(cornerRadius, 0.0f, min(halfSize.x, halfSize.y));
     float2 absP = abs(p);
-    float2 signP = float2(p.x >= 0.0f ? 1.0f : -1.0f, p.y >= 0.0f ? 1.0f : -1.0f);
+
+    // Smoothed sign: tapers each gradient component to zero across the
+    // shape's medial axis (p.x = 0 or p.y = 0). The hard `sign()` produces
+    // an instantaneous flip across the axis — for a wide capsule where the
+    // medial axis lies in the flat-edge region, this manifests as a visible
+    // seam down the middle of the lens. The smoothstep width is a small
+    // fraction of the half-extent (or 0.5 px, whichever is larger) so
+    // boundary normals are unaffected while the seam pixels see a smoothly
+    // vanishing displacement — physically correct for a glass slab whose
+    // midplane has no net refraction.
+    const float kMedialSeamWidth = 0.05f;
+    float2 seamScale = max(halfSize * kMedialSeamWidth, float2(0.5f));
+    float2 signP = float2(
+        (p.x >= 0.0f ? 1.0f : -1.0f) * smoothstep(0.0f, seamScale.x, absP.x),
+        (p.y >= 0.0f ? 1.0f : -1.0f) * smoothstep(0.0f, seamScale.y, absP.y)
+    );
 
     float2 inner = halfSize - corner;
     float2 q = absP - inner;
@@ -306,9 +321,11 @@ fragment half4 liquidLensFragment(
     float clampedCorner = clamp(uniforms.cornerRadius, 0.0f, minHalf);
     float clampedFalloffLength = clamp(uniforms.falloffLength, 0.01f, 1.0f);
     float clampedFalloffIntensity = clamp(uniforms.falloffIntensity, 0.0f, 1.0f);
-    // chromaticAmount is an artistic amplifier (not a physical [0,1] mix).
-    // 0 disables chromatic separation; 30 is the calibrated baseline; values
-    // above 1 extrapolate beyond physical correctness for stylistic emphasis.
+    // chromaticAmount is an artistic amplifier multiplied into the
+    // `mix(green, channel, t)` extrapolation: 0 disables chromatic
+    // separation; ~1–4 maps to the subtle fringing seen on iOS 26 Liquid
+    // Glass; higher values extrapolate beyond physical correctness for
+    // stylistic emphasis, with visible color bands above ~10.
     float clampedChromatic = clamp(uniforms.chromaticAmount, 0.0f, 30.0f);
     int falloffCurve = uniforms.falloffType;
 
