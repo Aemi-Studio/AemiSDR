@@ -279,14 +279,19 @@ inline float2 computeSDFGradient(float2 p, float2 halfSize, float cornerRadius) 
         gradLocal = (qLen > 0.0001f) ? (qp / qLen) : float2(0.707107f, 0.707107f);
     } else if (q.x <= 0.0f && q.y <= 0.0f) {
         // Interior region (both inside inner frame).
-        // The true SDF gradient is discontinuous along q.x = q.y (the medial
-        // axis between two equidistant edges). Smooth the transition with a
-        // scaled smoothstep so the displacement field has no visible seam.
-        float diff = q.x - q.y;
-        float sharpness = 1.0f / max(corner, 1.0f);
-        float blend = clamp(0.5f + diff * sharpness, 0.0f, 1.0f);
-        blend = blend * blend * (3.0f - 2.0f * blend);
-        gradLocal = normalize(float2(blend, 1.0f - blend));
+        //
+        // Use inverse-distance weighting between the two nearest axis-
+        // aligned edges. dx = distance to nearest vertical edge,
+        // dy = distance to nearest horizontal edge. The gradient bends
+        // toward whichever edge is closer, smoothly passing through 45°
+        // when the two distances match — no discrete `blend` threshold,
+        // so no diagonal seam where adjacent pixels straddle the
+        // transition. Continuous with the flat-edge sectors at q.x = 0
+        // and q.y = 0.
+        float dx = -q.x;
+        float dy = -q.y;
+        float total = max(dx + dy, 0.0001f);
+        gradLocal = normalize(float2(dy / total, dx / total));
     } else {
         // Flat-edge region: one component past the inner frame, the other not.
         // Direction is unambiguously toward the closer boundary.
@@ -381,10 +386,12 @@ fragment half4 liquidLensFragment(
         effectIntensity = mix(kInteriorFloor, 1.0f, edgePeak) * clampedFalloffIntensity;
     }
 
-    // Anti-alias at the SDF boundary (1.5 px soft edge) — prevents the
-    // peak refraction at the outermost pixel from sampling outside the
-    // lens shape.
-    effectIntensity *= clamp(-dOuter, 0.0f, 1.5f) / 1.5f;
+    // No SDF-boundary anti-alias: the previous 1.5 px fade dragged the
+    // peak refraction down to zero in the exact rim band where the
+    // edge-concentrated falloff places the strongest effect. The shape's
+    // outer boundary is anti-aliased by the SwiftUI `.clipShape`
+    // upstream; the sampler's `clamp_to_edge` handles displacement that
+    // walks past the texture edge.
 
     if (effectIntensity < 0.0001f) {
         return isOverlay ? half4(0.0h) : sourceTexture.sample(texSampler, in.texCoord);
