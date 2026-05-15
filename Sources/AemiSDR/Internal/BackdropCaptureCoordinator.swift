@@ -97,7 +97,10 @@
             }
             // System-state observers: each just bumps the display-link rate via
             // `updateDisplayLinkRate`, which reads `effectiveRefreshRate`.
-            reduceMotionObserver = NotificationCenter.default.addObserver(
+            // `UIAccessibility.reduceMotionStatusDidChangeNotification` is
+            // annotated `@unsafe` on iOS 26 SDK (it isn't on every SDK), so
+            // wrap the assignment expression accordingly.
+            reduceMotionObserver = unsafe NotificationCenter.default.addObserver(
                 forName: UIAccessibility.reduceMotionStatusDidChangeNotification,
                 object: nil, queue: .main
             ) { [weak self] _ in
@@ -135,7 +138,10 @@
         /// Returns 0 to signal "fully pause"; otherwise an fps value bounded
         /// by `refreshRate`.
         private var effectiveRefreshRate: Int {
-            if UIAccessibility.isReduceMotionEnabled { return 0 }
+            // `UIAccessibility.isReduceMotionEnabled` is `@unsafe`-annotated on
+            // iOS 26 SDK because it can be queried from any thread; we're on
+            // MainActor here, where the read is safe.
+            if unsafe UIAccessibility.isReduceMotionEnabled { return 0 }
             let thermal = ProcessInfo.processInfo.thermalState
             if thermal == .critical { return 0 }
             var cap = refreshRate
@@ -197,7 +203,10 @@
             // SwiftUI replaces the representable mid-flight), the coordinator
             // can still deallocate and the proxy's weak target becomes nil.
             let proxy = DisplayLinkProxy(target: self)
-            let link = unsafe CADisplayLink(target: proxy, selector: #selector(DisplayLinkProxy.fire(_:)))
+            // ObjC API; the proxy is `@MainActor` and the link is added to the
+            // main run loop below, so the selector dispatch always lands on
+            // main. No `unsafe` needed under the iOS 26 SDK annotations.
+            let link = CADisplayLink(target: proxy, selector: #selector(DisplayLinkProxy.fire(_:)))
             applyFrameRate(to: link)
             link.add(to: .main, forMode: .common)
             displayLink = link
