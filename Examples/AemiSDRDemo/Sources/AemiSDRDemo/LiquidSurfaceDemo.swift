@@ -156,12 +156,12 @@ import SwiftUI
 
         private var topSurface: some View {
             headerContent
+                .background { headerBlurLayer }
                 .liquidBackground(
                     liquidConfig,
                     shape: RoundedRectangle(cornerRadius: headerCornerRadius, style: .continuous),
                     cornerRadius: .points(Float(headerCornerRadius))
                 )
-                .background { headerBlurLayer }
                 .clipShape(RoundedRectangle(cornerRadius: headerCornerRadius, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: headerCornerRadius, style: .continuous)
@@ -252,8 +252,8 @@ import SwiftUI
             .font(.title3)
             .padding(.horizontal, 24)
             .padding(.vertical, 12)
-            .liquidBackground(liquidConfig, shape: Capsule())
             .background { headerBlurLayer }
+            .liquidBackground(liquidConfig, shape: Capsule())
             .clipShape(Capsule())
             .overlay {
                 Capsule()
