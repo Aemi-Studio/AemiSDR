@@ -52,14 +52,15 @@ class CIKernelCache {
     /// Shared CIContext for grayscale alpha-mask outputs.
     ///
     /// All mask kernels in this package emit single-channel alpha. Routing them
-    /// through a linear-gray working/output color space avoids a P3 → sRGB
-    /// conversion pass and roughly 30% of ALU per mask render relative to the
-    /// wide-gamut `context`.
+    /// through a linear-sRGB working space avoids the wider-gamut P3 conversion
+    /// pass without violating CI's requirement that `kCIContextWorkingColorSpace`
+    /// be `kCGColorSpaceModelRGB` (CI rejects monochrome working spaces with a
+    /// hard error).
     static let maskContext: CIContext = {
-        let gray = CGColorSpace(name: CGColorSpace.linearGray)
+        let linearSRGB = CGColorSpace(name: CGColorSpace.linearSRGB)
         return CIContext(options: [
-            .workingColorSpace: gray as Any,
-            .outputColorSpace: gray as Any,
+            .workingColorSpace: linearSRGB as Any,
+            .outputColorSpace: linearSRGB as Any,
             .cacheIntermediates: false,
             .priorityRequestLow: true,
         ])
