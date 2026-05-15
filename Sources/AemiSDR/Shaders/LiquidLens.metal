@@ -83,9 +83,11 @@ vertex VertexOut liquidLensVertex(uint vertexID [[vertex_id]]) {
 }
 
 // MARK: - Physical Constants
-
-// Refractive index of air at standard conditions
-constant float kAirRefractiveIndex = 1.000293;
+//
+// Refractive index of air (`1.000293`) and Sellmeier coefficients are no longer
+// referenced from the fragment shader — the Snell deviations they would feed are
+// precomputed CPU-side in `LiquidLensConfiguration.toUniforms`. The CPU
+// equivalents live in `LiquidLensConfiguration.swift`.
 
 // MARK: - Sellmeier Coefficients
 
@@ -297,9 +299,11 @@ fragment half4 liquidLensFragment(
         return isOverlay ? half4(0.0h) : sourceTexture.sample(texSampler, in.texCoord);
     }
 
-    // Clamp parameters
+    // Clamp parameters. `lensCurvature` is no longer referenced in-shader
+    // (the Snell deviations it would drive are precomputed CPU-side and read
+    // out of `uniforms.deviation{Red,Green,Blue}`), so no clamped form is
+    // needed here.
     float clampedCorner = clamp(uniforms.cornerRadius, 0.0f, minHalf);
-    float clampedCurvature = clamp(uniforms.lensCurvature, 0.0f, 1.0f);
     float clampedFalloffLength = clamp(uniforms.falloffLength, 0.01f, 1.0f);
     float clampedFalloffIntensity = clamp(uniforms.falloffIntensity, 0.0f, 1.0f);
     // chromaticAmount is an artistic amplifier (not a physical [0,1] mix).
