@@ -43,6 +43,24 @@
         /// Used to short-circuit no-op repeated calls from `updateUIView` cascades.
         private var lastConfiguration: BackdropBlurConfiguration?
 
+        /// Invokes `applyRequestedEffectToView:` on the given filter receiver, but
+        /// only after `responds(to:)` confirms the selector still exists. If the
+        /// private API has been removed by the host iOS version, we emit a
+        /// one-shot `.fault` log and return — better than the ObjC runtime
+        /// raising an uncatchable `NSInvalidArgumentException`.
+        private func applyEffectIfResponding(on receiver: NSObject?) {
+            guard let receiver else { return }
+            let sel = Selector(_InternedKeys.applyEffectSelector)
+            guard receiver.responds(to: sel) else {
+                _PrivateAPIDiagnostics.logOnce(
+                    key: "applyEffectSelector",
+                    "Private selector `\(_InternedKeys.applyEffectSelector)` is not implemented by \(type(of: receiver)); tint changes will not apply. The host iOS version may have removed this API."
+                )
+                return
+            }
+            _ = unsafe receiver.perform(sel, with: overlayView)
+        }
+
         // MARK: - Public Properties
 
         /// The tint color applied over the blur.
@@ -56,7 +74,7 @@
                 lastConfiguration = nil
                 prepareForChanges()
                 sourceOver?.setValue(newValue, forKeyPath: _InternedKeys.colorKey)
-                _ = unsafe sourceOver?.perform(Selector(_InternedKeys.applyEffectSelector), with: overlayView)
+                applyEffectIfResponding(on: sourceOver)
                 applyChanges()
                 overlayView?.backgroundColor = newValue
             }

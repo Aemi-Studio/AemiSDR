@@ -233,44 +233,64 @@ final class CAProbeViewModel: ObservableObject {
     }
 
     // MARK: - Export
+    //
+    // ⚠️ DEVELOPER-ONLY TARGET — DO NOT ARCHIVE FOR APP STORE DISTRIBUTION.
+    //
+    // The JSON dump enumerates iOS private API surface (class names, selector
+    // tables, ivar offsets). Combined with device identity (`hw.machine` +
+    // `systemVersion`) this artifact is App-Store-prohibited content. It is
+    // also a privacy surface if the probe is sideloaded onto a device the user
+    // doesn't own.
+    //
+    // Mitigations:
+    //  - `UIDevice.current.name` (often "Alex's iPhone") is STRIPPED.
+    //  - Export is gated behind `#if DEBUG` so release builds of the probe
+    //    cannot produce the JSON.
+    //  - The on-disk artifact is tagged `.completeFileProtection` so it is
+    //    unreadable while the device is locked, including by iCloud backup.
 
     func exportJSON() -> URL? {
-        let report: [String: Any] = [
-            "device": UIDevice.current.name,
-            "systemName": UIDevice.current.systemName,
-            "systemVersion": UIDevice.current.systemVersion,
-            "model": deviceModel(),
-            "scanDate": ISO8601DateFormatter().string(from: Date()),
-            "totalCAClasses": totalCAClasses,
-            "totalUnderscoreClasses": totalUnderscoreClasses,
-            "criticalAPIs": criticalAPIs.map { api in
-                ["name": api.name, "exists": api.exists, "detail": api.detail] as [String: Any]
-            },
-            "backdropLiveTest": backdropLiveTest,
-            "classes": classDetails,
-            "underscoreClasses": underscoreClassDetails,
-        ]
+        #if DEBUG
+            let report: [String: Any] = [
+                // Intentionally omitting UIDevice.current.name (may contain PII).
+                "systemName": UIDevice.current.systemName,
+                "systemVersion": UIDevice.current.systemVersion,
+                "model": deviceModel(),
+                "scanDate": ISO8601DateFormatter().string(from: Date()),
+                "totalCAClasses": totalCAClasses,
+                "totalUnderscoreClasses": totalUnderscoreClasses,
+                "criticalAPIs": criticalAPIs.map { api in
+                    ["name": api.name, "exists": api.exists, "detail": api.detail] as [String: Any]
+                },
+                "backdropLiveTest": backdropLiveTest,
+                "classes": classDetails,
+                "underscoreClasses": underscoreClassDetails,
+            ]
 
-        guard JSONSerialization.isValidJSONObject(report),
-              let data = try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
-        else {
+            guard JSONSerialization.isValidJSONObject(report),
+                  let data = try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
+            else {
+                return nil
+            }
+
+            let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+            let url = docs.appendingPathComponent("ca-probe-v2-\(UIDevice.current.systemVersion).json")
+
+            do {
+                try data.write(to: url, options: [.atomic, .completeFileProtection])
+                exportedFilePath = url.path
+                print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                print("CA PROBE EXPORT: \(url.path)")
+                print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                return url
+            } catch {
+                print("Export failed: \(error)")
+                return nil
+            }
+        #else
+            print("CA PROBE EXPORT: disabled in non-DEBUG builds (developer-only).")
             return nil
-        }
-
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let url = docs.appendingPathComponent("ca-probe-v2-\(UIDevice.current.systemVersion).json")
-
-        do {
-            try data.write(to: url, options: .atomic)
-            exportedFilePath = url.path
-            print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            print("CA PROBE EXPORT: \(url.path)")
-            print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            return url
-        } catch {
-            print("Export failed: \(error)")
-            return nil
-        }
+        #endif
     }
 
     private func deviceModel() -> String {
