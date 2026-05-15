@@ -47,18 +47,21 @@ extension View {
     /// This modifier creates a blur effect behind the view content with
     /// fine-grained control over blur radius, color tint, and scale.
     ///
+    /// Parameter order matches `BackdropBlurView.init` and
+    /// `BackdropBlurConfiguration.init` — tint+alpha first, then geometry.
+    ///
     /// - Parameters:
-    ///   - blurRadius: The blur radius in points (default: 10)
     ///   - colorTint: Optional tint color applied over the blur (default: nil)
     ///   - colorTintAlpha: Alpha value for the tint color (default: 0)
+    ///   - blurRadius: The blur radius in points (default: 10)
     ///   - scale: Scale factor for the effect (default: 1)
     ///   - ignoreSafeArea: Whether to ignore safe area for the blur effect (default: true)
     /// - Returns: A view with the blur effect applied as background
     @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
     @ViewBuilder public func backdropBlurBackground(
-        blurRadius: CGFloat = 10,
         colorTint: Color? = nil,
         colorTintAlpha: CGFloat = 0,
+        blurRadius: CGFloat = 10,
         scale: CGFloat = 1,
         ignoreSafeArea: Bool = true
     ) -> some View {
@@ -79,17 +82,17 @@ extension View {
     /// fine-grained control over blur radius, color tint, and scale.
     ///
     /// - Parameters:
-    ///   - blurRadius: The blur radius in points (default: 10)
     ///   - colorTint: Optional tint color applied over the blur (default: nil)
     ///   - colorTintAlpha: Alpha value for the tint color (default: 0)
+    ///   - blurRadius: The blur radius in points (default: 10)
     ///   - scale: Scale factor for the effect (default: 1)
     ///   - ignoreSafeArea: Whether to ignore safe area for the blur effect (default: true)
     /// - Returns: A view with the blur effect applied as overlay
     @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
     @ViewBuilder public func backdropBlurOverlay(
-        blurRadius: CGFloat = 10,
         colorTint: Color? = nil,
         colorTintAlpha: CGFloat = 0,
+        blurRadius: CGFloat = 10,
         scale: CGFloat = 1,
         ignoreSafeArea: Bool = true
     ) -> some View {

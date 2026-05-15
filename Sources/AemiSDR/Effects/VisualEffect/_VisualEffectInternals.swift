@@ -3,6 +3,37 @@
 //  AemiSDR
 //
 
+import Foundation
+import OSLog
+
+// MARK: - Private-API Diagnostics
+
+/// Emits a `.fault`-level OSLog message exactly once per process per `key`.
+///
+/// Used to surface private-API drift (missing selectors, classes, KVC keys)
+/// without spamming the log every frame. The cost on the hot path is one
+/// `Set.contains` under a short-held lock.
+internal enum _PrivateAPIDiagnostics {
+    nonisolated(unsafe) private static var loggedKeys: Set<String> = []
+    nonisolated private static let lock = NSLock()
+    nonisolated private static let logger = Logger(
+        subsystem: "studio.aemi.AemiSDR",
+        category: "PrivateAPI"
+    )
+
+    /// Fires exactly once per process per `key`. Subsequent calls with the same
+    /// `key` are no-ops.
+    static func logOnce(key: String, _ message: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        // Access guarded by `lock`; the `nonisolated(unsafe)` is documented at
+        // the storage declaration.
+        guard unsafe !loggedKeys.contains(key) else { return }
+        unsafe loggedKeys.insert(key)
+        logger.fault("\(message, privacy: .public)")
+    }
+}
+
 // MARK: - Shared Filter Value Access
 
 extension NSObject {
@@ -61,7 +92,16 @@ extension NSObject {
         }
 
         func applyChanges() {
-            _ = unsafe backdropView?.perform(Selector(_InternedKeys.commitFiltersSelector))
+            guard let backdropView else { return }
+            let sel = Selector(_InternedKeys.commitFiltersSelector)
+            guard backdropView.responds(to: sel) else {
+                _PrivateAPIDiagnostics.logOnce(
+                    key: "commitFiltersSelector",
+                    "Private selector `\(_InternedKeys.commitFiltersSelector)` is not implemented by \(type(of: backdropView)); backdrop filter changes will not commit. The host iOS version may have removed this API."
+                )
+                return
+            }
+            _ = unsafe backdropView.perform(sel)
         }
     }
 

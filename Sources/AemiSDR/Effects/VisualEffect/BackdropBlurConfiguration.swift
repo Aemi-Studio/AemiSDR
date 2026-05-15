@@ -90,11 +90,17 @@ public struct BackdropBlurConfiguration: Sendable, Equatable {
     // MARK: - Initialization
 
     /// Creates a configuration with the specified properties.
+    ///
+    /// Parameter order matches `BackdropBlurView.init(colorTint:colorTintAlpha:blurRadius:scale:)`
+    /// and `VisualEffectUIView.init(colorTint:colorTintAlpha:blurRadius:scale:)` —
+    /// tint+alpha first, then geometry. Keeps the tint pair adjacent so a
+    /// caller switching between `Color?` overloads can't transpose with
+    /// `blurRadius`.
     public init(
-        blurRadius: CGFloat = 0,
-        scale: CGFloat = 1,
         colorTint: Color? = nil,
         colorTintAlpha: CGFloat = 0,
+        blurRadius: CGFloat = 0,
+        scale: CGFloat = 1,
         saturationDeltaFactor: CGFloat = 0,
         grayscaleTintLevel: CGFloat = 0,
         grayscaleTintAlpha: CGFloat = 0,
@@ -142,12 +148,24 @@ public struct BackdropBlurConfiguration: Sendable, Equatable {
         /// - Parameter style: The blur effect style to match.
         /// - Returns: A configuration with values matching the system style.
         public static func systemStyle(_ style: UIBlurEffect.Style) -> BackdropBlurConfiguration {
+            guard let settingsClass = NSClassFromString(_InternedKeys.backdropViewSettingsClass) as? NSObject.Type else {
+                _PrivateAPIDiagnostics.logOnce(
+                    key: "backdropViewSettingsClass",
+                    "Private class `\(_InternedKeys.backdropViewSettingsClass)` not found; systemStyle presets degrade to .clear. The host iOS version may have renamed this class."
+                )
+                return .clear
+            }
+            let sel = Selector(_InternedKeys.settingsCreationSelector)
+            guard settingsClass.responds(to: sel) else {
+                _PrivateAPIDiagnostics.logOnce(
+                    key: "settingsCreationSelector",
+                    "Private selector `\(_InternedKeys.settingsCreationSelector)` not implemented by \(settingsClass); systemStyle presets degrade to .clear."
+                )
+                return .clear
+            }
             guard
-                let settingsClass = NSClassFromString(_InternedKeys.backdropViewSettingsClass) as? NSObject.Type,
-                let settings = unsafe settingsClass.perform(
-                    Selector(_InternedKeys.settingsCreationSelector),
-                    with: style.rawValue
-                )?.takeUnretainedValue() as? NSObject
+                let settings = unsafe settingsClass.perform(sel, with: style.rawValue)?
+                    .takeUnretainedValue() as? NSObject
             else {
                 return .clear
             }

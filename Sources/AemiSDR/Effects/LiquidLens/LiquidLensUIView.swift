@@ -52,8 +52,20 @@
         var onReadyForFirstCapture: (() -> Void)?
         private var didFireReady = false
 
+        /// Fires when the view's superview chain or trait collection has
+        /// changed, signalling that the `BackdropCaptureCoordinator`'s cached
+        /// content sibling / background color may be stale. Bound by
+        /// `_LiquidLensOverlay` to the coordinator's
+        /// `invalidateContentLookupCaches()`.
+        var onContentHierarchyChanged: (() -> Void)?
+
         override open class var layerClass: AnyClass { CAMetalLayer.self }
 
+        // Safe by construction: `layerClass` above returns `CAMetalLayer.self`,
+        // so `layer` is guaranteed to be a `CAMetalLayer`. A subclass that
+        // overrides `layerClass` would invalidate this — `open` permits
+        // subclassing, so a future maintainer adding a subclass must override
+        // both or accept the trap. The cost of `as?` per render is non-zero.
         private var metalLayer: CAMetalLayer { layer as! CAMetalLayer }
 
         // MARK: - Initialization
@@ -116,6 +128,13 @@
         ///     completion handler of every render driven by this texture. Used by
         ///     `ZeroCopyTextureBridge` to reclaim its slot once the GPU is done.
         public func setSourceTexture(_ texture: MTLTexture, onConsumed: (@Sendable () -> Void)? = nil) {
+            // If a previous capture's consumer is still pending (the prior texture
+            // was never GPU-rendered), fire it now to release that slot. Without
+            // this, two captures in quick succession lose the first consumer and
+            // the bridge slot is leaked.
+            if let stale = sourceTextureOnConsumed {
+                stale()
+            }
             sourceTexture = texture
             sourceTextureOnConsumed = onConsumed
             renderIfNeeded()
@@ -158,6 +177,7 @@
         override open func didMoveToWindow() {
             super.didMoveToWindow()
             guard window != nil else { return }
+            onContentHierarchyChanged?()
             metalLayer.contentsScale = displayScale
             metalLayer.drawableSize = CGSize(
                 width: bounds.width * displayScale,
@@ -165,6 +185,20 @@
             )
             renderIfNeeded()
             fireReadyIfPossible()
+        }
+
+        override open func didMoveToSuperview() {
+            super.didMoveToSuperview()
+            onContentHierarchyChanged?()
+        }
+
+        override open func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+            super.traitCollectionDidChange(previousTraitCollection)
+            // Background color resolution depends on traitCollection (dark/light).
+            // The coordinator caches the resolved CGColor; invalidate on change.
+            if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
+                onContentHierarchyChanged?()
+            }
         }
 
         private func fireReadyIfPossible() {
@@ -196,9 +230,23 @@
         // MARK: - Rendering
 
         private func renderIfNeeded() {
-            guard let renderer, let sourceTexture else { return }
-            guard metalLayer.drawableSize.width > 0, metalLayer.drawableSize.height > 0 else { return }
-            guard let drawable = metalLayer.nextDrawable() else { return }
+            // On every early-return path, fire and clear `sourceTextureOnConsumed`
+            // — the texture was never handed to the GPU, so the bridge slot
+            // wouldn't otherwise be reclaimed (it would stay in-flight forever).
+            // Without this, three thermally-throttled drops permanently exhaust
+            // the bridge's 3-slot ring.
+            guard let renderer, let sourceTexture else {
+                drainPendingConsumer()
+                return
+            }
+            guard metalLayer.drawableSize.width > 0, metalLayer.drawableSize.height > 0 else {
+                drainPendingConsumer()
+                return
+            }
+            guard let drawable = metalLayer.nextDrawable() else {
+                drainPendingConsumer()
+                return
+            }
 
             let textureSize = SIMD2<Float>(
                 Float(metalLayer.drawableSize.width),
@@ -224,6 +272,12 @@
                 drawable: drawable,
                 onCompleted: consumed
             )
+        }
+
+        private func drainPendingConsumer() {
+            guard let pending = sourceTextureOnConsumed else { return }
+            sourceTextureOnConsumed = nil
+            pending()
         }
     }
 #endif

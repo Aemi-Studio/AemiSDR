@@ -8,22 +8,20 @@
 
     extension View {
         /// Applies a full-surface liquid glass effect as a background.
+        ///
+        /// To override the chromatic amplifier, construct a `LiquidGlassConfiguration`
+        /// with a custom `chromaticAmount` and pass it in.
         @available(iOS 15.0, *)
         @ViewBuilder
         public func liquidBackground(
             _ configuration: LiquidGlassConfiguration = .regular,
-            chromaticIntensity: Float? = nil,
             shape: ShapePathProvider? = nil,
             cornerRadius: LiquidLensCornerRadius? = nil,
-            ignoreSafeArea: Bool = false
+            ignoreSafeArea: Bool = true
         ) -> some View {
-            let resolvedConfiguration = resolvedLiquidConfiguration(
-                configuration,
-                chromaticIntensity: chromaticIntensity
-            )
             background {
                 LiquidGlassView(
-                    configuration: resolvedConfiguration,
+                    configuration: configuration,
                     clipShapePath: shape,
                     cornerRadius: cornerRadius
                 )
@@ -36,20 +34,15 @@
         @ViewBuilder
         public func liquidBackground<S: Shape>(
             _ configuration: LiquidGlassConfiguration = .regular,
-            chromaticIntensity: Float? = nil,
             shape: S,
             cornerRadius: LiquidLensCornerRadius? = nil,
-            ignoreSafeArea: Bool = false
+            ignoreSafeArea: Bool = true
         ) -> some View {
-            let resolvedConfiguration = resolvedLiquidConfiguration(
-                configuration,
-                chromaticIntensity: chromaticIntensity
-            )
             let resolvedCornerRadius = cornerRadius
                 ?? LiquidShapeCornerRadiusResolver.inferCornerRadius(from: shape)
 
             liquidBackground(
-                resolvedConfiguration,
+                configuration,
                 shape: { rect in shape.path(in: rect).cgPath },
                 cornerRadius: resolvedCornerRadius,
                 ignoreSafeArea: ignoreSafeArea
@@ -61,18 +54,13 @@
         @ViewBuilder
         public func liquidOverlay(
             _ configuration: LiquidGlassConfiguration = .regular,
-            chromaticIntensity: Float? = nil,
             shape: ShapePathProvider? = nil,
             cornerRadius: LiquidLensCornerRadius? = nil,
-            ignoreSafeArea: Bool = false
+            ignoreSafeArea: Bool = true
         ) -> some View {
-            let resolvedConfiguration = resolvedLiquidConfiguration(
-                configuration,
-                chromaticIntensity: chromaticIntensity
-            )
             overlay {
                 LiquidGlassView(
-                    configuration: resolvedConfiguration,
+                    configuration: configuration,
                     clipShapePath: shape,
                     cornerRadius: cornerRadius
                 )
@@ -85,34 +73,19 @@
         @ViewBuilder
         public func liquidOverlay<S: Shape>(
             _ configuration: LiquidGlassConfiguration = .regular,
-            chromaticIntensity: Float? = nil,
             shape: S,
             cornerRadius: LiquidLensCornerRadius? = nil,
-            ignoreSafeArea: Bool = false
+            ignoreSafeArea: Bool = true
         ) -> some View {
-            let resolvedConfiguration = resolvedLiquidConfiguration(
-                configuration,
-                chromaticIntensity: chromaticIntensity
-            )
             let resolvedCornerRadius = cornerRadius
                 ?? LiquidShapeCornerRadiusResolver.inferCornerRadius(from: shape)
 
             liquidOverlay(
-                resolvedConfiguration,
+                configuration,
                 shape: { rect in shape.path(in: rect).cgPath },
                 cornerRadius: resolvedCornerRadius,
                 ignoreSafeArea: ignoreSafeArea
             )
-        }
-
-        private func resolvedLiquidConfiguration(
-            _ configuration: LiquidGlassConfiguration,
-            chromaticIntensity: Float?
-        ) -> LiquidGlassConfiguration {
-            guard let chromaticIntensity else { return configuration }
-            var resolved = configuration
-            resolved.chromaticAmount = chromaticIntensity
-            return resolved
         }
     }
 #endif

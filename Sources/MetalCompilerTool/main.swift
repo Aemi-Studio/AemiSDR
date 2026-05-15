@@ -204,6 +204,22 @@ func parseArguments() throws -> (
     let macosMinVersion = getArg("--macos-min-version") ?? "11.0"
     let mode = resolveCompilationMode(inputPath: inputPath, explicitMode: getArg("--mode"))
 
+    // Defense in depth: if `--allowed-root <path>` is passed, refuse to write
+    // any output outside that root. SwiftPM's plugin sandbox already enforces
+    // similar boundaries, but a path-confined tool is robust against
+    // out-of-plugin invocations where the sandbox profile may differ.
+    if let allowedRoot = getArg("--allowed-root") {
+        let root = (allowedRoot as NSString).standardizingPath
+        for path in [iosOutput, macosOutput] {
+            let standardized = (path as NSString).standardizingPath
+            if !standardized.hasPrefix(root) {
+                throw CompilerError.missingArgument(
+                    "output path '\(standardized)' is outside --allowed-root '\(root)'"
+                )
+            }
+        }
+    }
+
     return (inputPath, iosOutput, macosOutput, iosMinVersion, macosMinVersion, mode)
 }
 

@@ -42,11 +42,36 @@
         /// Whether the effect continuously recaptures backdrop content.
         public var continuousCapture: Bool
 
-        /// Capture refresh rate in frames per second.
-        public var refreshRate: Int
+        /// Capture refresh rate in frames per second. Clamped to `1...120` on
+        /// assignment; getter returns the clamped value, so two configurations
+        /// that render at the same rate hash as equal.
+        public var refreshRate: Int {
+            didSet {
+                let clamped = max(1, min(refreshRate, 120))
+                if refreshRate != clamped { refreshRate = clamped }
+            }
+        }
 
-        /// Capture scale factor (quality/performance tradeoff).
-        public var captureScale: CGFloat
+        /// Capture scale factor (quality/performance tradeoff). Clamped to
+        /// `0.25...3.0` on assignment.
+        public var captureScale: CGFloat {
+            didSet {
+                let clamped = max(0.25, min(captureScale, 3.0))
+                if captureScale != clamped { captureScale = clamped }
+            }
+        }
+
+        /// When `true`, the backdrop is recaptured on every display-link tick
+        /// regardless of the cheap content-change signature. Set this to `true`
+        /// when the backdrop contains animated content (e.g. a `Text` counter
+        /// or `AVPlayerLayer`) whose pixels change without restructuring the
+        /// view tree — otherwise the signature optimisation can freeze the
+        /// lens on the first frame's content.
+        ///
+        /// Default `false`: skip drawHierarchy when the captured view's
+        /// `bounds`/subview-count/sublayer-count/contents pointer are
+        /// unchanged. This is the common-case speedup.
+        public var forceCaptureEveryFrame: Bool
 
         public init(
             strength: Float = 1.0,
@@ -59,7 +84,8 @@
             material: LiquidLensMaterial = .water,
             continuousCapture: Bool = true,
             refreshRate: Int = 120,
-            captureScale: CGFloat = 0.85
+            captureScale: CGFloat = 0.85,
+            forceCaptureEveryFrame: Bool = false
         ) {
             self.strength = strength
             self.lensCurvature = lensCurvature
@@ -70,8 +96,11 @@
             self.chromaticAmount = chromaticAmount
             self.material = material
             self.continuousCapture = continuousCapture
-            self.refreshRate = refreshRate
-            self.captureScale = captureScale
+            // didSet doesn't fire from init; clamp explicitly so the stored
+            // value matches the post-assignment invariant.
+            self.refreshRate = max(1, min(refreshRate, 120))
+            self.captureScale = max(0.25, min(captureScale, 3.0))
+            self.forceCaptureEveryFrame = forceCaptureEveryFrame
         }
     }
 
@@ -103,9 +132,10 @@
         internal func lensConfiguration(
             center: SIMD2<Float>,
             halfSize: SIMD2<Float>,
-            cornerRadiusOverride: LiquidLensCornerRadius?
+            cornerRadiusOverride: LiquidLensCornerRadius?,
+            overlayMode: Bool = false
         ) -> LiquidLensConfiguration {
-            LiquidLensConfiguration(
+            var configuration = LiquidLensConfiguration(
                 center: center,
                 halfSize: halfSize,
                 strength: strength,
@@ -117,8 +147,14 @@
                 chromaticAmount: chromaticAmount,
                 material: material
             )
+            configuration.overlayMode = overlayMode
+            return configuration
         }
 
+        // Retained for source compatibility with the older split helpers; the
+        // unified `lensConfiguration(..., overlayMode:)` is now the canonical
+        // entry point.
+        @available(*, deprecated, renamed: "lensConfiguration(center:halfSize:cornerRadiusOverride:overlayMode:)")
         @usableFromInline
         internal func overlayLensConfiguration(
             center: SIMD2<Float>,
@@ -134,14 +170,5 @@
             return configuration
         }
 
-        @usableFromInline
-        internal var clampedRefreshRate: Int {
-            max(1, min(refreshRate, 120))
-        }
-
-        @usableFromInline
-        internal var clampedCaptureScale: CGFloat {
-            max(0.25, min(captureScale, 3.0))
-        }
     }
 #endif

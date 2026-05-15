@@ -60,6 +60,10 @@ extension MetalShaderBuildPlugin {
                 "--macos-output", macosOutputURL.path(percentEncoded: false),
                 "--ios-min-version", "14.0",
                 "--macos-min-version", "11.0",
+                // Defense in depth — tool rejects outputs that don't live
+                // under this root, in case the SwiftPM plugin sandbox is
+                // ever loosened in a future invocation context.
+                "--allowed-root", workDirectory.path(percentEncoded: false),
             ],
             inputFiles: [inputURL],
             outputFiles: [iosOutputURL, macosOutputURL]
