@@ -82,13 +82,18 @@
             }
 
             metalLayer.device = device
-            // 10-bit per channel, sRGB transfer, P3 color space: preserves
-            // wide-gamut backdrop content (P3 photos, vivid UI tints) instead
-            // of clamping to sRGB and desaturating. The drawable still presents
-            // through sRGB gamma so the rest of the system composites it
-            // correctly.
-            metalLayer.pixelFormat = .bgra10_xr_srgb
-            metalLayer.colorspace = CGColorSpace(name: CGColorSpace.displayP3)
+            // Pixel format selection — see also `LiquidLensRenderer.pipelinePixelFormat`.
+            // On real iOS devices (A14+/M-series): 10-bit extended-range sRGB +
+            //   Display P3 colorspace preserves wide-gamut backdrop content.
+            // On the iOS simulator: `bgra10_xr_srgb` reports "not blendable" at
+            //   pipeline-state validation time. Fall back to `bgra8Unorm_srgb`
+            //   (8-bit sRGB, blendable everywhere) and skip the P3 tag.
+            #if targetEnvironment(simulator)
+                metalLayer.pixelFormat = .bgra8Unorm_srgb
+            #else
+                metalLayer.pixelFormat = .bgra10_xr_srgb
+                metalLayer.colorspace = CGColorSpace(name: CGColorSpace.displayP3)
+            #endif
             metalLayer.isOpaque = false
             metalLayer.framebufferOnly = true
 

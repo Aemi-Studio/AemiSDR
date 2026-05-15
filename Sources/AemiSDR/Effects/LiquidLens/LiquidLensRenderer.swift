@@ -371,8 +371,13 @@
             let descriptor = MTLRenderPipelineDescriptor()
             descriptor.vertexFunction = vertexFunction
             descriptor.fragmentFunction = fragmentFunction
-            // Must match `metalLayer.pixelFormat` in `LiquidLensUIView`.
-            descriptor.colorAttachments[0].pixelFormat = .bgra10_xr_srgb
+            // Must match `metalLayer.pixelFormat` in `LiquidLensUIView`. See
+            // that file for the simulator vs device rationale.
+            #if targetEnvironment(simulator)
+                descriptor.colorAttachments[0].pixelFormat = .bgra8Unorm_srgb
+            #else
+                descriptor.colorAttachments[0].pixelFormat = .bgra10_xr_srgb
+            #endif
             descriptor.colorAttachments[0].isBlendingEnabled = true
             descriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
             descriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
