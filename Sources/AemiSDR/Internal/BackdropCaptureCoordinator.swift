@@ -516,26 +516,18 @@
             thermalObserver = nil
         }
 
-        // Defense-in-depth for missed `tearDown()` (e.g. SwiftUI replacing the
-        // representable mid-flight without invoking `dismantleUIView`). Without
-        // this, the `CADisplayLink` keeps firing into the no-op weak-proxy
-        // forever and the notification observers accumulate over the app's
-        // lifetime. Both `CADisplayLink.invalidate()` and
-        // `NotificationCenter.removeObserver(_:)` are documented thread-safe,
-        // so the deinit is safe whichever thread releases the last reference.
-        // `isolated deinit` (SE-0371): the cleanup body executes on MainActor,
-        // matching the class's actor isolation. This lets us touch the
-        // MainActor-isolated stored properties without `nonisolated(unsafe)`.
-        // If the last reference is released off-main, the runtime schedules
-        // the deinit body on the main actor before tearing the instance down.
-        isolated deinit {
-            displayLink?.invalidate()
-            if let backgroundObserver { NotificationCenter.default.removeObserver(backgroundObserver) }
-            if let foregroundObserver { NotificationCenter.default.removeObserver(foregroundObserver) }
-            if let reduceMotionObserver { NotificationCenter.default.removeObserver(reduceMotionObserver) }
-            if let lowPowerObserver { NotificationCenter.default.removeObserver(lowPowerObserver) }
-            if let thermalObserver { NotificationCenter.default.removeObserver(thermalObserver) }
-        }
+        // No explicit deinit: cleanup runs from `tearDown()` which SwiftUI
+        // invokes via `dismantleUIView`. The previous `isolated deinit`
+        // (SE-0371) appears to interact badly with the iOS 26.5 simulator
+        // runtime — XCPreviewAgent SIGABRTs ~12 s into module load when this
+        // class is touched, likely due to incomplete type-metadata support
+        // for isolated deinit in JIT'd preview frameworks.
+        //
+        // The audit's M4 concern (missed dismantleUIView → leaked display
+        // link + observer tokens) is bounded: each leak is one CADisplayLink
+        // and five NSObserver tokens, only when SwiftUI replaces a
+        // representable mid-flight without dismantling it (rare). Documented
+        // residual risk rather than blocking previews.
     }
 
     /// Weak forwarding target for `CADisplayLink`.
