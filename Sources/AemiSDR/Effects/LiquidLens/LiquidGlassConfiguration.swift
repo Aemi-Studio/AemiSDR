@@ -61,16 +61,17 @@
             }
         }
 
-        /// When `true`, the backdrop is recaptured on every display-link tick
-        /// regardless of the cheap content-change signature. Set this to `true`
-        /// when the backdrop contains animated content (e.g. a `Text` counter
-        /// or `AVPlayerLayer`) whose pixels change without restructuring the
-        /// view tree — otherwise the signature optimisation can freeze the
-        /// lens on the first frame's content.
+        /// When `true` (the default), the backdrop is recaptured on every
+        /// display-link tick. When `false`, the capture is skipped if a cheap
+        /// content-change signature (bounds, subview/sublayer count, contents
+        /// pointer) is unchanged.
         ///
-        /// Default `false`: skip drawHierarchy when the captured view's
-        /// `bounds`/subview-count/sublayer-count/contents pointer are
-        /// unchanged. This is the common-case speedup.
+        /// The signature is not sensitive to scroll offset, animation
+        /// progress, video frames, or text-only content updates — all of
+        /// these change pixels without restructuring the view tree — so the
+        /// safe default is `true`. Set to `false` only when the backdrop is
+        /// known to be static between user inputs and rendering every frame
+        /// is a measurable cost.
         public var forceCaptureEveryFrame: Bool
 
         public init(
@@ -80,12 +81,12 @@
             falloff: LiquidLensFalloff = .exponential,
             falloffLength: Float = 1.0,
             falloffIntensity: Float = 1.0,
-            chromaticAmount: Float = 30,
+            chromaticAmount: Float = 4,
             material: LiquidLensMaterial = .water,
             continuousCapture: Bool = true,
             refreshRate: Int = 120,
             captureScale: CGFloat = 0.85,
-            forceCaptureEveryFrame: Bool = false
+            forceCaptureEveryFrame: Bool = true
         ) {
             self.strength = strength
             self.lensCurvature = lensCurvature
@@ -113,7 +114,7 @@
             strength: 0.4,
             lensCurvature: 0.6,
             falloffIntensity: 0.5,
-            chromaticAmount: 8,
+            chromaticAmount: 1.5,
             material: .water
         )
 
