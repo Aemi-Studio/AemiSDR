@@ -309,16 +309,20 @@
                 resolvedTint = nil
             }
             sourceOver?.setValue(resolvedTint, forKeyPath: _InternedKeys.colorKey)
-            _ = unsafe sourceOver?.perform(Selector(_InternedKeys.applyEffectSelector), with: overlayView)
+            applyEffectIfResponding(on: sourceOver)
+
+            // Set `backgroundColor` BEFORE `applyChanges()`. On iOS 26 the
+            // private effect tree consumes `overlayView.backgroundColor` as
+            // the tint input during its flush — setting it after the flush
+            // makes UIKit treat it as a raw subview background composited
+            // atop the blurred result, which visually appears far more opaque
+            // than the alpha value would suggest. An earlier audit suggested
+            // matching the `colorTint` property setter's post-flush ordering,
+            // but visual evidence on iOS 26 shows the pre-flush ordering is
+            // the one that produces correct translucent tints.
+            overlayView?.backgroundColor = resolvedTint
 
             applyChanges()
-
-            // Set `backgroundColor` AFTER `applyChanges()` to match the public
-            // `colorTint` property setter's ordering — without this, a
-            // configuration that flips tint state between renders could leave
-            // a one-frame stale tint while the private effect-tree flush
-            // races the layer-side backgroundColor change.
-            overlayView?.backgroundColor = resolvedTint
         }
     }
 
