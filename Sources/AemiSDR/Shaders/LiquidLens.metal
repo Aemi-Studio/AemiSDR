@@ -342,36 +342,41 @@ fragment half4 liquidLensFragment(
     float normalizedRadius = 1.0f - (distFromEdge / minHalf);
     normalizedRadius = clamp(normalizedRadius, 0.0f, 1.0f);
 
-    // Edge-concentrated effect: zero in the interior, ramping up to peak
-    // refraction at the boundary. This matches Apple's iOS 26 Liquid Glass
-    // where the centre of the panel shows content nearly intact and only
-    // the rim diffracts.
+    // Edge-concentrated effect with a soft interior baseline. The baseline
+    // ensures the lens body has subtle uniform refraction throughout so
+    // there's no abrupt boundary between a pass-through centre and the
+    // refracting rim. The curve-shaped boost rides on top of the baseline,
+    // peaking at the boundary. This matches Apple's iOS 26 Liquid Glass:
+    // the panel reads as glass everywhere with visibly stronger diffraction
+    // at the curved rim.
     //
-    //   falloffLength    = width of the active edge zone as a fraction of
-    //                       the lens radius. 1.0 = ramp spans the entire
-    //                       lens (default); 0.3 = only the outer 30 % is
-    //                       active, the inner 70 % is transparent.
+    //   falloffLength    = width of the active edge-boost zone as a
+    //                       fraction of the lens radius. 1.0 = boost ramps
+    //                       across the entire lens (default); 0.3 = only
+    //                       the outer 30 % carries the boost on top of
+    //                       the baseline.
     //   falloff curve    = shape of the 0→1 ramp within the active zone
-    //                       (exponential = central region almost fully
-    //                       intact, sharp peak at rim — closest to iOS 26).
-    //   falloffIntensity = overall [0, 1] multiplier on the peak intensity.
+    //                       (exponential = baseline dominates the interior
+    //                       and the boost concentrates sharply at the rim).
+    //   falloffIntensity = overall [0, 1] multiplier on the final
+    //                       intensity (both baseline and edge boost scale
+    //                       together so 0 disables the effect entirely).
     //
     // The previous "full in interior, fade at edge" model produced visible
     // seams down the medial axis of elongated shapes because adjacent
     // pixels straddling the SDF gradient discontinuity refracted strongly
-    // in opposite directions. Edge-concentrated peaks place the strong
-    // refraction where the gradient direction is locally consistent
-    // (perpendicular to the boundary), so neighbouring pixels sample
-    // similar offsets and seams disappear.
+    // in opposite directions. The edge-concentrated peak with baseline
+    // places strong refraction where the gradient direction is locally
+    // consistent (perpendicular to the boundary) and keeps the interior
+    // smoothly continuous with the rim.
+    const float kInteriorBaseline = 0.15f;
     float effectIntensity = 0.0f;
     if (clampedFalloffLength > 0.0f && clampedFalloffIntensity > 0.0f) {
         float activeStart = 1.0f - clampedFalloffLength;
-        if (normalizedRadius >= activeStart) {
-            float t = (normalizedRadius - activeStart) / clampedFalloffLength;
-            effectIntensity = applyFalloff(t, falloffCurve);
-        }
+        float t = clamp((normalizedRadius - activeStart) / clampedFalloffLength, 0.0f, 1.0f);
+        float edgePeak = applyFalloff(t, falloffCurve);
+        effectIntensity = mix(kInteriorBaseline, 1.0f, edgePeak) * clampedFalloffIntensity;
     }
-    effectIntensity *= clampedFalloffIntensity;
 
     // Anti-alias at the SDF boundary (1.5 px soft edge) — prevents the
     // peak refraction at the outermost pixel from sampling outside the
