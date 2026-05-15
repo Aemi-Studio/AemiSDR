@@ -160,12 +160,11 @@ import SwiftUI
                     cornerRadius: .points(Float(headerCornerRadius))
                 )
                 .clipShape(RoundedRectangle(cornerRadius: headerCornerRadius, style: .continuous))
-//                .overlay {
-//                    RoundedRectangle(cornerRadius: headerCornerRadius, style: .continuous)
-//                        .fill(.clear)
-//                        .strokeBorder(.ultraThinMaterial, lineWidth: 0.5)
-//                }
-                .shadow(radius: 10, y: 4)
+                .overlay {
+                    RoundedRectangle(cornerRadius: headerCornerRadius, style: .continuous)
+                        .strokeBorder(.white.opacity(0.35), lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.18), radius: 24, y: 10)
         }
 
         private var headerContent: some View {
@@ -253,6 +252,11 @@ import SwiftUI
             .background { headerBlurLayer }
             .liquidBackground(liquidConfig, shape: Capsule())
             .clipShape(Capsule())
+            .overlay {
+                Capsule()
+                    .strokeBorder(.white.opacity(0.35), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.18), radius: 24, y: 10)
         }
 
         // MARK: - Settings Sheet
