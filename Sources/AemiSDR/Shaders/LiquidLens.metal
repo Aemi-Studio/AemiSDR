@@ -342,21 +342,40 @@ fragment half4 liquidLensFragment(
     float normalizedRadius = 1.0f - (distFromEdge / minHalf);
     normalizedRadius = clamp(normalizedRadius, 0.0f, 1.0f);
 
-    // Edge fade: full effect in the interior, smoothly fading near the boundary.
-    // falloffLength  = fraction of the shape radius devoted to the fade zone.
-    // falloffIntensity = blend between uniform (1.0) and faded edge.
-    float effectIntensity = 1.0f;
-    if (clampedFalloffIntensity > 0.0f) {
-        float fadeStart = 1.0f - clampedFalloffLength;
-        if (normalizedRadius > fadeStart) {
-            float fadeT = (normalizedRadius - fadeStart) / clampedFalloffLength;
-            fadeT = clamp(fadeT, 0.0f, 1.0f);
-            float faded = 1.0f - applyFalloff(fadeT, falloffCurve);
-            effectIntensity = mix(1.0f, faded, clampedFalloffIntensity);
+    // Edge-concentrated effect: zero in the interior, ramping up to peak
+    // refraction at the boundary. This matches Apple's iOS 26 Liquid Glass
+    // where the centre of the panel shows content nearly intact and only
+    // the rim diffracts.
+    //
+    //   falloffLength    = width of the active edge zone as a fraction of
+    //                       the lens radius. 1.0 = ramp spans the entire
+    //                       lens (default); 0.3 = only the outer 30 % is
+    //                       active, the inner 70 % is transparent.
+    //   falloff curve    = shape of the 0→1 ramp within the active zone
+    //                       (exponential = central region almost fully
+    //                       intact, sharp peak at rim — closest to iOS 26).
+    //   falloffIntensity = overall [0, 1] multiplier on the peak intensity.
+    //
+    // The previous "full in interior, fade at edge" model produced visible
+    // seams down the medial axis of elongated shapes because adjacent
+    // pixels straddling the SDF gradient discontinuity refracted strongly
+    // in opposite directions. Edge-concentrated peaks place the strong
+    // refraction where the gradient direction is locally consistent
+    // (perpendicular to the boundary), so neighbouring pixels sample
+    // similar offsets and seams disappear.
+    float effectIntensity = 0.0f;
+    if (clampedFalloffLength > 0.0f && clampedFalloffIntensity > 0.0f) {
+        float activeStart = 1.0f - clampedFalloffLength;
+        if (normalizedRadius >= activeStart) {
+            float t = (normalizedRadius - activeStart) / clampedFalloffLength;
+            effectIntensity = applyFalloff(t, falloffCurve);
         }
     }
+    effectIntensity *= clampedFalloffIntensity;
 
-    // Anti-alias at the SDF boundary (1.5 px soft edge)
+    // Anti-alias at the SDF boundary (1.5 px soft edge) — prevents the
+    // peak refraction at the outermost pixel from sampling outside the
+    // lens shape.
     effectIntensity *= clamp(-dOuter, 0.0f, 1.5f) / 1.5f;
 
     if (effectIntensity < 0.0001f) {
