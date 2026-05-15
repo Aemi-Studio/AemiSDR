@@ -105,10 +105,10 @@ import SwiftUI
 
         private var backdropConfig: BackdropBlurConfiguration {
             BackdropBlurConfiguration(
-                blurRadius: bdBlurRadius,
-                scale: bdScale,
                 colorTint: bdColorTint,
                 colorTintAlpha: bdColorTintAlpha,
+                blurRadius: bdBlurRadius,
+                scale: bdScale,
                 saturationDeltaFactor: bdSaturation
             )
         }

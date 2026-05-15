@@ -66,9 +66,9 @@ struct VisualEffectDemo: View {
     private var configuration: BackdropBlurConfiguration {
         if customMode {
             BackdropBlurConfiguration(
-                blurRadius: blurRadius,
                 colorTint: tintColor.color,
                 colorTintAlpha: tintColor == .none ? 0 : colorTintAlpha,
+                blurRadius: blurRadius,
                 saturationDeltaFactor: saturationDeltaFactor
             )
         } else {
