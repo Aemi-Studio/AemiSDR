@@ -48,16 +48,16 @@ import SwiftUI
         // MARK: - Liquid Glass State
 
         @State private var preset: Preset = .regular
-        @State private var strength: Double = 1.0
+        @State private var strength: Double = 0.5
         @State private var lensCurvature: Double = 1.0
-        @State private var chromaticAmount: Double = 30
-        @State private var material: LiquidLensMaterial = .water
+        @State private var chromaticAmount: Double = 15
+        @State private var material: LiquidLensMaterial = .acrylic
         @State private var falloff: LiquidLensFalloff = .exponential
         @State private var falloffLength: Double = 1.0
         @State private var falloffIntensity: Double = 1.0
         @State private var continuousCapture = true
-        @State private var refreshRate: Double = 120
-        @State private var captureScale: Double = 0.85
+        @State private var refreshRate: Double = 40
+        @State private var captureScale: Double = 0.5
         @State private var headerCornerRadius: Double = 16
 
         // MARK: - Header Blur State
