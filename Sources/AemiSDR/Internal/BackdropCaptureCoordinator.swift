@@ -4,7 +4,6 @@
 //
 
 #if os(iOS)
-    import OSLog
     import QuartzCore
     import UIKit
 
@@ -23,11 +22,6 @@
     /// to their specific rendering pipeline.
     @MainActor
     class BackdropCaptureCoordinator {
-        nonisolated private static let logger = Logger(
-            subsystem: "studio.aemi.AemiSDR",
-            category: "BackdropCapture"
-        )
-
         /// The effect view this coordinator manages capture for.
         /// Set by the owning `UIViewRepresentable`.
         weak var effectView: UIView?
@@ -299,15 +293,8 @@
         /// overlay/background container and capture it directly via `drawHierarchy`.
         @available(iOS 26, *)
         private func performContentSiblingCapture() {
-            guard let effectView else {
-                Self.logger.debug("performContentSiblingCapture: effectView is nil")
-                return
-            }
-            guard let contentView = cachedOrResolvedContentSibling(for: effectView) else {
-                Self.logger.error("performContentSiblingCapture: findContentSibling returned nil — capture will be blank")
-                return
-            }
-            Self.logger.debug("Capturing into \(type(of: contentView)) (\(contentView.bounds.debugDescription))")
+            guard let effectView else { return }
+            guard let contentView = cachedOrResolvedContentSibling(for: effectView) else { return }
 
             let screenScale = effectView.displayScale
             let scale = screenScale * captureScale
@@ -333,10 +320,7 @@
             }
 
             ensureBridge(width: pixelWidth, height: pixelHeight)
-            guard let bridge, let consumerID = bridgeConsumerID else {
-                Self.logger.error("performContentSiblingCapture: bridge or consumerID nil (device unavailable?)")
-                return
-            }
+            guard let bridge, let consumerID = bridgeConsumerID else { return }
 
             let bgColor = cachedOrResolvedBackgroundColor(for: contentView)
 
@@ -362,8 +346,6 @@
             }
             if let captured {
                 processTexture(captured)
-            } else {
-                Self.logger.error("bridge.render returned nil — all slots in-flight or device failure")
             }
         }
 
