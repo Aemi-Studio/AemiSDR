@@ -38,6 +38,8 @@
         private var configuredStartOffset: CGFloat
         private var configuredCornerRadius: CGFloat
         private var configuredFadeWidth: CGFloat
+        private var configuredInverted: Bool
+        private var configuredScale: CGFloat
         private var variableBlurFilter: NSObject?
 
         private var currentScale: CGFloat { displayScale }
@@ -57,13 +59,17 @@
             maskType: MaskType = .linearTopToBottom,
             startOffset: CGFloat = 0,
             cornerRadius: CGFloat = UIScreen.displayCornerRadius,
-            fadeWidth: CGFloat = 16
+            fadeWidth: CGFloat = 16,
+            inverted: Bool = false,
+            scale: CGFloat = 1
         ) {
             configuredMaxBlurRadius = maxBlurRadius
             configuredMaskType = maskType
             configuredStartOffset = startOffset
             configuredCornerRadius = cornerRadius
             configuredFadeWidth = fadeWidth
+            configuredInverted = inverted
+            configuredScale = scale
 
             super.init(effect: UIBlurEffect(style: .regular))
             isUserInteractionEnabled = false
@@ -93,14 +99,19 @@
             maskType: MaskType,
             startOffset: CGFloat,
             cornerRadius: CGFloat,
-            fadeWidth: CGFloat
+            fadeWidth: CGFloat,
+            inverted: Bool,
+            scale: CGFloat
         ) {
+            let scaleChanged = configuredScale != scale
             let needsUpdate =
                 configuredMaxBlurRadius != maxBlurRadius
                 || configuredMaskType != maskType
                 || configuredStartOffset != startOffset
                 || configuredCornerRadius != cornerRadius
                 || configuredFadeWidth != fadeWidth
+                || configuredInverted != inverted
+                || scaleChanged
 
             if needsUpdate {
                 configuredMaxBlurRadius = maxBlurRadius
@@ -108,6 +119,14 @@
                 configuredStartOffset = startOffset
                 configuredCornerRadius = cornerRadius
                 configuredFadeWidth = fadeWidth
+                configuredInverted = inverted
+                configuredScale = scale
+                // Push the capture scale immediately when it changes;
+                // otherwise it sticks on whatever was set in
+                // `didMoveToWindow` until the layer next reattaches.
+                if scaleChanged, let backdropLayer = subviews.first?.layer {
+                    backdropLayer.setValue(scale, forKey: _InternedKeys.scaleFactorKey)
+                }
                 updateMask(for: bounds.size)
             }
         }
@@ -115,8 +134,14 @@
         // MARK: - UIView Lifecycle
 
         override public func didMoveToWindow() {
-            guard let window, let backdropLayer = subviews.first?.layer else { return }
-            backdropLayer.setValue(window.screen.scale, forKey: _InternedKeys.scaleFactorKey)
+            guard window != nil, let backdropLayer = subviews.first?.layer else { return }
+            // Honour the caller-configured capture scale instead of
+            // implicitly tracking the host window's screen scale. The
+            // default value (1.0) matches `BackdropBlurView`; callers
+            // who want device-native sampling pass
+            // `UIScreen.main.scale` (or the live environment scale)
+            // explicitly through `scale:`.
+            backdropLayer.setValue(configuredScale, forKey: _InternedKeys.scaleFactorKey)
             updateMask(for: bounds.size)
         }
 
@@ -205,7 +230,7 @@
                 startOffset: configuredStartOffset,
                 cornerRadius: configuredCornerRadius,
                 fadeWidth: configuredFadeWidth,
-                inverted: false
+                inverted: configuredInverted
             )
 
             guard let gradientImage = MaskCache.image(for: key, generate: {
@@ -224,7 +249,8 @@
             let extent = CGRect(x: 0, y: 0, width: scaledWidth, height: scaledHeight)
             let descriptor = configuredMaskType.kernelDescriptor(
                 size: size, scale: scale, startOffset: configuredStartOffset,
-                cornerRadius: configuredCornerRadius, fadeWidth: configuredFadeWidth, inverted: false
+                cornerRadius: configuredCornerRadius, fadeWidth: configuredFadeWidth,
+                inverted: configuredInverted
             )
             return CIKernelCache.generateCGImage(
                 kernel: descriptor.kernel,

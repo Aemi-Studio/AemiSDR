@@ -509,6 +509,116 @@ extern "C" { namespace coreimage {
     }
 
     // --------------------------------------------------------------
+    // MARK: Linear horizontal mask (left<->right)
+    // --------------------------------------------------------------
+    /**
+     * Creates a linear gradient mask along the horizontal axis. Mirror of
+     * `linearMask` for X — the inverted flag flips left/right instead of
+     * top/bottom. Useful for fading content at the scroll edges of a
+     * horizontally-scrolling row or for directional reveal effects.
+     *
+     * @param widthPx Width of the output image in pixels
+     * @param heightPx Height of the output image in pixels (unused by math, required by the kernel signature for output extent)
+     * @param startOffset Starting position as fraction of width [-1.0, 1.0]
+     * @param inverted Direction flag: 0 = left-to-right, 1 = right-to-left
+     * @param dest Core Image destination providing current pixel coordinates
+     * @return RGBA grayscale mask
+     */
+    float4 linearMaskHorizontal(float widthPx,
+                                float heightPx,
+                                float startOffset,
+                                float inverted,
+                                coreimage::destination dest)
+    {
+        float x = dest.coord().x;
+        float w = max(widthPx, 1.0f);
+        float x0 = clamp(startOffset, -1.0f, 1.0f) * w;
+        float effective_w = max(w - abs(x0), 1.0f);
+
+        float alpha;
+        if (inverted > 0.5f) {
+            float x_from_right = w - x;
+            alpha = clamp((x_from_right - x0) / effective_w, 0.0f, 1.0f);
+        } else {
+            alpha = clamp((x - x0) / effective_w, 0.0f, 1.0f);
+        }
+
+        return float4(alpha);
+    }
+
+    // --------------------------------------------------------------
+    // MARK: Ease-in horizontal mask with optional inversion
+    // --------------------------------------------------------------
+    /**
+     * Quadratic ease-in gradient along the X-axis. Mirror of
+     * `easeInAlphaMask` for the horizontal direction.
+     *
+     * @param widthPx Width in pixels
+     * @param heightPx Height in pixels (unused)
+     * @param startOffset Start position as fraction [0.0, 1.0]
+     * @param direction 0 = left-to-right, 1 = right-to-left
+     * @param inverted 0 = normal, 1 = inverted gradient
+     * @param dest Pixel coordinates
+     * @return half4 mask
+     */
+    half4 easeInAlphaMaskHorizontal(float widthPx,
+                                    float heightPx,
+                                    float startOffset,
+                                    float direction,
+                                    float inverted,
+                                    coreimage::destination dest)
+    {
+        float w     = max(widthPx, 1.0f);
+        float xNorm = dest.coord().x / w;
+
+        if (direction > 0.5f) xNorm = 1.0f - xNorm;
+
+        float s = clamp(startOffset, 0.0f, 0.999f);
+        float t = clamp((xNorm - s) / (1.0f - s), 0.0f, 1.0f);
+        float eased = t * t;
+
+        half a = half(eased);
+        if (inverted > 0.5f) a = half(1.0f) - a;
+
+        return half4(a, a, a, a);
+    }
+
+    // --------------------------------------------------------------
+    // MARK: Center horizontal mask with quadratic ease
+    // --------------------------------------------------------------
+    /**
+     * Horizontal-axis center gradient: peaks at the X centre and fades
+     * to zero at both left and right edges. Mirror of `easeInCenterMask`
+     * for the horizontal direction.
+     *
+     * @param widthPx Width in pixels
+     * @param heightPx Height in pixels (unused)
+     * @param startOffset Fraction of the half-width that remains flat before the gradient begins
+     * @param inverted 0 = centre blurred / edges clear, 1 = centre clear / edges blurred
+     * @param dest Pixel coordinates
+     * @return half4 mask
+     */
+    half4 easeInCenterMaskHorizontal(float widthPx,
+                                     float heightPx,
+                                     float startOffset,
+                                     float inverted,
+                                     coreimage::destination dest)
+    {
+        float w     = max(widthPx, 1.0f);
+        float xNorm = dest.coord().x / w;
+
+        float proximity = 1.0f - abs(2.0f * xNorm - 1.0f);
+
+        float s = clamp(startOffset, 0.0f, 0.999f);
+        float t = clamp((proximity - s) / (1.0f - s), 0.0f, 1.0f);
+        float eased = t * t;
+
+        half a = half(eased);
+        if (inverted > 0.5f) a = half(1.0f) - a;
+        return half4(a, a, a, a);
+    }
+
+    // --------------------------------------------------------------
     // MARK: Superellipse with quadratic ease and optional inversion
     // --------------------------------------------------------------
     /**
