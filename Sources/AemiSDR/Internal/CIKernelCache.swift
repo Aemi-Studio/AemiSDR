@@ -211,4 +211,9 @@ extension CIKernelCache {
     // Uniform and center kernels
     static let uniformMask = loadKernel("uniformMask")
     static let easeInCenterMask = loadKernel("easeInCenterMask")
+
+    // Horizontal-axis mirrors of the vertical gradient kernels above.
+    static let linearMaskHorizontal = loadKernel("linearMaskHorizontal")
+    static let easeInAlphaMaskHorizontal = loadKernel("easeInAlphaMaskHorizontal")
+    static let easeInCenterMaskHorizontal = loadKernel("easeInCenterMaskHorizontal")
 }

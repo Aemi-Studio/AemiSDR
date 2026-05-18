@@ -30,7 +30,8 @@ import SwiftUI
             cornerRadius: CGFloat = UIScreen.displayCornerRadius,
             fadeWidth: CGFloat = 16,
             ignoreSafeArea: Bool = true,
-            transition: TransitionAlgorithm = .eased
+            transition: TransitionAlgorithm = .eased,
+            scale: CGFloat = 1
         ) -> some View {
             overlay {
                 VariableBlurView(
@@ -38,7 +39,8 @@ import SwiftUI
                     maxBlurRadius: maxBlurRadius,
                     cornerRadius: cornerRadius,
                     fadeWidth: fadeWidth,
-                    transition: transition
+                    transition: transition,
+                    scale: scale
                 )
                 .conditionalIgnoreSafeArea(ignoreSafeArea)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -58,12 +60,14 @@ import SwiftUI
         @available(iOS 15.0, *)
         @ViewBuilder public func uniformBlur(
             maxBlurRadius: CGFloat = 20,
-            ignoreSafeArea: Bool = true
+            ignoreSafeArea: Bool = true,
+            scale: CGFloat = 1
         ) -> some View {
             overlay {
                 VariableBlurView(
                     maxBlurRadius: maxBlurRadius,
-                    type: .uniform
+                    type: .uniform,
+                    scale: scale
                 )
                 .conditionalIgnoreSafeArea(ignoreSafeArea)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -88,20 +92,32 @@ import SwiftUI
             maxBlurRadius: CGFloat = 3,
             edges: VerticalEdge.Set = .all,
             transition: TransitionAlgorithm = .eased,
-            ignoreSafeArea: Bool = true
+            ignoreSafeArea: Bool = true,
+            scale: CGFloat = 1
         ) -> some View {
             let hasTop = edges.contains(.top)
             let hasBottom = edges.contains(.bottom)
             let needsSpacer = hasTop && hasBottom || height != .infinity
 
+            // Convention: Apple's variableBlur CAFilter reads the mask as
+            // luminance-drives-blur — white pixels (alpha=1) receive
+            // maximum blur, black pixels (alpha=0) are left crisp. So a
+            // top band needs alpha=1 *at* the top edge fading to 0 going
+            // inward; the gradient that produces that profile is the
+            // "Bottom-to-Top" mask (peaks at the top, troughs at the
+            // bottom of the band). The trailing band is symmetric. This
+            // is the inverse of what the case names superficially imply —
+            // the names describe the *gradient direction*, not which side
+            // ends up blurred.
             overlay {
                 VStack(spacing: 0) {
                     if hasTop {
                         let topType: MaskType =
-                            transition == .linear ? .linearTopToBottom : .easeInTopToBottom
+                            transition == .linear ? .linearBottomToTop : .easeInBottomToTop
                         VariableBlurView(
                             maxBlurRadius: maxBlurRadius,
-                            type: topType
+                            type: topType,
+                            scale: scale
                         )
                         .frame(height: height == .infinity ? nil : height)
                         .frame(maxHeight: height == .infinity ? .infinity : nil)
@@ -111,13 +127,13 @@ import SwiftUI
                         Spacer()
                     }
 
-                    // Bottom edge blur
                     if hasBottom {
                         let bottomType: MaskType =
-                            transition == .linear ? .linearBottomToTop : .easeInBottomToTop
+                            transition == .linear ? .linearTopToBottom : .easeInTopToBottom
                         VariableBlurView(
                             maxBlurRadius: maxBlurRadius,
-                            type: bottomType
+                            type: bottomType,
+                            scale: scale
                         )
                         .frame(height: height == .infinity ? nil : height)
                         .frame(maxHeight: height == .infinity ? .infinity : nil)
@@ -127,34 +143,166 @@ import SwiftUI
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        /// Applies a variable blur effect strongest at the vertical center, fading to clear at edges.
+        /// Spotlight-style variable blur: the vertical centre stays crisp
+        /// and both top and bottom edges receive maximum blur, with a
+        /// quadratic ease fading the blur inward toward the centre row.
         ///
-        /// This is the inverse of `verticalEdgeBlur`: the center of the view receives
-        /// maximum blur while both top and bottom edges remain sharp.
+        /// Visually the inverse of "blur peaked at centre" — the centre
+        /// is the focus region and the blur surrounds it. Pair with
+        /// `verticalEdgeBlur(edges: .all)` if you want sharper, more
+        /// linear edge falloff instead of a smooth inward fade.
         ///
         /// - Parameters:
-        ///   - height: Height of the blurred center region in points (.infinity for full height, default: .infinity)
+        ///   - height: Height of the spotlight band in points (.infinity
+        ///     for full height, default: .infinity)
         ///   - maxBlurRadius: Maximum blur radius in points (default: 3)
-        ///   - ignoreSafeArea: Whether to ignore safe area for the blur effect (default: true)
-        /// - Returns: A view with center blur applied
+        ///   - ignoreSafeArea: Whether to ignore safe area for the blur
+        ///     effect (default: true)
+        /// - Returns: A view with the spotlight blur applied
         @available(iOS 15.0, *)
         @ViewBuilder public func verticalCenterBlur(
             height: CGFloat = .infinity,
             maxBlurRadius: CGFloat = 3,
-            ignoreSafeArea: Bool = true
+            ignoreSafeArea: Bool = true,
+            scale: CGFloat = 1
         ) -> some View {
             overlay {
                 VStack(spacing: 0) {
                     if height != .infinity { Spacer() }
 
+                    // `inverted: true` flips the centre-proximity field
+                    // so the mask peaks at the top/bottom edges (alpha=1
+                    // = max blur) and falls to zero at the centre row
+                    // (alpha=0 = crisp). Without the inversion the
+                    // pattern would be reversed (blur peaks at centre).
                     VariableBlurView(
                         maxBlurRadius: maxBlurRadius,
-                        type: .easeInCenterVertical
+                        type: .easeInCenterVertical,
+                        inverted: true,
+                        scale: scale
                     )
                     .frame(height: height == .infinity ? nil : height)
                     .frame(maxHeight: height == .infinity ? .infinity : nil)
 
                     if height != .infinity { Spacer() }
+                }
+                .conditionalIgnoreSafeArea(ignoreSafeArea)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+
+        /// Applies variable blur effects to the horizontal edges (leading
+        /// and trailing) of a view. Mirror of `verticalEdgeBlur` for the
+        /// X-axis — useful for fading content that scrolls past the edges
+        /// of a horizontally-scrolling row or for soft overflow indicators.
+        ///
+        /// - Parameters:
+        ///   - width: Width of each blur band in points (.infinity for full
+        ///     width, default: .infinity)
+        ///   - maxBlurRadius: Maximum blur radius in points (default: 3)
+        ///   - edges: Which horizontal edges to blur — combinable .leading
+        ///     and .trailing (default: .all)
+        ///   - transition: Transformation function — linear or eased
+        ///     (default: .eased)
+        ///   - ignoreSafeArea: Whether to ignore safe area for the blur
+        ///     effect (default: true)
+        @available(iOS 15.0, *)
+        @ViewBuilder public func horizontalEdgeBlur(
+            width: CGFloat = .infinity,
+            maxBlurRadius: CGFloat = 3,
+            edges: HorizontalEdge.Set = .all,
+            transition: TransitionAlgorithm = .eased,
+            ignoreSafeArea: Bool = true,
+            scale: CGFloat = 1
+        ) -> some View {
+            let hasLeading = edges.contains(.leading)
+            let hasTrailing = edges.contains(.trailing)
+            let needsSpacer = hasLeading && hasTrailing || width != .infinity
+
+            // Same mask-direction inversion as `verticalEdgeBlur`: white
+            // mask drives max blur, so the leading band's mask must peak
+            // at the leading edge and decay toward the inner side — that
+            // profile comes from the "Right-to-Left" gradient case
+            // (xNorm flipped so alpha=1 at the leading edge). The
+            // trailing band mirrors it. See the comment block in
+            // `verticalEdgeBlur` for the underlying CAFilter convention.
+            overlay {
+                HStack(spacing: 0) {
+                    if hasLeading {
+                        let leadingType: MaskType =
+                            transition == .linear ? .linearRightToLeft : .easeInRightToLeft
+                        VariableBlurView(
+                            maxBlurRadius: maxBlurRadius,
+                            type: leadingType,
+                            scale: scale
+                        )
+                        .frame(width: width == .infinity ? nil : width)
+                        .frame(maxWidth: width == .infinity ? .infinity : nil)
+                    }
+
+                    if needsSpacer {
+                        Spacer()
+                    }
+
+                    if hasTrailing {
+                        let trailingType: MaskType =
+                            transition == .linear ? .linearLeftToRight : .easeInLeftToRight
+                        VariableBlurView(
+                            maxBlurRadius: maxBlurRadius,
+                            type: trailingType,
+                            scale: scale
+                        )
+                        .frame(width: width == .infinity ? nil : width)
+                        .frame(maxWidth: width == .infinity ? .infinity : nil)
+                    }
+                }
+                .conditionalIgnoreSafeArea(ignoreSafeArea)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+
+        /// Spotlight-style variable blur: the horizontal centre stays
+        /// crisp and both leading and trailing edges receive maximum
+        /// blur, with a quadratic ease fading the blur inward toward
+        /// the centre column. Mirror of `verticalCenterBlur` for the
+        /// X-axis.
+        ///
+        /// Visually the inverse of "blur peaked at centre" — the centre
+        /// is the focus region and the blur surrounds it. Useful for
+        /// fading overflow on a horizontally-scrolling row while keeping
+        /// the on-screen item in focus.
+        ///
+        /// - Parameters:
+        ///   - width: Width of the spotlight band in points (.infinity
+        ///     for full width, default: .infinity)
+        ///   - maxBlurRadius: Maximum blur radius in points (default: 3)
+        ///   - ignoreSafeArea: Whether to ignore safe area for the blur
+        ///     effect (default: true)
+        @available(iOS 15.0, *)
+        @ViewBuilder public func horizontalCenterBlur(
+            width: CGFloat = .infinity,
+            maxBlurRadius: CGFloat = 3,
+            ignoreSafeArea: Bool = true,
+            scale: CGFloat = 1
+        ) -> some View {
+            overlay {
+                HStack(spacing: 0) {
+                    if width != .infinity { Spacer() }
+
+                    // See `verticalCenterBlur` for the `inverted: true`
+                    // rationale — same flip on the X-axis: blur peaks at
+                    // the leading and trailing edges, centre column stays
+                    // crisp.
+                    VariableBlurView(
+                        maxBlurRadius: maxBlurRadius,
+                        type: .easeInCenterHorizontal,
+                        inverted: true,
+                        scale: scale
+                    )
+                    .frame(width: width == .infinity ? nil : width)
+                    .frame(maxWidth: width == .infinity ? .infinity : nil)
+
+                    if width != .infinity { Spacer() }
                 }
                 .conditionalIgnoreSafeArea(ignoreSafeArea)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
