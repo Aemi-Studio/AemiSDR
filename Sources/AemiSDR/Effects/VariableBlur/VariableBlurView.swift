@@ -58,6 +58,29 @@
         /// The width of the fade from clear (center) to fully blurred (edges), in points
         public var fadeWidth: CGFloat = 16
 
+        /// Inverts the generated mask before handing it to the variable
+        /// blur filter. The filter reads mask luminance as blur intensity
+        /// (white pixels = max blur). Inverting flips that mapping so
+        /// callers can build spotlight-style effects on top of mask kernels
+        /// whose natural output peaks in the wrong region — e.g. the
+        /// centre kernels peak at the centre, so `verticalCenterBlur` /
+        /// `horizontalCenterBlur` set this `true` to leave the centre crisp
+        /// and push the blur to the edges.
+        public var inverted: Bool = false
+
+        /// Capture scale forwarded to the backdrop layer's
+        /// `scaleFactorKey`. Same semantics as `BackdropBlurView.scale`:
+        /// the filter samples the captured content at this scale before
+        /// blurring, so values below `1` produce softer / cheaper blur
+        /// (downsampled capture) and values above `1` produce sharper
+        /// edges at higher cost. Defaults to `1` to match the
+        /// `BackdropBlurView` default — note that this differs from the
+        /// pre-config behaviour where `VariableBlurUIView` implicitly
+        /// tracked `window.screen.scale`. Pass `UIScreen.main.scale` (or
+        /// the live environment scale) explicitly when you need the
+        /// previous device-native behaviour.
+        public var scale: CGFloat = 1
+
         // MARK: - Initializers
 
         /// Creates a basic variable blur view with linear gradient configuration.
@@ -72,11 +95,15 @@
         public init(
             maxBlurRadius: CGFloat = 3,
             type maskType: MaskType = .linearTopToBottom,
-            startOffset: CGFloat = 0
+            startOffset: CGFloat = 0,
+            inverted: Bool = false,
+            scale: CGFloat = 1
         ) {
             self.maxBlurRadius = maxBlurRadius
             self.maskType = maskType
             self.startOffset = startOffset
+            self.inverted = inverted
+            self.scale = scale
         }
 
         /// Creates a variable blur view configured for superellipse (squircle) shapes.
@@ -96,7 +123,8 @@
             cornerRadius: CGFloat = UIScreen.displayCornerRadius,
             fadeWidth: CGFloat = 16,
             startOffset: CGFloat = 0,
-            transition: TransitionAlgorithm = .eased
+            transition: TransitionAlgorithm = .eased,
+            scale: CGFloat = 1
         ) {
             self.maxBlurRadius = maxBlurRadius
             maskType =
@@ -107,6 +135,7 @@
             self.startOffset = startOffset
             self.cornerRadius = cornerRadius
             self.fadeWidth = fadeWidth
+            self.scale = scale
         }
 
         /// Creates a variable blur view with unified corner styling.
@@ -129,13 +158,15 @@
             cornerRadius: CGFloat = UIScreen.displayCornerRadius,
             fadeWidth: CGFloat = 16,
             startOffset: CGFloat = 0,
-            transition: TransitionAlgorithm = .eased
+            transition: TransitionAlgorithm = .eased,
+            scale: CGFloat = 1
         ) {
             self.maxBlurRadius = maxBlurRadius
             maskType = MaskType(cornerStyle: cornerStyle, transition: transition)
             self.startOffset = startOffset
             self.cornerRadius = cornerRadius
             self.fadeWidth = fadeWidth
+            self.scale = scale
         }
 
         // MARK: - UIViewRepresentable Implementation
@@ -153,7 +184,9 @@
                 maskType: maskType,
                 startOffset: startOffset,
                 cornerRadius: cornerRadius,
-                fadeWidth: fadeWidth
+                fadeWidth: fadeWidth,
+                inverted: inverted,
+                scale: scale
             )
         }
 
@@ -173,7 +206,9 @@
                 maskType: maskType,
                 startOffset: startOffset,
                 cornerRadius: cornerRadius,
-                fadeWidth: fadeWidth
+                fadeWidth: fadeWidth,
+                inverted: inverted,
+                scale: scale
             )
         }
     }

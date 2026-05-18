@@ -115,12 +115,17 @@ extension View {
     /// - Parameters:
     ///   - blurRadius: The blur radius in points (default: 18)
     ///   - tintOpacity: Opacity of the white tint (default: 0.2)
+    ///   - scale: Capture scale factor forwarded to the backdrop layer
+    ///     (default: 1). Values below 1 sample the captured backdrop at
+    ///     reduced resolution before blurring (softer / cheaper); values
+    ///     above 1 oversample for sharper edges.
     ///   - ignoreSafeArea: Whether to ignore safe area for the effect (default: true)
     /// - Returns: A view with a frosted glass background effect
     @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
     @ViewBuilder public func frostedBackdropBackground(
         blurRadius: CGFloat = 18,
         tintOpacity: CGFloat = 0.2,
+        scale: CGFloat = 1,
         ignoreSafeArea: Bool = true
     ) -> some View {
         background {
@@ -128,7 +133,7 @@ extension View {
                 colorTint: .white,
                 colorTintAlpha: tintOpacity,
                 blurRadius: blurRadius,
-                scale: 1
+                scale: scale
             )
             .conditionalIgnoreSafeArea(ignoreSafeArea)
         }
@@ -143,6 +148,9 @@ extension View {
     ///   - color: The tint color for the blur
     ///   - blurRadius: The blur radius in points (default: 15)
     ///   - tintOpacity: Opacity of the tint color (default: 0.3)
+    ///   - scale: Capture scale factor forwarded to the backdrop layer
+    ///     (default: 1). See `frostedBackdropBackground` for the
+    ///     fidelity / cost tradeoff.
     ///   - ignoreSafeArea: Whether to ignore safe area for the effect (default: true)
     /// - Returns: A view with a tinted blur background effect
     @available(iOS 15.0, macOS 12.0, tvOS 15.0, watchOS 8.0, *)
@@ -150,6 +158,7 @@ extension View {
         color: Color,
         blurRadius: CGFloat = 15,
         tintOpacity: CGFloat = 0.3,
+        scale: CGFloat = 1,
         ignoreSafeArea: Bool = true
     ) -> some View {
         background {
@@ -157,7 +166,7 @@ extension View {
                 colorTint: color,
                 colorTintAlpha: tintOpacity,
                 blurRadius: blurRadius,
-                scale: 1
+                scale: scale
             )
             .conditionalIgnoreSafeArea(ignoreSafeArea)
         }
