@@ -103,6 +103,7 @@ import SwiftUI
         @State private var enableSpectral = false
         @State private var enableAspheric = false
         @State private var enableHighFidelityRefraction = false
+        @State private var quality: LiquidLensQuality = .balanced
         @State private var asphericK2: Double = 0.0
         @State private var asphericK4: Double = 0.0
 
@@ -198,6 +199,16 @@ import SwiftUI
             }
             .onChange(of: preset) { _, value in
                 applyPreset(value)
+            }
+            .onChange(of: quality) { _, value in
+                // Quality maps to the four feature flags. Individual toggles
+                // below remain overridable — picking another quality re-sets
+                // them, which is the intended behavior for the preset row.
+                enableHighFidelityRefraction = value.usesHighFidelityRefraction
+                enableFresnel = value.usesFresnel
+                enableSpectral = value.usesSpectral
+                enableAspheric = value.usesAspheric
+                captureScale = Double(value.captureScale)
             }
         }
 
@@ -408,6 +419,22 @@ import SwiftUI
 
         private var settingsSheet: some View {
             Form {
+                Section {
+                    Picker("Quality", selection: $quality) {
+                        ForEach(LiquidLensQuality.allCases, id: \.self) { q in
+                            Text(q.label).tag(q)
+                        }
+                    }
+                } header: {
+                    Text("Quality")
+                } footer: {
+                    Text(
+                        "Bundles the right feature flags for the chosen fidelity tier. "
+                            + "Individual toggles below override the preset on a per-flag basis."
+                    )
+                    .font(.caption2)
+                }
+
                 Section("Preset") {
                     Picker("Preset", selection: $preset) {
                         ForEach(Preset.allCases, id: \.self) { p in
