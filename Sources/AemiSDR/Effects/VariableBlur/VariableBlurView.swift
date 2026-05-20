@@ -41,7 +41,6 @@
     /// ```
     public struct VariableBlurView: UIViewRepresentable {
         // MARK: - Configuration Properties
-        
         /// The maximum radius of the blur to be applied
         public var maxBlurRadius: CGFloat = 3
 
@@ -152,6 +151,8 @@
         ///   - fadeWidth: Width of the fade transition in points (default: 16)
         ///   - startOffset: Transition control parameter (default: 0)
         ///   - transition: Transformation function type - linear or eased (default: .eased)
+        ///   - inverted: Flips the mask so the blur lands *outside* the rounded
+        ///     shape (default: `false`)
         public init(
             _ cornerStyle: RoundedCornerStyle = .continuous,
             maxBlurRadius: CGFloat = 3,
@@ -159,6 +160,7 @@
             fadeWidth: CGFloat = 16,
             startOffset: CGFloat = 0,
             transition: TransitionAlgorithm = .eased,
+            inverted: Bool = false,
             scale: CGFloat = 1
         ) {
             self.maxBlurRadius = maxBlurRadius
@@ -166,6 +168,7 @@
             self.startOffset = startOffset
             self.cornerRadius = cornerRadius
             self.fadeWidth = fadeWidth
+            self.inverted = inverted
             self.scale = scale
         }
 
