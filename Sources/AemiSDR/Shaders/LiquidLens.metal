@@ -39,13 +39,14 @@ using namespace metal;
 
 // MARK: - Uniforms
 
-// LiquidLensUniforms — 128-byte stride. Layout grouped by access pattern:
+// LiquidLensUniforms — 112-byte stride. Layout grouped by access pattern:
 //
 //   • Geometry first (center, textureSize, halfSize) — read once per fragment.
 //   • Scalar shape parameters next (strength..asphericK4) — read by branch
 //     gates and the displacement scaling.
-//   • Three `float3` channel triplets last (refractiveIndex, airOver,
-//     deviation) — read together as vectors in the chromatic path.
+//   • Two `float3` channel triplets (airOver, deviation) — read together as
+//     vectors in the chromatic path.
+//   • Two trailing scalars for the spectral integration mode.
 //
 // The triplets use `float3` rather than three independent scalars so the
 // compiler can emit a single 16-byte vector load per triplet and the GPU
@@ -57,12 +58,16 @@ using namespace metal;
 // in the fragment, and packing it into a bitfield would cost a shift+mask
 // on every fragment for no measurable saving.
 //
-// `falloffType` and `materialType` are not in this struct. `falloffType` is
-// resolved at pipeline build time via `kFalloffType` function constant, so
-// the runtime field would be unread. `materialType` is a CPU-side dispatch
-// label for picking Sellmeier coefficients; the resolved index values reach
-// the GPU through `refractiveIndex`/`airOver`/`deviation`, not through a
-// material ID, so the GPU has no use for it.
+// Three CPU-side concepts deliberately do NOT appear here:
+//   • `falloffType` — the chosen polynomial is resolved at pipeline build
+//     time via `kFalloffType`, so the runtime field would be unread.
+//   • `materialType` — a CPU dispatch label for picking Sellmeier
+//     coefficients; per-material values reach the GPU through `airOver` /
+//     `deviation`, not through a material ID.
+//   • `refractiveIndex` (the per-channel n_λ values) — used only on the CPU
+//     to derive `airOver` and `deviation`. Carrying them through the
+//     uniform buffer would add 16 bytes (one vector slot) of bandwidth per
+//     frame for data the shader never reads.
 struct LiquidLensUniforms {
     // Geometry (24 bytes, 8-byte aligned).
     float2 center;
@@ -86,7 +91,6 @@ struct LiquidLensUniforms {
 
     // Channel triplets, naturally vector-loaded as `float3`. Each occupies a
     // 16-byte register slot.
-    float3 refractiveIndex;   // .r = 656.3 nm (C line), .g = 546.1 nm (e), .b = 486.1 nm (F)
     float3 airOver;           // η = n_air / n_λ per channel; feeds MSL refract(I, N, η)
     float3 deviation;         // scalar Snell deviation (radians) at the rim, per channel
 
