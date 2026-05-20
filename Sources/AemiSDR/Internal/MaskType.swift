@@ -203,7 +203,7 @@ extension MaskType {
 /// of `10_000`. For the typical input ranges (`[0, 1]` for offsets/scales and
 /// pixel-bounded values for dimensions/radii) this is well below visual
 /// significance and below the noise floor of `CGRect` jitter.
-struct MaskCacheKey: Hashable {
+struct MaskCacheKey: Hashable, Sendable {
     var widthPx: Int
     var heightPx: Int
     var scaleQ: Int
