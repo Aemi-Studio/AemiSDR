@@ -29,22 +29,22 @@ struct LiquidLensSnellTests {
         )
         let uniforms = config.toUniforms(textureSize: SIMD2(200, 200), scale: 1)
 
-        #expect(uniforms.refractiveIndexRed.isFinite)
-        #expect(uniforms.refractiveIndexGreen.isFinite)
-        #expect(uniforms.refractiveIndexBlue.isFinite)
-        #expect(uniforms.airOverRed.isFinite)
-        #expect(uniforms.airOverGreen.isFinite)
-        #expect(uniforms.airOverBlue.isFinite)
+        #expect(uniforms.refractiveIndex.x.isFinite)
+        #expect(uniforms.refractiveIndex.y.isFinite)
+        #expect(uniforms.refractiveIndex.z.isFinite)
+        #expect(uniforms.airOver.x.isFinite)
+        #expect(uniforms.airOver.y.isFinite)
+        #expect(uniforms.airOver.z.isFinite)
         #expect(uniforms.spectralAirOver0.isFinite)
         #expect(uniforms.spectralAirOver1.isFinite)
 
         // All real materials are denser than air → n ≥ 1, so n_air / n ≤ 1.
-        #expect(uniforms.refractiveIndexRed >= 1.0)
-        #expect(uniforms.refractiveIndexGreen >= 1.0)
-        #expect(uniforms.refractiveIndexBlue >= 1.0)
-        #expect(uniforms.airOverRed > 0 && uniforms.airOverRed <= 1.0)
-        #expect(uniforms.airOverGreen > 0 && uniforms.airOverGreen <= 1.0)
-        #expect(uniforms.airOverBlue > 0 && uniforms.airOverBlue <= 1.0)
+        #expect(uniforms.refractiveIndex.x >= 1.0)
+        #expect(uniforms.refractiveIndex.y >= 1.0)
+        #expect(uniforms.refractiveIndex.z >= 1.0)
+        #expect(uniforms.airOver.x > 0 && uniforms.airOver.x <= 1.0)
+        #expect(uniforms.airOver.y > 0 && uniforms.airOver.y <= 1.0)
+        #expect(uniforms.airOver.z > 0 && uniforms.airOver.z <= 1.0)
     }
 
     /// Normal dispersion: n_blue > n_green > n_red, so the eta ratios used by
@@ -60,12 +60,12 @@ struct LiquidLensSnellTests {
 
         // Eta ratios: smaller eta → more refraction. So airOverBlue is the
         // smallest, airOverRed the largest, for any normally-dispersive medium.
-        #expect(uniforms.airOverBlue < uniforms.airOverGreen)
-        #expect(uniforms.airOverGreen < uniforms.airOverRed)
+        #expect(uniforms.airOver.z < uniforms.airOver.y)
+        #expect(uniforms.airOver.y < uniforms.airOver.x)
 
         // Refractive index ordering: blue > green > red.
-        #expect(uniforms.refractiveIndexBlue > uniforms.refractiveIndexGreen)
-        #expect(uniforms.refractiveIndexGreen > uniforms.refractiveIndexRed)
+        #expect(uniforms.refractiveIndex.z > uniforms.refractiveIndex.y)
+        #expect(uniforms.refractiveIndex.y > uniforms.refractiveIndex.x)
     }
 
     /// Zero curvature → zero per-fragment displacement (shader-side property).
@@ -81,7 +81,7 @@ struct LiquidLensSnellTests {
         // airOver values are still non-zero (they're material constants), but
         // the shader's `sinTheta = normalizedRadius * lensCurvature = 0` makes
         // `refract()` return a straight-through ray with T.xy = 0 → no displacement.
-        #expect(uniforms.airOverGreen > 0)
+        #expect(uniforms.airOver.y > 0)
     }
 
     /// Diamond's exact refractive index after fixing the Sellmeier C-coefficients.
@@ -95,7 +95,7 @@ struct LiquidLensSnellTests {
         )
         let uniforms = config.toUniforms(textureSize: SIMD2(200, 200), scale: 1)
         // Real diamond at 546 nm ≈ 2.430. Allow ±0.05 for the 2-term fit.
-        #expect(abs(uniforms.refractiveIndexGreen - 2.42) < 0.05)
+        #expect(abs(uniforms.refractiveIndex.y - 2.42) < 0.05)
     }
 
     /// Water's 4-term Daimon-Masumura fit improves accuracy in the visible
@@ -109,6 +109,6 @@ struct LiquidLensSnellTests {
         )
         let uniforms = config.toUniforms(textureSize: SIMD2(200, 200), scale: 1)
         // Real water at 546 nm ≈ 1.3345.
-        #expect(abs(uniforms.refractiveIndexGreen - 1.3345) < 0.01)
+        #expect(abs(uniforms.refractiveIndex.y - 1.3345) < 0.01)
     }
 }

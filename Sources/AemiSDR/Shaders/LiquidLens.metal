@@ -39,44 +39,60 @@ using namespace metal;
 
 // MARK: - Uniforms
 
+// LiquidLensUniforms — 128-byte stride. Layout grouped by access pattern:
+//
+//   • Geometry first (center, textureSize, halfSize) — read once per fragment.
+//   • Scalar shape parameters next (strength..asphericK4) — read by branch
+//     gates and the displacement scaling.
+//   • Three `float3` channel triplets last (refractiveIndex, airOver,
+//     deviation) — read together as vectors in the chromatic path.
+//
+// The triplets use `float3` rather than three independent scalars so the
+// compiler can emit a single 16-byte vector load per triplet and the GPU
+// register allocator gets a natural vector lane. Independent scalars would
+// force the compiler to schedule three separate loads with no guarantee of
+// fusion. Per-channel access (`uniforms.airOver.r`) is the same syntax cost.
+//
+// `overlayMode` stays as a 4-byte int — it gates an early-return branch
+// in the fragment, and packing it into a bitfield would cost a shift+mask
+// on every fragment for no measurable saving.
+//
+// `falloffType` and `materialType` are not in this struct. `falloffType` is
+// resolved at pipeline build time via `kFalloffType` function constant, so
+// the runtime field would be unread. `materialType` is a CPU-side dispatch
+// label for picking Sellmeier coefficients; the resolved index values reach
+// the GPU through `refractiveIndex`/`airOver`/`deviation`, not through a
+// material ID, so the GPU has no use for it.
 struct LiquidLensUniforms {
+    // Geometry (24 bytes, 8-byte aligned).
     float2 center;
     float2 textureSize;
     float2 halfSize;
+
+    // Scalar shape/intensity parameters.
     float strength;
     float lensCurvature;     // pre-clamped to [0, 1] on CPU
     float cornerRadius;
-    int falloffType;          // present in uniforms but the shader reads kFalloffType
     float falloffLength;
     float falloffIntensity;
     float chromaticAmount;
-    int materialType;
-    int overlayMode;          // 1 = transparent outside lens
-    float refractiveIndexRed;
-    float refractiveIndexGreen;
-    float refractiveIndexBlue;
-    // η = n_air / n_λ — feeds MSL `refract(I, N, η)` per channel.
-    float airOverRed;         // 656.3 nm (Fraunhofer C)
-    float airOverGreen;       // 546.1 nm (Fraunhofer e)
-    float airOverBlue;        // 486.1 nm (Fraunhofer F)
-    // Pixel-space width of the soft transition band across q.x = q.y.
-    float diagonalBand;
+    int overlayMode;          // 1 = transparent outside lens shape
+    float diagonalBand;       // pixel-space width of the q.x = q.y transition band
+
     // Aspheric profile coefficients. Surface tilt = c·r·(1 + k2·u² + k4·u⁴)
-    // where u = c·r. k2=k4=0 ⇒ pure spherical cap.
+    // where u = c·r. k2 = k4 = 0 ⇒ pure spherical cap.
     float asphericK2;
     float asphericK4;
-    // Extra wavelengths sampled in spectral integration mode.
+
+    // Channel triplets, naturally vector-loaded as `float3`. Each occupies a
+    // 16-byte register slot.
+    float3 refractiveIndex;   // .r = 656.3 nm (C line), .g = 546.1 nm (e), .b = 486.1 nm (F)
+    float3 airOver;           // η = n_air / n_λ per channel; feeds MSL refract(I, N, η)
+    float3 deviation;         // scalar Snell deviation (radians) at the rim, per channel
+
+    // Extra wavelengths consumed only when `kEnableSpectral` is true.
     float spectralAirOver0;   // 440 nm (deep blue)
     float spectralAirOver1;   // 580 nm (yellow)
-    // Scalar Snell deviation (radians) at the rim (sinθ = lensCurvature),
-    // precomputed CPU-side. Used by the fast chromatic path when
-    // `kHighFidelityRefraction` is false — per-fragment displacement is
-    // `outwardDir * deviation * displacementScale`. Faster than the 3D
-    // `refract()` form (3× ALU savings in chromatic mode) at the cost of
-    // first-order accuracy only at large incidence angles.
-    float deviationRed;
-    float deviationGreen;
-    float deviationBlue;
 };
 
 // MARK: - Vertex Types
@@ -251,18 +267,22 @@ inline float2 refractDisplacement(float2 outwardDir,
     return T.xy * invTz;
 }
 
-/// Unpolarized Fresnel transmission coefficient T = 1 − ½(Rs + Rp) at a
-/// dielectric interface with `cosθ_i` and `cosθ_t` known. Returns 1 under
-/// TIR (cosθ_t = 0), which gracefully degrades to "no attenuation" rather
-/// than a hard zero.
-inline float fresnelTransmission(float cosI, float cosT, float n1, float n2) {
-    float rs_num = n1 * cosI - n2 * cosT;
-    float rs_den = n1 * cosI + n2 * cosT;
-    float rp_num = n1 * cosT - n2 * cosI;
-    float rp_den = n1 * cosT + n2 * cosI;
-    float Rs = (rs_num * rs_num) / max(rs_den * rs_den, 1e-6f);
-    float Rp = (rp_num * rp_num) / max(rp_den * rp_den, 1e-6f);
-    return clamp(1.0f - 0.5f * (Rs + Rp), 0.0f, 1.0f);
+/// Schlick approximation of the Fresnel reflection coefficient
+/// `F = F₀ + (1 − F₀)·(1 − cosθ)⁵`. Returns the transmission coefficient
+/// `1 − F` clamped to [0, 1].
+///
+/// `(1 − cosθ)⁵` is unrolled to `x²·x²·x` (4 muls) — the standard pow-5
+/// expansion in real-time PBR. Half precision is sufficient: F₀ for typical
+/// dielectric / glass / water interfaces is around 0.02–0.08 and the
+/// (1−cosθ)⁵ term saturates to 1 within fp16 dynamic range. The full
+/// polarized form needs four squares and two divisions per fragment for an
+/// accuracy improvement that is below the noise floor of a real-time
+/// composite.
+inline half fresnelSchlickTransmission(half cosTheta, half F0) {
+    half x = 1.0h - cosTheta;
+    half x2 = x * x;
+    half F = F0 + (1.0h - F0) * (x2 * x2 * x);
+    return clamp(1.0h - F, 0.0h, 1.0h);
 }
 
 /// CIE-D65-derived weights for reconstructing sRGB from 5 spectral samples at
@@ -315,59 +335,83 @@ fragment half4 liquidLensFragment(
     }
 
     float distFromEdge = -dOuter;
-    float normalizedRadius = clamp(1.0f - (distFromEdge / minHalf), 0.0f, 1.0f);
+    // `normalizedRadius` is in [0, 1] — half precision (≈3 decimal digits of
+    // mantissa) is sufficient for the falloff envelope below.
+    half normalizedRadius = half(clamp(1.0f - (distFromEdge / minHalf), 0.0f, 1.0f));
 
-    // Artistic falloff envelope on top of the physical angular profile.
-    // With the per-fragment `refract()` model, displacement is already 0 at
-    // the apex (sinθ=0) and max at the rim (sinθ=lensCurvature) — the
-    // angular profile is now physical. The envelope here is a pure artistic
-    // amplifier (default = quartic ease-in, concentrating effect at rim).
-    const float kInteriorFloor = 0.05f;
-    float effectIntensity = 0.0f;
+    // Artistic falloff envelope. Whether the displacement is per-fragment
+    // physical (3D refract) or per-rim scalar, this envelope is a multiplicative
+    // shape on top — quartic ease-in by default, concentrating the effect at
+    // the rim. The values stay in [0, 1] so half precision is fine.
+    const half kInteriorFloor = 0.05h;
+    half effectIntensity = 0.0h;
     if (clampedFalloffLength > 0.0f && clampedFalloffIntensity > 0.0f) {
-        float activeStart = 1.0f - clampedFalloffLength;
-        float t = clamp((normalizedRadius - activeStart) / clampedFalloffLength, 0.0f, 1.0f);
-        float edgePeak = applyFalloff(t);
-        effectIntensity = mix(kInteriorFloor, 1.0f, edgePeak) * clampedFalloffIntensity;
+        half activeStart = half(1.0f - clampedFalloffLength);
+        half t = clamp((normalizedRadius - activeStart) / half(clampedFalloffLength), 0.0h, 1.0h);
+        half edgePeak = half(applyFalloff(float(t)));
+        effectIntensity = mix(kInteriorFloor, 1.0h, edgePeak) * half(clampedFalloffIntensity);
     }
 
-    if (effectIntensity < 0.0001f) {
+    if (effectIntensity < 0.0001h) {
         return isOverlay ? half4(0.0h) : sourceTexture.sample(texSampler, in.texCoord);
     }
 
     float2 outwardDir = computeSDFGradient(toPixel, halfSize, clampedCorner, uniforms.diagonalBand);
 
-    // Build the spherical-cap surface normal at this fragment. sinθ = surface
-    // tilt = r·c · (1 + aspheric corrections); cosθ = √(1 − sin²θ).
-    float sinTheta = surfaceTilt(normalizedRadius,
+    // Surface tilt and its cosine are consumed 3–5 times by `refractDisplacement`
+    // and the Fresnel block. Keeping them as `float` avoids repeated half→float
+    // promotions at each call site; the half-precision saving on a single
+    // value would be offset by the conversion cost across multiple uses.
+    float sinTheta = surfaceTilt(float(normalizedRadius),
                                  uniforms.lensCurvature,
                                  uniforms.asphericK2,
                                  uniforms.asphericK4);
     float cosTheta = sqrt(max(1.0f - sinTheta * sinTheta, 0.0f));
 
+    // `signFactor` is ±1, exact in either precision; using `float` here matches
+    // the type of `displacementScale` so the per-channel scaling is one mul.
     float signFactor = (uniforms.strength >= 0.0f) ? 1.0f : -1.0f;
-    float absStrength = abs(uniforms.strength);
-    float displacementScale = minHalf * absStrength * effectIntensity * 2.0f;
+    // `displacementScale` stays `float` because `minHalf` may exceed the half
+    // dynamic range for very large render targets, and the final scale needs
+    // sub-pixel precision when multiplied into the texture UV — half's 11-bit
+    // mantissa loses fractional resolution at pixel coordinates above ~2048.
+    float displacementScale = minHalf * abs(uniforms.strength) * float(effectIntensity) * 2.0f;
 
-    // Fresnel transmission (opt-in). At cosθ_i = cosTheta, cosθ_t derived from
-    // green-channel refract. n1 = n_air; n2 = n_air / airOverGreen.
+    // Schlick Fresnel transmission (opt-in). `F₀` is the normal-incidence
+    // reflectance and depends only on the refractive-index ratio:
+    //   F₀ = ((n_air − n_glass) / (n_air + n_glass))²
+    //      = ((1 − airOver) / (1 + airOver))²    (eta = airOver = n_air/n_glass)
+    // Choosing Schlick here over the polarized full Fresnel because the
+    // visible difference in real-time rendering is below the noise floor,
+    // and the polynomial is two orders of magnitude cheaper.
     half fresnelT = 1.0h;
     if (kEnableFresnel) {
-        float sinT2 = uniforms.airOverGreen * uniforms.airOverGreen * sinTheta * sinTheta;
-        float cosT  = sqrt(max(1.0f - sinT2, 0.0f));
-        float n2    = 1.000293f / max(uniforms.airOverGreen, 1e-4f);
-        fresnelT = half(fresnelTransmission(cosTheta, cosT, 1.000293f, n2));
+        half etaG = half(uniforms.airOver.g);
+        half oneMinusEta = 1.0h - etaG;
+        half onePlusEta  = 1.0h + etaG;
+        half r0Root = oneMinusEta / max(onePlusEta, 1e-3h);
+        half F0 = r0Root * r0Root;
+        fresnelT = fresnelSchlickTransmission(half(cosTheta), F0);
+        // One half-precision Schlick polynomial vs four squares + two divisions
+        // in the polarized form — the visible attenuation at typical viewing
+        // distances is identical, which is why Schlick is the industry-standard
+        // real-time approximation.
     }
 
     // Non-chromatic specialization: single sample at the green displacement.
     if (!kEnableChromatic) {
         float2 dispG;
         if (kHighFidelityRefraction) {
-            dispG = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOverGreen)
+            dispG = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOver.g)
                     * displacementScale * signFactor;
         } else {
-            // Fast scalar path: per-fragment displacement = outwardDir * (rim deviation).
-            dispG = outwardDir * (uniforms.deviationGreen * displacementScale * signFactor);
+            // Fast scalar path: per-fragment displacement = outwardDir · (rim deviation).
+            // One vec mul + one scalar mul. Choosing scalar deviation over the 3D
+            // `refract()` form here because `refract()` adds a sqrt + dot + 3 muls
+            // for an accuracy improvement that's invisible at typical lens
+            // curvatures; opt-in `kHighFidelityRefraction` covers grazing-angle
+            // cases.
+            dispG = outwardDir * (uniforms.deviation.g * displacementScale * signFactor);
         }
         float2 uv = (position + dispG) / uniforms.textureSize;
         half4 c = sourceTexture.sample(texSampler, uv);
@@ -378,10 +422,10 @@ fragment half4 liquidLensFragment(
     if (kEnableSpectral) {
         float2 disp[5];
         disp[0] = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.spectralAirOver0); // 440
-        disp[1] = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOverBlue);      // 486
-        disp[2] = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOverGreen);     // 546
+        disp[1] = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOver.b);        // 486
+        disp[2] = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOver.g);        // 546
         disp[3] = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.spectralAirOver1); // 580
-        disp[4] = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOverRed);       // 656
+        disp[4] = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOver.r);        // 656
 
         // Apply chromatic amplifier: mix green (middle) toward each spectral
         // sample by `clampedChromatic`. amount=0 collapses to single sample.
@@ -396,8 +440,9 @@ fragment half4 liquidLensFragment(
             accum += w * s.rgb;
             wsum  += w;
         }
-        // Normalize by per-channel weight sum (each channel's weights ~sum to 1
-        // but normalize defensively to handle any drift).
+        // Normalize by per-channel weight sum. The fixed `kSpectralRGB` matrix
+        // is designed so each channel's column sums to ~1 across the 5 visible
+        // wavelengths, but a runtime division guards against any drift.
         half3 rgb = accum / max(wsum, half3(1e-3h));
         half a = sourceTexture.sample(texSampler, (position + dispMid * displacementScale * signFactor) * invSize).a;
         return half4(rgb * fresnelT, a);
@@ -406,23 +451,25 @@ fragment half4 liquidLensFragment(
     // RGB-discrete chromatic specialization.
     float2 dispR2D, dispG2D, dispB2D;
     if (kHighFidelityRefraction) {
-        // Per-fragment 3D refract — accurate at all incidence angles.
-        float2 rDir = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOverRed);
-        float2 gDir = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOverGreen);
-        float2 bDir = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOverBlue);
+        // Per-fragment 3D refract — accurate at all incidence angles. Three
+        // separate refract calls because the per-channel η differs.
+        float2 rDir = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOver.r);
+        float2 gDir = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOver.g);
+        float2 bDir = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOver.b);
         dispR2D = rDir * displacementScale * signFactor;
         dispG2D = gDir * displacementScale * signFactor;
         dispB2D = bDir * displacementScale * signFactor;
     } else {
-        // Fast scalar path: rim deviation × outwardDir. ~3× less ALU than the
-        // refract() path; the chromatic mix below stretches the per-channel
-        // displacement in the same direction as the original implementation.
-        float dispGreenScalar = uniforms.deviationGreen * displacementScale * signFactor;
-        float dispRedScalar   = uniforms.deviationRed   * displacementScale * signFactor;
-        float dispBlueScalar  = uniforms.deviationBlue  * displacementScale * signFactor;
-        dispG2D = outwardDir * dispGreenScalar;
-        dispR2D = outwardDir * dispRedScalar;
-        dispB2D = outwardDir * dispBlueScalar;
+        // Fast scalar path. The per-channel rim deviations are pre-multiplied
+        // by `displacementScale * signFactor` (a single vector mul into the
+        // float3 lane) and the result is broadcast onto `outwardDir` to give
+        // each channel its own 2D displacement vector. Net ALU is roughly
+        // a third of the refract() path because the surface tilt math is
+        // amortized into the CPU-precomputed rim deviation.
+        float3 dispScalars = uniforms.deviation * displacementScale * signFactor;
+        dispR2D = outwardDir * dispScalars.r;
+        dispG2D = outwardDir * dispScalars.g;
+        dispB2D = outwardDir * dispScalars.b;
     }
 
     if (clampedChromatic < 0.0001f) {

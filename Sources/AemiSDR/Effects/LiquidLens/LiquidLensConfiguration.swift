@@ -60,57 +60,76 @@ public enum LiquidLensCornerRadius: Sendable, Equatable, Hashable {
 
 /// Uniform buffer matching the Metal `LiquidLensUniforms` struct layout.
 ///
-/// This struct must remain byte-identical to the Metal-side definition.
-/// Verify with `MemoryLayout<LiquidLensUniforms>.stride` (expected 104).
+/// Layout (128-byte stride, 16-byte aligned because of the trailing
+/// `SIMD3<Float>` triplets). Grouped by access pattern:
+///
+///   - Geometry first (`center`, `textureSize`, `halfSize`) — read once per
+///     fragment to derive pixel-space coordinates.
+///   - Scalar shape parameters next (`strength`..`asphericK4`) — read by
+///     branch gates and the displacement scaling step.
+///   - Three `SIMD3<Float>` channel triplets last (`refractiveIndex`,
+///     `airOver`, `deviation`) — read together as vectors in the chromatic
+///     path.
+///
+/// The RGB triplets use `SIMD3<Float>` rather than three independent scalars
+/// so the GPU can emit a single 16-byte vector load per triplet. The struct
+/// alignment is 16 bytes because of the SIMD types; the trailing scalar
+/// `spectralAirOver*` fields fit inside the 16-byte tail. Verify the layout
+/// with `MemoryLayout<LiquidLensUniforms>.stride == 128`.
+///
+/// `falloffType` does not appear here — the chosen polynomial is resolved
+/// at pipeline build time via the `kFalloffType` function constant, so the
+/// shader has no use for a runtime field. `materialType` is likewise absent
+/// because all per-material values reach the GPU through the three channel
+/// triplets, not through a material ID.
 public struct LiquidLensUniforms: Sendable, Equatable {
+    // Geometry.
     public var center: SIMD2<Float>
     public var textureSize: SIMD2<Float>
     public var halfSize: SIMD2<Float>
+
+    // Scalar shape / intensity parameters.
     public var strength: Float
     public var lensCurvature: Float
     public var cornerRadius: Float
-    public var falloffType: Int32
     public var falloffLength: Float
     public var falloffIntensity: Float
     public var chromaticAmount: Float
-    public var materialType: Int32
     public var overlayMode: Int32
-    public var refractiveIndexRed: Float
-    public var refractiveIndexGreen: Float
-    public var refractiveIndexBlue: Float
-    /// Ratio `n_air / n_λ` for the red channel (656.3 nm, Fraunhofer C). The
-    /// shader uses this directly as the `eta` argument to MSL `refract()` for
-    /// per-fragment Snell refraction. Stored on CPU side as `airRefractiveIndex
-    /// / refractiveIndexRed`.
-    public var airOverRed: Float
-    /// Ratio `n_air / n_λ` for the green channel (546.1 nm, Fraunhofer e).
-    public var airOverGreen: Float
-    /// Ratio `n_air / n_λ` for the blue channel (486.1 nm, Fraunhofer F).
-    public var airOverBlue: Float
-    /// Pixel-space width of the soft transition band that smooths the inner-rect
-    /// medial-axis (q.x = q.y) discontinuity in the SDF gradient. Resolved from
-    /// `LiquidLensConfiguration.diagonalBand` (points) at `toUniforms` time.
     public var diagonalBand: Float
-    /// Aspheric profile coefficient applied as `surfaceTilt = c·r·(1 + k2·(c·r)² + k4·(c·r)⁴)`.
-    /// Only consumed when the pipeline is specialized with `kEnableAspheric = true`.
-    /// `0` produces a pure spherical cap.
+
+    /// Second-order aspheric coefficient. Applied as
+    /// `surfaceTilt = c·r·(1 + k2·(c·r)² + k4·(c·r)⁴)`. Consumed only when
+    /// the pipeline is specialized with `kEnableAspheric = true`. Zero
+    /// produces a pure spherical cap.
     public var asphericK2: Float
+    /// Fourth-order aspheric coefficient. See `asphericK2`.
     public var asphericK4: Float
-    /// `n_air / n_λ` ratio at 440 nm (deep blue) for 5-wavelength spectral
-    /// integration. Only sampled when the pipeline is specialized with
-    /// `kEnableSpectral = true`.
+
+    /// Per-channel refractive indices at the standard Fraunhofer wavelengths.
+    /// `.x` = 656.3 nm (C line), `.y` = 546.1 nm (e), `.z` = 486.1 nm (F).
+    /// Kept as informational data; the shader's refraction path uses
+    /// `airOver` directly.
+    public var refractiveIndex: SIMD3<Float>
+
+    /// Per-channel `η = n_air / n_λ`. Feeds MSL `refract(I, N, η)` for the
+    /// 3D refraction path, and also used to compute `airOver.g` in the
+    /// Fresnel block.
+    public var airOver: SIMD3<Float>
+
+    /// Scalar Snell deviation (radians) at the rim, precomputed CPU-side as
+    /// `asin(airOver · sinθ_rim) − θ_rim` where `θ_rim = asin(lensCurvature)`.
+    /// The shader's fast chromatic path multiplies this by `outwardDir ·
+    /// displacementScale` per channel, which is roughly a third of the ALU
+    /// of the 3D `refract()` path.
+    public var deviation: SIMD3<Float>
+
+    /// `n_air / n_λ` ratio at 440 nm (deep blue). Sampled only when the
+    /// pipeline is specialized with `kEnableSpectral = true`.
     public var spectralAirOver0: Float
-    /// `n_air / n_λ` ratio at 580 nm (yellow) for 5-wavelength spectral
-    /// integration.
+    /// `n_air / n_λ` ratio at 580 nm (yellow). Sampled only when the
+    /// pipeline is specialized with `kEnableSpectral = true`.
     public var spectralAirOver1: Float
-    /// Scalar Snell deviation (radians) at the rim, `asin(airOver_red ·
-    /// sin θ_rim) − θ_rim` for `θ_rim = asin(lensCurvature)`. Consumed by
-    /// the fast chromatic path in the shader when `kHighFidelityRefraction`
-    /// is false. Per-fragment displacement is `outwardDir · deviation ·
-    /// displacementScale`.
-    public var deviationRed: Float
-    public var deviationGreen: Float
-    public var deviationBlue: Float
 }
 
 /// Configuration for the liquid lens distortion effect.
@@ -268,8 +287,8 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
     public func toUniforms(textureSize: SIMD2<Float>, scale: Float = 1.0) -> LiquidLensUniforms {
         let coefficients = Self.sellmeierCoefficients(for: material)
         assert(
-            MemoryLayout<LiquidLensUniforms>.stride == 120,
-            "LiquidLensUniforms layout mismatch — Metal expects 120-byte stride, got \(MemoryLayout<LiquidLensUniforms>.stride)"
+            MemoryLayout<LiquidLensUniforms>.stride == 128,
+            "LiquidLensUniforms layout mismatch — Metal expects 128-byte stride, got \(MemoryLayout<LiquidLensUniforms>.stride)"
         )
 
         let nRed = Self.sellmeierIndex(wavelength: Self.redWavelength, coefficients: coefficients)
@@ -281,8 +300,8 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
         let clampedCurvature = min(max(lensCurvature, 0), 1)
         let nAir = Self.airRefractiveIndex
 
-        // Scalar rim deviations for the fast chromatic path.
-        // `θ_rim = asin(lensCurvature)`; `dev_λ = asin((n_air/n_λ)·sinθ_rim) − θ_rim`.
+        // Scalar rim deviations for the fast chromatic path:
+        // θ_rim = asin(lensCurvature); dev_λ = asin((n_air / n_λ)·sinθ_rim) − θ_rim.
         let surfaceAngle = asin(clampedCurvature)
         let devRed = Self.snellDeviation(incidentAngle: surfaceAngle, n1: nAir, n2: nRed)
         let devGreen = Self.snellDeviation(incidentAngle: surfaceAngle, n1: nAir, n2: nGreen)
@@ -295,26 +314,18 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
             strength: strength,
             lensCurvature: clampedCurvature,
             cornerRadius: cornerRadius.resolve(halfSize: halfSize) * scale,
-            falloffType: Int32(falloff.rawValue),
             falloffLength: falloffLength,
             falloffIntensity: falloffIntensity,
             chromaticAmount: chromaticAmount,
-            materialType: Int32(material.rawValue),
             overlayMode: overlayMode ? 1 : 0,
-            refractiveIndexRed: nRed,
-            refractiveIndexGreen: nGreen,
-            refractiveIndexBlue: nBlue,
-            airOverRed: nAir / nRed,
-            airOverGreen: nAir / nGreen,
-            airOverBlue: nAir / nBlue,
             diagonalBand: max(diagonalBand, 0) * scale,
             asphericK2: asphericK2,
             asphericK4: asphericK4,
+            refractiveIndex: SIMD3(nRed, nGreen, nBlue),
+            airOver: SIMD3(nAir / nRed, nAir / nGreen, nAir / nBlue),
+            deviation: SIMD3(devRed, devGreen, devBlue),
             spectralAirOver0: nAir / nSpec0,
-            spectralAirOver1: nAir / nSpec1,
-            deviationRed: devRed,
-            deviationGreen: devGreen,
-            deviationBlue: devBlue
+            spectralAirOver1: nAir / nSpec1
         )
     }
 }
@@ -322,11 +333,14 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
 // MARK: - Layout Verification
 
 extension LiquidLensUniforms {
-    /// Compile-time sanity check — Metal shader expects exactly 120 bytes.
+    /// Compile-time sanity check — Metal shader expects exactly 128 bytes.
+    /// The stride is set by `SIMD3<Float>` alignment (16 bytes), not by the
+    /// sum of field sizes; keep this constant in sync if the Metal struct
+    /// reorders or adds members.
     @usableFromInline
     static let _stride: Int = {
         let s = MemoryLayout<LiquidLensUniforms>.stride
-        assert(s == 120, "LiquidLensUniforms stride changed to \(s) — update Metal struct to match")
+        assert(s == 128, "LiquidLensUniforms stride changed to \(s) — update Metal struct to match")
         return s
     }()
 }
