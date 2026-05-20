@@ -27,10 +27,46 @@ import SwiftUI
             case swiftUI = "SwiftUI"
         }
 
-        private enum VariableBlurMode: String, CaseIterable {
+        private enum VariableBlurMode: String, CaseIterable, Identifiable {
             case uniform = "Uniform"
-            case edgeBlur = "Edge"
-            case centerBlur = "Center"
+            case verticalEdge = "Vertical Edge"
+            case horizontalEdge = "Horizontal Edge"
+            case verticalCenter = "Vertical Center"
+            case horizontalCenter = "Horizontal Center"
+            case roundedRect = "Rounded Rect"
+
+            var id: Self { self }
+
+            var isVerticalEdge: Bool { self == .verticalEdge }
+            var isHorizontalEdge: Bool { self == .horizontalEdge }
+            var usesEdges: Bool { isVerticalEdge || isHorizontalEdge }
+            var usesCenter: Bool { self == .verticalCenter || self == .horizontalCenter }
+            var isRoundedRect: Bool { self == .roundedRect }
+            var supportsBandSize: Bool { !isRoundedRect && self != .uniform }
+            var supportsTransition: Bool { usesEdges || isRoundedRect }
+        }
+
+        private enum HorizontalEdgeSelection: String, CaseIterable {
+            case leading, trailing, both
+
+            var edgeSet: HorizontalEdge.Set {
+                switch self {
+                case .leading: .leading
+                case .trailing: .trailing
+                case .both: .all
+                }
+            }
+        }
+
+        private enum CornerStyleSelection: String, CaseIterable {
+            case circular, continuous
+
+            var cornerStyle: RoundedCornerStyle {
+                switch self {
+                case .circular: .circular
+                case .continuous: .continuous
+                }
+            }
         }
 
         private enum EdgeSelection: String, CaseIterable {
@@ -88,10 +124,17 @@ import SwiftUI
         // Variable blur
         @State private var vbMode: VariableBlurMode = .uniform
         @State private var vbBlurRadius: Double = 20
-        @State private var vbHeight: Double = 100
-        @State private var vbFullHeight = true
+        @State private var vbBandLength: Double = 100  // height for vertical, width for horizontal
+        @State private var vbUseFullExtent = true
         @State private var vbEdges: EdgeSelection = .both
+        @State private var vbHorizontalEdges: HorizontalEdgeSelection = .both
         @State private var vbTransition: TransitionAlgorithm = .eased
+        @State private var vbInverted = false
+        @State private var vbCaptureScale: Double = 1.0
+        // Rounded-rect specifics
+        @State private var vbRectCornerStyle: CornerStyleSelection = .continuous
+        @State private var vbRectCornerRadius: Double = 16
+        @State private var vbRectFadeWidth: Double = 16
 
         // SwiftUI blur
         @State private var suiBlurRadius: Double = 10
@@ -211,40 +254,116 @@ import SwiftUI
 
         @ViewBuilder
         private var variableBlurLayer: some View {
-            let height = vbFullHeight ? CGFloat.infinity : vbHeight
+            let bandLength = vbUseFullExtent ? CGFloat.infinity : CGFloat(vbBandLength)
             switch vbMode {
             case .uniform:
-                VariableBlurView(maxBlurRadius: vbBlurRadius, type: .uniform)
-            case .edgeBlur:
+                VariableBlurView(
+                    maxBlurRadius: vbBlurRadius,
+                    type: .uniform,
+                    inverted: vbInverted,
+                    scale: vbCaptureScale
+                )
+
+            case .verticalEdge:
                 let hasTop = vbEdges.edgeSet.contains(.top)
                 let hasBottom = vbEdges.edgeSet.contains(.bottom)
                 VStack(spacing: 0) {
                     if hasTop {
                         let topType: MaskType =
-                            vbTransition == .linear
-                            ? .linearTopToBottom : .easeInTopToBottom
-                        VariableBlurView(maxBlurRadius: vbBlurRadius, type: topType)
-                            .frame(height: height == .infinity ? nil : height)
-                            .frame(maxHeight: height == .infinity ? .infinity : nil)
+                            vbTransition == .linear ? .linearTopToBottom : .easeInTopToBottom
+                        VariableBlurView(
+                            maxBlurRadius: vbBlurRadius,
+                            type: topType,
+                            inverted: vbInverted,
+                            scale: vbCaptureScale
+                        )
+                        .frame(height: bandLength == .infinity ? nil : bandLength)
+                        .frame(maxHeight: bandLength == .infinity ? .infinity : nil)
                     }
-                    if hasTop && hasBottom || height != .infinity { Spacer() }
+                    if hasTop && hasBottom || bandLength != .infinity { Spacer() }
                     if hasBottom {
                         let bottomType: MaskType =
-                            vbTransition == .linear
-                            ? .linearBottomToTop : .easeInBottomToTop
-                        VariableBlurView(maxBlurRadius: vbBlurRadius, type: bottomType)
-                            .frame(height: height == .infinity ? nil : height)
-                            .frame(maxHeight: height == .infinity ? .infinity : nil)
+                            vbTransition == .linear ? .linearBottomToTop : .easeInBottomToTop
+                        VariableBlurView(
+                            maxBlurRadius: vbBlurRadius,
+                            type: bottomType,
+                            inverted: vbInverted,
+                            scale: vbCaptureScale
+                        )
+                        .frame(height: bandLength == .infinity ? nil : bandLength)
+                        .frame(maxHeight: bandLength == .infinity ? .infinity : nil)
                     }
                 }
-            case .centerBlur:
-                VStack(spacing: 0) {
-                    if height != .infinity { Spacer() }
-                    VariableBlurView(maxBlurRadius: vbBlurRadius, type: .easeInCenterVertical)
-                        .frame(height: height == .infinity ? nil : height)
-                        .frame(maxHeight: height == .infinity ? .infinity : nil)
-                    if height != .infinity { Spacer() }
+
+            case .horizontalEdge:
+                let hasLeading = vbHorizontalEdges.edgeSet.contains(.leading)
+                let hasTrailing = vbHorizontalEdges.edgeSet.contains(.trailing)
+                HStack(spacing: 0) {
+                    if hasLeading {
+                        let leadingType: MaskType =
+                            vbTransition == .linear ? .linearRightToLeft : .easeInRightToLeft
+                        VariableBlurView(
+                            maxBlurRadius: vbBlurRadius,
+                            type: leadingType,
+                            inverted: vbInverted,
+                            scale: vbCaptureScale
+                        )
+                        .frame(width: bandLength == .infinity ? nil : bandLength)
+                        .frame(maxWidth: bandLength == .infinity ? .infinity : nil)
+                    }
+                    if hasLeading && hasTrailing || bandLength != .infinity { Spacer() }
+                    if hasTrailing {
+                        let trailingType: MaskType =
+                            vbTransition == .linear ? .linearLeftToRight : .easeInLeftToRight
+                        VariableBlurView(
+                            maxBlurRadius: vbBlurRadius,
+                            type: trailingType,
+                            inverted: vbInverted,
+                            scale: vbCaptureScale
+                        )
+                        .frame(width: bandLength == .infinity ? nil : bandLength)
+                        .frame(maxWidth: bandLength == .infinity ? .infinity : nil)
+                    }
                 }
+
+            case .verticalCenter:
+                VStack(spacing: 0) {
+                    if bandLength != .infinity { Spacer() }
+                    VariableBlurView(
+                        maxBlurRadius: vbBlurRadius,
+                        type: .easeInCenterVertical,
+                        inverted: !vbInverted,  // spotlight by default
+                        scale: vbCaptureScale
+                    )
+                    .frame(height: bandLength == .infinity ? nil : bandLength)
+                    .frame(maxHeight: bandLength == .infinity ? .infinity : nil)
+                    if bandLength != .infinity { Spacer() }
+                }
+
+            case .horizontalCenter:
+                HStack(spacing: 0) {
+                    if bandLength != .infinity { Spacer() }
+                    VariableBlurView(
+                        maxBlurRadius: vbBlurRadius,
+                        type: .easeInCenterHorizontal,
+                        inverted: !vbInverted,
+                        scale: vbCaptureScale
+                    )
+                    .frame(width: bandLength == .infinity ? nil : bandLength)
+                    .frame(maxWidth: bandLength == .infinity ? .infinity : nil)
+                    if bandLength != .infinity { Spacer() }
+                }
+
+            case .roundedRect:
+                VariableBlurView(
+                    vbRectCornerStyle.cornerStyle,
+                    maxBlurRadius: vbBlurRadius,
+                    cornerRadius: CGFloat(vbRectCornerRadius),
+                    fadeWidth: CGFloat(vbRectFadeWidth),
+                    transition: vbTransition,
+                    inverted: vbInverted,
+                    scale: vbCaptureScale
+                )
             }
         }
 
@@ -323,31 +442,78 @@ import SwiftUI
 
                         case .variableBlur:
                             Picker("Mode", selection: $vbMode) {
-                                ForEach(VariableBlurMode.allCases, id: \.self) { m in
+                                ForEach(VariableBlurMode.allCases) { m in
                                     Text(m.rawValue).tag(m)
                                 }
                             }
-                            .pickerStyle(.segmented)
 
                             ParameterSlider("Radius", value: $vbBlurRadius, range: 1...40)
+                            ParameterSlider(
+                                "Capture Scale",
+                                value: $vbCaptureScale,
+                                range: 0.25...3.0,
+                                format: "%.2fx"
+                            )
+                            Toggle("Inverted", isOn: $vbInverted)
 
-                            if vbMode != .uniform {
-                                Toggle("Full Height", isOn: $vbFullHeight)
-                                if !vbFullHeight {
-                                    ParameterSlider("Height", value: $vbHeight, range: 20...200, format: "%.0f pt")
+                            if vbMode.supportsBandSize {
+                                Toggle(
+                                    vbMode.usesEdges || vbMode.usesCenter
+                                        ? (vbMode.isHorizontalEdge || vbMode == .horizontalCenter
+                                            ? "Full Width" : "Full Height")
+                                        : "Full Extent",
+                                    isOn: $vbUseFullExtent
+                                )
+                                if !vbUseFullExtent {
+                                    ParameterSlider(
+                                        vbMode.isHorizontalEdge || vbMode == .horizontalCenter
+                                            ? "Width" : "Height",
+                                        value: $vbBandLength,
+                                        range: 20...400,
+                                        format: "%.0f pt"
+                                    )
                                 }
                             }
 
-                            if vbMode == .edgeBlur {
+                            if vbMode.isVerticalEdge {
                                 Picker("Edges", selection: $vbEdges) {
                                     Text("Top").tag(EdgeSelection.top)
                                     Text("Bottom").tag(EdgeSelection.bottom)
                                     Text("Both").tag(EdgeSelection.both)
                                 }
+                            }
+                            if vbMode.isHorizontalEdge {
+                                Picker("Edges", selection: $vbHorizontalEdges) {
+                                    Text("Leading").tag(HorizontalEdgeSelection.leading)
+                                    Text("Trailing").tag(HorizontalEdgeSelection.trailing)
+                                    Text("Both").tag(HorizontalEdgeSelection.both)
+                                }
+                            }
+                            if vbMode.supportsTransition {
                                 Picker("Transition", selection: $vbTransition) {
                                     Text("Linear").tag(TransitionAlgorithm.linear)
                                     Text("Eased").tag(TransitionAlgorithm.eased)
                                 }
+                            }
+
+                            if vbMode.isRoundedRect {
+                                Picker("Corner Style", selection: $vbRectCornerStyle) {
+                                    ForEach(CornerStyleSelection.allCases, id: \.self) { style in
+                                        Text(style.rawValue.capitalized).tag(style)
+                                    }
+                                }
+                                ParameterSlider(
+                                    "Corner Radius",
+                                    value: $vbRectCornerRadius,
+                                    range: 0...80,
+                                    format: "%.0f pt"
+                                )
+                                ParameterSlider(
+                                    "Fade Width",
+                                    value: $vbRectFadeWidth,
+                                    range: 0...64,
+                                    format: "%.0f pt"
+                                )
                             }
 
                         case .swiftUI:

@@ -74,6 +74,55 @@ import SwiftUI
             }
         }
 
+        /// Applies a variable blur masked by a rounded-rectangle (or
+        /// continuous-curvature squircle) shape. The blur is strongest *inside*
+        /// the rounded region and fades to clear at the edges through a
+        /// configurable fade-width band.
+        ///
+        /// Pass `inverted: true` to flip the mapping: clear inside the shape,
+        /// blurred outside — useful for spotlight-style focus effects where
+        /// the background is blurred and the rounded callout stays sharp.
+        ///
+        /// - Parameters:
+        ///   - cornerStyle: Circular or continuous (squircle) corners
+        ///     (default: `.continuous`)
+        ///   - cornerRadius: Corner radius in points
+        ///     (default: `UIScreen.displayCornerRadius`)
+        ///   - fadeWidth: Width of the alpha fade band in points (default: 16)
+        ///   - maxBlurRadius: Maximum blur radius in points (default: 3)
+        ///   - transition: Linear or eased falloff (default: `.eased`)
+        ///   - inverted: Flips the mask so blur lands outside the rounded
+        ///     shape (default: `false`)
+        ///   - ignoreSafeArea: Whether the blur ignores safe area
+        ///     (default: `true`)
+        ///   - scale: Capture scale forwarded to the backdrop layer
+        ///     (default: 1)
+        @available(iOS 15.0, *)
+        @ViewBuilder public func roundedRectBlur(
+            _ cornerStyle: RoundedCornerStyle = .continuous,
+            cornerRadius: CGFloat = UIScreen.displayCornerRadius,
+            fadeWidth: CGFloat = 16,
+            maxBlurRadius: CGFloat = 3,
+            transition: TransitionAlgorithm = .eased,
+            inverted: Bool = false,
+            ignoreSafeArea: Bool = true,
+            scale: CGFloat = 1
+        ) -> some View {
+            overlay {
+                VariableBlurView(
+                    cornerStyle,
+                    maxBlurRadius: maxBlurRadius,
+                    cornerRadius: cornerRadius,
+                    fadeWidth: fadeWidth,
+                    transition: transition,
+                    inverted: inverted,
+                    scale: scale
+                )
+                .conditionalIgnoreSafeArea(ignoreSafeArea)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+
         /// Applies variable blur effects to the vertical edges (top and bottom) of a view.
         ///
         /// This modifier creates blur effects on the top and/or bottom of the view, with a
