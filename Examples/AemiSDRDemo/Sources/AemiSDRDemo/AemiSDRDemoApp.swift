@@ -1,5 +1,5 @@
-import SwiftUI
 import AppIntents
+import SwiftUI
 
 @main
 struct AemiSDRDemoApp: App {

@@ -56,9 +56,18 @@ import SwiftUI
         @State private var falloffLength: Double = 1.0
         @State private var falloffIntensity: Double = 1.0
         @State private var continuousCapture = true
-        @State private var refreshRate: Double = 40
+        @State private var refreshRate: Int = 40
         @State private var captureScale: Double = 0.5
+        @State private var forceCaptureEveryFrame = true
         @State private var headerCornerRadius: Double = 16
+
+        // Physical fidelity opt-ins (function-constant gated in the shader).
+        @State private var diagonalBand: Double = 6.0
+        @State private var enableFresnel = false
+        @State private var enableSpectral = false
+        @State private var enableAspheric = false
+        @State private var asphericK2: Double = 0.0
+        @State private var asphericK4: Double = 0.0
 
         // MARK: - Header Blur State
 
@@ -101,8 +110,15 @@ import SwiftUI
                 chromaticAmount: Float(chromaticAmount),
                 material: material,
                 continuousCapture: continuousCapture,
-                refreshRate: Int(refreshRate.rounded()),
-                captureScale: CGFloat(captureScale)
+                refreshRate: refreshRate,
+                captureScale: CGFloat(captureScale),
+                forceCaptureEveryFrame: forceCaptureEveryFrame,
+                diagonalBand: Float(diagonalBand),
+                asphericK2: Float(asphericK2),
+                asphericK4: Float(asphericK4),
+                enableFresnel: enableFresnel,
+                enableSpectral: enableSpectral,
+                enableAspheric: enableAspheric
             )
         }
 
@@ -131,20 +147,8 @@ import SwiftUI
             }
             .navigationTitle("Liquid Surface")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showSettings.toggle()
-                    } label: {
-                        Image(
-                            systemName: showSettings
-                                ? "slider.horizontal.2.square.on.square"
-                                : "slider.horizontal.2.square"
-                        )
-                    }
-                }
-            }
-            .sheet(isPresented: $showSettings) {
+            .demoSettingsToolbar(isPresented: $showSettings)
+            .demoSettingsSheet(isPresented: $showSettings) {
                 settingsSheet
             }
             .onChange(of: preset) { _, value in
@@ -176,10 +180,12 @@ import SwiftUI
                 Text("Floating Header")
                     .font(.headline)
                 Spacer()
-                Button {} label: {
+                Button {
+                } label: {
                     Image(systemName: "bell.fill")
                 }
-                Button {} label: {
+                Button {
+                } label: {
                     Image(systemName: "person.circle")
                 }
             }
@@ -212,7 +218,8 @@ import SwiftUI
                 let hasBottom = vbEdges.edgeSet.contains(.bottom)
                 VStack(spacing: 0) {
                     if hasTop {
-                        let topType: MaskType = vbTransition == .linear
+                        let topType: MaskType =
+                            vbTransition == .linear
                             ? .linearTopToBottom : .easeInTopToBottom
                         VariableBlurView(maxBlurRadius: vbBlurRadius, type: topType)
                             .frame(height: height == .infinity ? nil : height)
@@ -220,7 +227,8 @@ import SwiftUI
                     }
                     if hasTop && hasBottom || height != .infinity { Spacer() }
                     if hasBottom {
-                        let bottomType: MaskType = vbTransition == .linear
+                        let bottomType: MaskType =
+                            vbTransition == .linear
                             ? .linearBottomToTop : .easeInBottomToTop
                         VariableBlurView(maxBlurRadius: vbBlurRadius, type: bottomType)
                             .frame(height: height == .infinity ? nil : height)
@@ -240,14 +248,27 @@ import SwiftUI
 
         private var bottomSurface: some View {
             HStack(spacing: 20) {
-                Button {} label: { Image(systemName: "house.fill") }
-                Button {} label: { Image(systemName: "magnifyingglass") }
-                Button {} label: {
+                Button {
+                } label: {
+                    Image(systemName: "house.fill")
+                }
+                Button {
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                Button {
+                } label: {
                     Image(systemName: "plus.circle.fill")
                         .font(.title2)
                 }
-                Button {} label: { Image(systemName: "heart.fill") }
-                Button {} label: { Image(systemName: "person.fill") }
+                Button {
+                } label: {
+                    Image(systemName: "heart.fill")
+                }
+                Button {
+                } label: {
+                    Image(systemName: "person.fill")
+                }
             }
             .font(.title3)
             .padding(.horizontal, 24)
@@ -276,10 +297,8 @@ import SwiftUI
                 }
 
                 Section("Layout") {
-                    sliderRow("Header Radius", value: $headerCornerRadius, range: 0...48, format: "%.0f")
+                    ParameterSlider("Header Radius", value: $headerCornerRadius, range: 0...48, format: "%.0f pt")
                 }
-
-                // MARK: Header Blur
 
                 Section("Header Blur") {
                     Toggle("Enable Blur", isOn: $headerBlurEnabled)
@@ -294,11 +313,11 @@ import SwiftUI
 
                         switch headerBlurType {
                         case .backdrop:
-                            sliderRow("Radius", value: $bdBlurRadius, range: 0...40)
+                            ParameterSlider("Radius", value: $bdBlurRadius, range: 0...40)
                             ColorPicker("Tint Color", selection: $bdColorTint, supportsOpacity: false)
-                            sliderRow("Tint Alpha", value: $bdColorTintAlpha, range: 0...1)
-                            sliderRow("Saturation", value: $bdSaturation, range: 0...3)
-                            sliderRow("Scale", value: $bdScale, range: 0.1...3.0, format: "%.2fx")
+                            ParameterSlider("Tint Alpha", value: $bdColorTintAlpha, range: 0...1)
+                            ParameterSlider("Saturation", value: $bdSaturation, range: 0...3)
+                            ParameterSlider("Scale", value: $bdScale, range: 0.1...3.0, format: "%.2fx")
 
                         case .variableBlur:
                             Picker("Mode", selection: $vbMode) {
@@ -308,12 +327,12 @@ import SwiftUI
                             }
                             .pickerStyle(.segmented)
 
-                            sliderRow("Radius", value: $vbBlurRadius, range: 1...40)
+                            ParameterSlider("Radius", value: $vbBlurRadius, range: 1...40)
 
                             if vbMode != .uniform {
                                 Toggle("Full Height", isOn: $vbFullHeight)
                                 if !vbFullHeight {
-                                    sliderRow("Height", value: $vbHeight, range: 20...200, format: "%.0f pt")
+                                    ParameterSlider("Height", value: $vbHeight, range: 20...200, format: "%.0f pt")
                                 }
                             }
 
@@ -330,17 +349,15 @@ import SwiftUI
                             }
 
                         case .swiftUI:
-                            sliderRow("Radius", value: $suiBlurRadius, range: 0...40)
+                            ParameterSlider("Radius", value: $suiBlurRadius, range: 0...40)
                         }
                     }
                 }
 
-                // MARK: Optics
-
                 Section("Optics") {
-                    sliderRow("Strength", value: $strength, range: 0...1)
-                    sliderRow("Curvature", value: $lensCurvature, range: 0...1)
-                    sliderRow("Chromatic", value: $chromaticAmount, range: 0...30)
+                    ParameterSlider("Strength", value: $strength, range: 0...1)
+                    ParameterSlider("Curvature", value: $lensCurvature, range: 0...1)
+                    ParameterSlider("Chromatic", value: $chromaticAmount, range: 0...30, format: "%.1f")
 
                     Picker("Material", selection: $material) {
                         ForEach(LiquidLensMaterial.allCases, id: \.self) { value in
@@ -355,43 +372,55 @@ import SwiftUI
                             Text(falloffTitle(value)).tag(value)
                         }
                     }
-                    sliderRow("Length", value: $falloffLength, range: 0.01...1.0)
-                    sliderRow("Intensity", value: $falloffIntensity, range: 0...1)
+                    ParameterSlider("Length", value: $falloffLength, range: 0.01...1.0)
+                    ParameterSlider("Intensity", value: $falloffIntensity, range: 0...1)
                 }
 
-                Section("Capture") {
+                Section {
+                    ParameterSlider(
+                        "Diagonal Band",
+                        value: $diagonalBand,
+                        range: 0...32,
+                        format: "%.1f pt"
+                    )
+                    Toggle("Fresnel Attenuation", isOn: $enableFresnel)
+                    Toggle("Spectral Integration", isOn: $enableSpectral)
+                    Toggle("Aspheric Profile", isOn: $enableAspheric)
+                    if enableAspheric {
+                        ParameterSlider("Asph K₂", value: $asphericK2, range: -1...1, format: "%+.2f")
+                        ParameterSlider("Asph K₄", value: $asphericK4, range: -1...1, format: "%+.2f")
+                    }
+                } header: {
+                    Text("Physical Fidelity")
+                } footer: {
+                    Text(
+                        "Function-constant-gated pipeline variants. Each enabled toggle builds a specialized shader on first use."
+                    )
+                    .font(.caption2)
+                }
+
+                Section {
                     Toggle("Continuous Capture", isOn: $continuousCapture)
 
-                    sliderRow("Refresh", value: $refreshRate, range: 1...120, format: "%.0f fps")
+                    ParameterIntSlider("Refresh Rate", value: $refreshRate, range: 1...120, unit: "fps")
                         .disabled(!continuousCapture)
                         .opacity(continuousCapture ? 1 : 0.5)
-                    sliderRow("Scale", value: $captureScale, range: 0.25...1.0, format: "%.2fx")
+
+                    ParameterSlider("Capture Scale", value: $captureScale, range: 0.25...3.0, format: "%.2fx")
+
+                    Toggle("Force Capture Every Frame", isOn: $forceCaptureEveryFrame)
+                } header: {
+                    Text("Capture")
+                } footer: {
+                    Text(
+                        "Lower capture scale trades fidelity for performance. Disable “Force Capture Every Frame” to skip recaptures when the backdrop structure hasn’t changed."
+                    )
+                    .font(.caption2)
                 }
             }
-            .presentationDetents([.medium, .large])
-            .presentationContentInteraction(.scrolls)
-            .presentationBackgroundInteraction(.enabled)
         }
 
         // MARK: - Helpers
-
-        private func sliderRow(
-            _ label: String,
-            value: Binding<Double>,
-            range: ClosedRange<Double>,
-            format: String = "%.2f"
-        ) -> some View {
-            HStack(spacing: 6) {
-                Text(label)
-                    .font(.caption)
-                    .frame(width: 80, alignment: .leading)
-                Slider(value: value, in: range)
-                Text(String(format: format, value.wrappedValue))
-                    .monospacedDigit()
-                    .font(.caption2)
-                    .frame(width: 50, alignment: .trailing)
-            }
-        }
 
         private func materialTitle(_ material: LiquidLensMaterial) -> String {
             switch material {
@@ -424,8 +453,15 @@ import SwiftUI
             falloffLength = Double(value.falloffLength)
             falloffIntensity = Double(value.falloffIntensity)
             continuousCapture = value.continuousCapture
-            refreshRate = Double(value.refreshRate)
+            refreshRate = value.refreshRate
             captureScale = Double(value.captureScale)
+            forceCaptureEveryFrame = value.forceCaptureEveryFrame
+            diagonalBand = Double(value.diagonalBand)
+            asphericK2 = Double(value.asphericK2)
+            asphericK4 = Double(value.asphericK4)
+            enableFresnel = value.enableFresnel
+            enableSpectral = value.enableSpectral
+            enableAspheric = value.enableAspheric
         }
     }
 #endif
