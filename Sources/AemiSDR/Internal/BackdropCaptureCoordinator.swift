@@ -484,9 +484,8 @@
             }
             guard let device else { return }
 
-            // Same bucket as last time — reuse current bridge handle.
-            if let existing = bridge, width == bridgeWidth, height == bridgeHeight {
-                _ = existing
+            // Same bucket as last time — keep the current bridge handle.
+            if bridge != nil, width == bridgeWidth, height == bridgeHeight {
                 return
             }
 

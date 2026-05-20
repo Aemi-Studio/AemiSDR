@@ -16,13 +16,19 @@
 public enum LiquidLensQuality: Sendable, Equatable, Hashable, CaseIterable {
     /// Cheapest rendering path. Scalar rim deviation (no per-fragment
     /// `refract()`), no Fresnel, no spectral integration, no aspheric
-    /// surface profile. Targets the fastest possible chromatic-path
-    /// fragment cost.
+    /// surface profile, and the smallest backdrop capture scale.
+    ///
+    /// On iOS, this resolves to the same shader pipeline as `.balanced`
+    /// (both leave all opt-in physical flags off); the difference is the
+    /// `captureScale` applied by `LiquidGlassConfiguration.apply(_:)` —
+    /// 0.25 vs 0.5 — which moves backdrop fragment cost by 4×. On non-iOS
+    /// platforms (where `LiquidGlassConfiguration` is unavailable) the two
+    /// cases produce identical configurations.
     case fastest
 
     /// Default balanced configuration. Scalar refraction, no opt-in physical
-    /// modes. Matches the out-of-the-box behavior and is appropriate for
-    /// most interactive use.
+    /// modes, half-resolution backdrop capture. Matches the out-of-the-box
+    /// behavior and is appropriate for most interactive use.
     case balanced
 
     /// Per-fragment 3D `refract()` for `tan(α)` accuracy at large incidence

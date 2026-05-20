@@ -123,10 +123,13 @@ struct VariableBlurMaskTests {
     // view's outermost bottom edge). The mask type is `.easeInBottomToTop`
     // (alpha=1 at yNorm=0 = CI bottom = visual bottom of the band).
 
-    /// Documents the corrected mapping: top band uses `.easeInTopToBottom`,
-    /// bottom band uses `.easeInBottomToTop`. The previous mapping had these
-    /// swapped, producing blur at the *interior* of the view instead of at
-    /// the outermost edge.
+    /// Pins the mask-direction-to-band mapping: the top band uses
+    /// `.easeInTopToBottom` (alpha peaks at the band's *top* row, which is
+    /// the view's outermost top edge); the bottom band uses
+    /// `.easeInBottomToTop` (alpha peaks at the bottom row). Swapping the
+    /// two would produce blur at the band's interior boundary instead of at
+    /// the outermost edge, which is the visual that the SwiftUI modifier
+    /// promises.
     @Test("verticalEdgeBlur top band uses TopToBottom mask (peaks at outermost edge)")
     func topBandPeaksAtOutermostEdge() {
         // The top band's mask must have alpha=1 at the band's top.
