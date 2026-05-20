@@ -225,6 +225,25 @@
                 }
             }
 
+            // Inline-bytes upload for the uniform struct.
+            //
+            // `setFragmentBytes` copies the payload directly into the command
+            // encoder's argument stream — no separate `MTLBuffer`, no
+            // round-trip to shared memory. Apple's guidance is to prefer this
+            // path for resources ≤4KB; the 128-byte lens uniform fits well
+            // inside that envelope.
+            //
+            // A standalone `MTLBuffer` (with triple-buffering for in-flight
+            // frames) would let the GPU reuse the same backing allocation
+            // across draws, but it costs an extra allocation per buffer, a
+            // dispatch-semaphore-gated CPU/GPU producer/consumer dance, and
+            // shaves nothing meaningful when the data is small, changes every
+            // frame, and is consumed by exactly one draw call. The win shows
+            // up when the same uniforms are reused across many draws or when
+            // the struct grows past the inline ceiling — neither applies
+            // here. A true Metal argument buffer (with `[[id(N)]]` field
+            // attributes bundling multiple resources) is similarly aimed at
+            // many-resource scenes, not a single 128-byte payload.
             var mutableUniforms = uniforms
             unsafe encoder.setFragmentBytes(&mutableUniforms, length: MemoryLayout<LiquidLensUniforms>.stride, index: 0)
 
