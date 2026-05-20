@@ -147,6 +147,24 @@
     }
 
     extension LiquidGlassConfiguration {
+        /// Applies the chosen quality preset's flag combination plus the
+        /// matching `captureScale`. Returns `self` after mutation for
+        /// chain-friendly call sites.
+        ///
+        /// The preset overrides the feature flags it owns
+        /// (`enableHighFidelityRefraction`, `enableFresnel`, `enableSpectral`,
+        /// `enableAspheric`) and the `captureScale`. All other fields are
+        /// left intact. Override any flag afterwards to deviate from the tier.
+        @discardableResult
+        public mutating func apply(_ quality: LiquidLensQuality) -> Self {
+            enableHighFidelityRefraction = quality.usesHighFidelityRefraction
+            enableFresnel = quality.usesFresnel
+            enableSpectral = quality.usesSpectral
+            enableAspheric = quality.usesAspheric
+            captureScale = quality.captureScale
+            return self
+        }
+
         /// Balanced preset for general UI backgrounds.
         public static let regular = LiquidGlassConfiguration()
 
