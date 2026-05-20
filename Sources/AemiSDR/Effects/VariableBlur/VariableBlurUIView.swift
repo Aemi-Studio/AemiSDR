@@ -88,6 +88,9 @@
 
             super.init(effect: UIBlurEffect(style: .regular))
             isUserInteractionEnabled = false
+            logger.debug(
+                "init: maxRadius=\(maxBlurRadius) mask=\(String(describing: maskType)) offset=\(startOffset) corner=\(cornerRadius) fade=\(fadeWidth) inverted=\(inverted) scale=\(scale) bounds=\(String(describing: self.bounds.size))"
+            )
             updateMask(for: bounds.size)
         }
 
@@ -149,7 +152,14 @@
         // MARK: - UIView Lifecycle
 
         override public func didMoveToWindow() {
-            guard window != nil, let backdropLayer = subviews.first?.layer else { return }
+            guard window != nil else {
+                logger.debug("didMoveToWindow: window=nil, skipping setup")
+                return
+            }
+            guard let backdropLayer = subviews.first?.layer else {
+                logger.error("didMoveToWindow: backdrop layer missing (subviews=\(self.subviews.count))")
+                return
+            }
             // Honour the caller-configured capture scale instead of
             // implicitly tracking the host window's screen scale. The
             // default value (1.0) matches `BackdropBlurView`; callers
@@ -157,11 +167,13 @@
             // `UIScreen.main.scale` (or the live environment scale)
             // explicitly through `scale:`.
             backdropLayer.setValue(configuredScale, forKey: _InternedKeys.scaleFactorKey)
+            logger.debug("didMoveToWindow: bounds=\(String(describing: self.bounds.size)) captureScale=\(self.configuredScale)")
             updateMask(for: bounds.size)
         }
 
         override public func layoutSubviews() {
             super.layoutSubviews()
+            logger.debug("layoutSubviews: bounds=\(String(describing: self.bounds.size))")
             updateMask(for: bounds.size)
         }
 
@@ -181,6 +193,9 @@
                 // Force CA to re-evaluate by clearing then re-assigning.
                 // Re-assigning the same NSObject reference is optimized away.
                 let backdropLayer = subviews.first?.layer
+                if backdropLayer == nil {
+                    logger.error("setupVariableBlurFilter: backdrop layer missing on reuse path")
+                }
                 backdropLayer?.filters = []
                 backdropLayer?.filters = [variableBlurFilter]
 
@@ -219,7 +234,13 @@
             variableBlur.setValue(true, forKey: _InternedKeys.normalizeParam)
 
             let backdropLayer = subviews.first?.layer
+            if backdropLayer == nil {
+                logger.error("setupVariableBlurFilter: backdrop layer missing at filter install (subviews=\(self.subviews.count))")
+            }
             backdropLayer?.filters = [variableBlur]
+            logger.debug(
+                "setupVariableBlurFilter: filter created radius=\(self.configuredMaxBlurRadius) backdropLayerPresent=\(backdropLayer != nil)"
+            )
 
             for subview in subviews.dropFirst() {
                 subview.alpha = 0
@@ -235,7 +256,10 @@
         fileprivate func updateMask(for size: CGSize) {
             setupVariableBlurFilter()
 
-            guard size.width > 0, size.height > 0 else { return }
+            guard size.width > 0, size.height > 0 else {
+                logger.debug("updateMask: skipping, size=\(String(describing: size))")
+                return
+            }
 
             let scale = currentScale
             let key = MaskCacheKey.make(
@@ -255,6 +279,9 @@
             if let cached = MaskCache.peek(for: key) {
                 pendingMaskKey = nil
                 variableBlurFilter?.setValue(cached, forKey: _InternedKeys.maskParam)
+                logger.debug(
+                    "updateMask: cache HIT size=\(String(describing: size)) mask=\(String(describing: self.configuredMaskType)) inverted=\(self.configuredInverted) cgImage=\(cached.width)x\(cached.height) filterPresent=\(self.variableBlurFilter != nil)"
+                )
                 return
             }
 
@@ -272,6 +299,10 @@
             let fadeWidth = configuredFadeWidth
             let inverted = configuredInverted
 
+            logger.debug(
+                "updateMask: cache MISS size=\(String(describing: size)) mask=\(String(describing: maskType)) inverted=\(inverted) — dispatching background gen"
+            )
+
             VariableBlurUIView.backgroundQueue.async { [weak self, logger] in
                 let image = Self.generateMaskImage(
                     size: size,
@@ -283,16 +314,46 @@
                     inverted: inverted
                 )
                 guard let image else {
-                    logger.error("Failed to generate mask image off main")
+                    logger.error(
+                        "updateMask: background gen FAILED mask=\(String(describing: maskType)) size=\(String(describing: size)) — filter has no mask, will produce uniform-blur fallback"
+                    )
                     return
                 }
                 MaskCache.insert(image, for: key)
+                logger.debug(
+                    "updateMask: background gen OK mask=\(String(describing: maskType)) cgImage=\(image.width)x\(image.height) — hopping to main to apply"
+                )
                 DispatchQueue.main.async {
                     MainActor.assumeIsolated {
-                        guard let self else { return }
-                        guard self.pendingMaskKey == key else { return }
+                        guard let self else {
+                            logger.debug("updateMask: apply skipped, self deallocated")
+                            return
+                        }
+                        guard self.pendingMaskKey == key else {
+                            logger.debug("updateMask: apply DROPPED — newer mask key superseded this one")
+                            return
+                        }
                         self.pendingMaskKey = nil
-                        self.variableBlurFilter?.setValue(image, forKey: _InternedKeys.maskParam)
+                        guard let filter = self.variableBlurFilter else {
+                            logger.error("updateMask: apply FAILED — filter is nil at mask-arrival time")
+                            return
+                        }
+                        filter.setValue(image, forKey: _InternedKeys.maskParam)
+                        // Force CA to re-evaluate the filter chain with the
+                        // freshly assigned mask. `setValue(_:forKey:)` mutates
+                        // the filter object in place but does not by itself
+                        // invalidate the layer's rendered output; clearing
+                        // and re-assigning the filter array is the documented
+                        // way to ensure the next draw picks up the new state.
+                        // This matters specifically when the mask arrives
+                        // asynchronously after the filter has already been
+                        // attached to the backdrop layer in a prior tick.
+                        let backdropLayer = self.subviews.first?.layer
+                        backdropLayer?.filters = []
+                        backdropLayer?.filters = [filter]
+                        logger.debug(
+                            "updateMask: APPLIED mask=\(String(describing: maskType)) backdropLayerPresent=\(backdropLayer != nil)"
+                        )
                     }
                 }
             }
