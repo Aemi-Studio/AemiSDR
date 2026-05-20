@@ -154,14 +154,17 @@
         // MARK: - Effective Refresh Rate
 
         /// The frame rate the display link should actually run at, derived from
-        /// the configured `refreshRate` plus system state:
+        /// the configured `refreshRate` plus system state. The thermal ladder
+        /// progressively trims the cap so capture cost falls before the OS has
+        /// to step in with hard throttling:
         /// - Reduce Motion → 0 (paused; one initial capture only)
         /// - Thermal `.critical` → 0 (paused)
-        /// - Thermal `.serious` → 30
-        /// - Low Power Mode → 30 (cap)
+        /// - Thermal `.serious` → cap 20
+        /// - Thermal `.fair` → cap 30
+        /// - Low Power Mode → cap 30
         ///
         /// Returns 0 to signal "fully pause"; otherwise an fps value bounded
-        /// by `refreshRate`.
+        /// by `refreshRate` and the strictest active cap.
         private var effectiveRefreshRate: Int {
             // `UIAccessibility.isReduceMotionEnabled` is `@unsafe`-annotated on
             // iOS 26 SDK because it can be queried from any thread; we're on
@@ -170,7 +173,15 @@
             let thermal = ProcessInfo.processInfo.thermalState
             if thermal == .critical { return 0 }
             var cap = refreshRate
-            if thermal == .serious { cap = min(cap, 30) }
+            // `.fair` is the first state where sustained 40-120 Hz capture
+            // starts contributing to a long-term thermal rise; capping at 30
+            // gives the system headroom before `.serious` triggers.
+            if thermal == .fair { cap = min(cap, 30) }
+            // `.serious` already implies significant OS-level CPU throttling
+            // (typically 50% of peak); dropping the capture link to 20 fps
+            // keeps display-link work below the throttled budget so other UI
+            // animations on the main thread stay smooth.
+            if thermal == .serious { cap = min(cap, 20) }
             if ProcessInfo.processInfo.isLowPowerModeEnabled { cap = min(cap, 30) }
             return max(0, cap)
         }
