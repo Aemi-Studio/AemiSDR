@@ -218,23 +218,5 @@
             return configuration
         }
 
-        // Retained for source compatibility with the older split helpers; the
-        // unified `lensConfiguration(..., overlayMode:)` is now the canonical
-        // entry point.
-        @available(*, deprecated, renamed: "lensConfiguration(center:halfSize:cornerRadiusOverride:overlayMode:)")
-        @usableFromInline
-        internal func overlayLensConfiguration(
-            center: SIMD2<Float>,
-            halfSize: SIMD2<Float>,
-            cornerRadiusOverride: LiquidLensCornerRadius?
-        ) -> LiquidLensConfiguration {
-            var configuration = lensConfiguration(
-                center: center,
-                halfSize: halfSize,
-                cornerRadiusOverride: cornerRadiusOverride
-            )
-            configuration.overlayMode = true
-            return configuration
-        }
     }
 #endif
