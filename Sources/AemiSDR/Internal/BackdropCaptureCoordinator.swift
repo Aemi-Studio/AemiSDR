@@ -20,6 +20,22 @@
     ///
     /// Subclasses override `processTexture(_:)` to route the captured `MTLTexture`
     /// to their specific rendering pipeline.
+    ///
+    /// ## Why CPU-side rasterization, not a Metal render pass
+    ///
+    /// The capture has to traverse a SwiftUI / UIKit view hierarchy that the
+    /// renderer doesn't own. `drawHierarchy(in:afterScreenUpdates:)` is the
+    /// only API that does this faithfully — Metal can't directly render a
+    /// UIView. The output lands in an IOSurface-backed `CVPixelBuffer` (see
+    /// `ZeroCopyTextureBridge`), which Metal samples as a zero-copy
+    /// `CVMetalTexture`. No CPU→GPU memcpy occurs; the GPU reads the same
+    /// physical pages the CPU wrote.
+    ///
+    /// This means tile-memory tricks (`MTLStorageMode.memoryless`,
+    /// programmable blending tile reads) don't apply to the captured
+    /// texture — it must live in shared memory to survive the CPU→GPU
+    /// handoff. The downstream lens render is a single Metal pass over this
+    /// texture, which is the minimal possible work for the given input.
     @MainActor
     class BackdropCaptureCoordinator {
         /// The effect view this coordinator manages capture for.
@@ -361,9 +377,9 @@
         ///   (i.e. the hierarchy hasn't been restructured to nest us under it)
         private func cachedOrResolvedContentSibling(for effectView: UIView) -> UIView? {
             if let cached = cachedContentSibling,
-               cached.window === effectView.window,
-               !effectView.isDescendant(of: cached),
-               cached.superview != nil
+                cached.window === effectView.window,
+                !effectView.isDescendant(of: cached),
+                cached.superview != nil
             {
                 return cached
             }
@@ -448,18 +464,21 @@
             ensureBridge(width: pixelWidth, height: pixelHeight)
             guard let bridge, let consumerID = bridgeConsumerID else { return }
 
-            if let captured = bridge.render(consumer: consumerID, width: pixelWidth, height: pixelHeight, actions: { ctx in
-                ctx.saveGState()
-                ctx.translateBy(x: 0, y: CGFloat(pixelHeight))
-                ctx.scaleBy(x: 1, y: -1)
-                ctx.scaleBy(x: scale, y: scale)
-                let needsScreenUpdate = !self.captureViewHasRendered
-                UIGraphicsPushContext(ctx)
-                captureView.drawHierarchy(in: captureView.bounds, afterScreenUpdates: needsScreenUpdate)
-                UIGraphicsPopContext()
-                self.captureViewHasRendered = true
-                ctx.restoreGState()
-            }) {
+            if let captured = bridge.render(
+                consumer: consumerID, width: pixelWidth, height: pixelHeight,
+                actions: { ctx in
+                    ctx.saveGState()
+                    ctx.translateBy(x: 0, y: CGFloat(pixelHeight))
+                    ctx.scaleBy(x: 1, y: -1)
+                    ctx.scaleBy(x: scale, y: scale)
+                    let needsScreenUpdate = !self.captureViewHasRendered
+                    UIGraphicsPushContext(ctx)
+                    captureView.drawHierarchy(in: captureView.bounds, afterScreenUpdates: needsScreenUpdate)
+                    UIGraphicsPopContext()
+                    self.captureViewHasRendered = true
+                    ctx.restoreGState()
+                })
+            {
                 processTexture(captured)
             }
         }

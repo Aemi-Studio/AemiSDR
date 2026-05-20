@@ -67,17 +67,25 @@
         /// and push the blur to the edges.
         public var inverted: Bool = false
 
-        /// Capture scale forwarded to the backdrop layer's
-        /// `scaleFactorKey`. Same semantics as `BackdropBlurView.scale`:
-        /// the filter samples the captured content at this scale before
-        /// blurring, so values below `1` produce softer / cheaper blur
-        /// (downsampled capture) and values above `1` produce sharper
-        /// edges at higher cost. Defaults to `1` to match the
-        /// `BackdropBlurView` default — note that this differs from the
-        /// pre-config behaviour where `VariableBlurUIView` implicitly
-        /// tracked `window.screen.scale`. Pass `UIScreen.main.scale` (or
-        /// the live environment scale) explicitly when you need the
-        /// previous device-native behaviour.
+        /// Source rasterization scale forwarded to the backdrop layer's
+        /// `scaleFactorKey`.
+        ///
+        /// The variable-blur filter samples the captured backdrop content at
+        /// this scale before convolving, so the value is the single biggest
+        /// performance lever for large blur radii:
+        ///
+        /// - `scale < 1` downsamples the source before blurring, then the
+        ///   compositor bilinearly upscales the result. Cost scales with the
+        ///   downsampled pixel count: 0.5× → 4× less work, 0.25× → 16×.
+        ///   Visually indistinguishable at radii ≥ 8 pt because the blur
+        ///   itself flattens the lost detail.
+        /// - `scale = 1` (default) samples at native screen scale. Matches
+        ///   `BackdropBlurView`'s default and gives the sharpest edges.
+        /// - `scale > 1` oversamples — sharper edges, more work. Only useful
+        ///   for tiny radii where bilinear upscaling would soften the result.
+        ///
+        /// Pass `UIScreen.main.scale` (or the live environment scale) when
+        /// you need device-native sampling regardless of platform default.
         public var scale: CGFloat = 1
 
         // MARK: - Initializers
