@@ -74,6 +74,27 @@
         /// is a measurable cost.
         public var forceCaptureEveryFrame: Bool
 
+        /// Soft transition band in points across the inner-rect medial axis
+        /// of the SDF gradient. Forwards to
+        /// `LiquidLensConfiguration.diagonalBand`.
+        public var diagonalBand: Float
+
+        /// Second-order aspheric coefficient (active when `enableAspheric` is `true`).
+        public var asphericK2: Float
+
+        /// Fourth-order aspheric coefficient (active when `enableAspheric` is `true`).
+        public var asphericK4: Float
+
+        /// Enables Fresnel transmission attenuation at the lens surface.
+        /// Off by default to preserve the artistic look.
+        public var enableFresnel: Bool
+
+        /// Enables 5-wavelength spectral integration in chromatic mode.
+        public var enableSpectral: Bool
+
+        /// Enables the aspheric surface-tilt model.
+        public var enableAspheric: Bool
+
         public init(
             strength: Float = 0.5,
             lensCurvature: Float = 1.0,
@@ -86,7 +107,13 @@
             continuousCapture: Bool = true,
             refreshRate: Int = 40,
             captureScale: CGFloat = 0.5,
-            forceCaptureEveryFrame: Bool = true
+            forceCaptureEveryFrame: Bool = true,
+            diagonalBand: Float = 6.0,
+            asphericK2: Float = 0.0,
+            asphericK4: Float = 0.0,
+            enableFresnel: Bool = false,
+            enableSpectral: Bool = false,
+            enableAspheric: Bool = false
         ) {
             self.strength = strength
             self.lensCurvature = lensCurvature
@@ -102,6 +129,12 @@
             self.refreshRate = max(1, min(refreshRate, 120))
             self.captureScale = max(0.25, min(captureScale, 3.0))
             self.forceCaptureEveryFrame = forceCaptureEveryFrame
+            self.diagonalBand = diagonalBand
+            self.asphericK2 = asphericK2
+            self.asphericK4 = asphericK4
+            self.enableFresnel = enableFresnel
+            self.enableSpectral = enableSpectral
+            self.enableAspheric = enableAspheric
         }
     }
 
@@ -146,7 +179,13 @@
                 falloffLength: falloffLength,
                 falloffIntensity: falloffIntensity,
                 chromaticAmount: chromaticAmount,
-                material: material
+                material: material,
+                diagonalBand: diagonalBand,
+                asphericK2: asphericK2,
+                asphericK4: asphericK4,
+                enableFresnel: enableFresnel,
+                enableSpectral: enableSpectral,
+                enableAspheric: enableAspheric
             )
             configuration.overlayMode = overlayMode
             return configuration
@@ -170,6 +209,5 @@
             configuration.overlayMode = true
             return configuration
         }
-
     }
 #endif

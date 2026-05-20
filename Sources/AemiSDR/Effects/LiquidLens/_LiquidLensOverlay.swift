@@ -16,7 +16,6 @@
     /// Supports continuous capture via `CADisplayLink` with a low-resolution dirty
     /// check to skip unchanged frames. Auto-pauses when off-screen or backgrounded.
     struct _LiquidLensOverlay: UIViewRepresentable {
-
         var configuration: LiquidLensConfiguration
         var clipShapePath: ShapePathProvider?
         var continuousCapture: Bool

@@ -27,38 +27,12 @@ using namespace metal;
 //======================================================================
 
 /**
- * Fast power function optimized for positive bases with common exponents.
- *
- * This function provides optimized paths for common exponents (0, 1, 2) which
- * are frequently used in graphics calculations. For other exponents, it uses
- * Metal's built-in pow() function with clamping to prevent numerical instability.
- *
- * @param x The base value (must be positive for fractional exponents)
- * @param n The exponent
- * @return x raised to the power of n, or 0 if x <= 0
- *
- * Note: Clamping x to [1e-6, 1e6] prevents NaN/Inf for extreme values while
- * maintaining reasonable precision for typical graphics operations.
+ * Safe positive-base pow. The squircle SDF feeds normalized values in
+ * [0, 1] with exponent n ∈ [2, 100]; the `max(x, 1e-6)` floor avoids
+ * `pow(0, n) = 0` propagating into divisions while keeping precision.
  */
-inline float fast_pow(float x, float n) {
-    // Handle 0^0 = 1 (standard convention for graphics)
-    if (x == 0.0f && n == 0.0f) return 1.0f;
-
-    // Guard against invalid operations with negative/zero base and fractional exponents
-    if (x <= 0.0f) return 0.0f;
-
-    // Fast paths for common exponents - avoids pow() overhead
-    if (n == 0.0f) return 1.0f;    // x^0 = 1 for all x
-    if (n == 1.0f) return x;        // x^1 = x (identity)
-    if (n == 2.0f) return x * x;    // x^2 common in distance calculations
-
-    // Clamp exponent to prevent overflow (very large n can produce Inf)
-    float safe_n = clamp(n, 0.0f, 100.0f);
-
-    // General case with stability clamping
-    // The clamp prevents numerical issues when x is very small (underflow)
-    // or very large (overflow) which could produce NaN or Inf
-    return pow(clamp(x, 1e-6f, 1e6f), safe_n);
+inline float safe_pow(float x, float n) {
+    return pow(max(x, 1e-6f), n);
 }
 
 /**
@@ -129,56 +103,46 @@ inline float rounded_rect_sdf(float2 p, float2 half_size, float radius) {
 inline float simple_squircle_sdf(float2 p, float2 half_size, float radius, float n) {
     // Ensure valid radius (same logic as rounded rectangle)
     float r = clamp(radius, 0.0f, min(half_size.x, half_size.y));
-    
+
     // Define the inner rectangle where edges are straight
-    // This is the region not affected by corner rounding
-    float2 rect_half = half_size - float2(r);
-    rect_half = max(rect_half, float2(0.0f)); // Prevent negative dimensions
-    
+    float2 rect_half = max(half_size - float2(r), float2(0.0f));
+
     // Calculate position relative to the inset rectangle
     float2 d = abs(p) - rect_half;
-    
-    // Check if we're in the straight edge region (not in a corner)
+
+    // Straight edge region (not in a corner)
     if (d.x <= 0.0f && d.y <= 0.0f) {
-        // Inside straight edges: return distance to nearest edge minus corner offset
         return max(d.x, d.y) - r;
     }
-    
-    // We're in a corner region - need to apply superellipse shape
-    // Only consider the positive quadrant (due to symmetry)
+
+    // Corner region (positive quadrant by symmetry)
     float2 corner = max(d, float2(0.0f));
-    
-    // Handle the no-rounding case
     if (r <= 0.0f) {
-        // Sharp corners: just return Euclidean distance
         return length(corner);
     }
-    
-    // Transform to normalized superellipse space [0,1]
-    // This makes the math independent of the actual corner size
+
+    // Transform to normalized superellipse space [0, 1].
     float2 normalized = corner / r;
-    
-    // Evaluate the superellipse equation: |x|^n + |y|^n
-    // The 0.0001f prevents division by zero for edge cases
-    float se_sum = fast_pow(max(normalized.x, 0.0001f), n) +
-    fast_pow(max(normalized.y, 0.0001f), n);
-    
-    // Determine if we're inside or outside the superellipse
-    // On the curve: se_sum = 1
-    // Inside: se_sum < 1
-    // Outside: se_sum > 1
-    
-    if (se_sum <= 1.0f) {
-        // Inside the corner curve
-        // Approximate distance as difference from the corner radius
-        float current_r = fast_pow(se_sum, 1.0f/n) * r;
-        return current_r - r; // Negative value (inside)
-    } else {
-        // Outside the corner curve
-        // Scale distance based on how far outside we are
-        float scale = fast_pow(se_sum, 1.0f/n);
-        return r * (scale - 1.0f); // Positive value (outside)
-    }
+    float invN = 1.0f / max(n, 2.0f);
+
+    // Evaluate |x|^n + |y|^n. Floor at 1e-6 to avoid `pow(0, n)` problems
+    // and to keep the subsequent `pow(seSum, 1/n)` numerically stable.
+    float seSum = safe_pow(normalized.x, n) + safe_pow(normalized.y, n);
+
+    // Radial parameterization: distance along the line from the inner-rect
+    // corner to (cx, cy). On the curve, scale = 1 and the result is exactly
+    // zero. This is the standard Inigo Quilez approximation — not a true
+    // Euclidean SDF (the gradient magnitude isn't 1 everywhere), but it has
+    // the right sign and is monotonic in radial distance. Sufficient for
+    // mask kernels where the smoothstep AA only samples near the curve.
+    //
+    // Note: closed-form true Euclidean SDF for a superellipse does not exist
+    // (see refractiveindex.info and Raph Levien's blurred-rounded-rect work).
+    // Newton iteration on F = |x/r|^n + |y/r|^n - 1 is unstable for interior
+    // points far from the curve (linear extrapolation overshoots when the
+    // gradient is small), so we accept the radial approximation here.
+    float scale = safe_pow(seSum, invN);
+    return r * (scale - 1.0f);
 }
 
 /**
@@ -205,16 +169,10 @@ inline float distance_to_alpha(float dist, float fade_width) {
     if (fade_width <= 0.0f) {
         return (dist >= 0.0f) ? 1.0f : 0.0f;
     }
-    
-    // Normalize distance to [0,1] range across the fade width
-    // t = 0 at the inside edge of fade zone
-    // t = 1 at the outside edge of fade zone
-    float t = clamp(1.0f + dist / fade_width, 0.0f, 1.0f);
-    
-    // Apply smoothstep (Hermite) interpolation: 3t² - 2t³
-    // This provides C¹ continuity (smooth first derivative)
-    // Results in visually smooth anti-aliasing
-    return t * t * (3.0f - 2.0f * t);
+    // MSL built-in smoothstep: t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
+    //                          t * t * (3 - 2 * t)
+    // Map: dist = -fade_width → 0, dist = 0 → 1 (Hermite cubic).
+    return smoothstep(-fade_width, 0.0f, dist);
 }
 
 //======================================================================
@@ -251,38 +209,26 @@ extern "C" { namespace coreimage {
      * offset to the opposite edge of the image. Negative or >1 offsets are
      * supported for partial gradients.
      */
-    float4 linearMask(float widthPx,
-                      float heightPx,
-                      float startOffset,
-                      float inverted,
-                      coreimage::destination dest)
+    half4 linearMask(float widthPx,
+                     float heightPx,
+                     float startOffset,
+                     float inverted,
+                     coreimage::destination dest)
     {
-        // Get current pixel's Y coordinate
         float y = dest.coord().y;
-
-        // Convert fractional offset to pixel coordinates
-        // Guard against zero height to prevent division issues
         float h  = max(heightPx, 1.0f);
-
-        // Allow offsets outside [0,1] for partial gradients but clamp to reasonable range
         float y0 = clamp(startOffset, -1.0f, 1.0f) * h;
-
-        // Calculate effective gradient height (remaining space after offset)
-        // This ensures we don't divide by zero even with extreme offsets
         float effective_h = max(h - abs(y0), 1.0f);
 
         float alpha;
         if (inverted > 0.5f) {
-            // Bottom-to-top gradient: opaque at bottom (y=h), transparent at top (y=0)
             float y_from_bottom = h - y;
             alpha = clamp((y_from_bottom - y0) / effective_h, 0.0f, 1.0f);
         } else {
-            // Top-to-bottom gradient: transparent at top (y=0), opaque at bottom (y=h)
             alpha = clamp((y - y0) / effective_h, 0.0f, 1.0f);
         }
 
-        // Return as RGBA with all channels set to alpha value (grayscale)
-        return float4(alpha);
+        return half4(half(alpha));
     }
     
     // --------------------------------------------------------------
@@ -303,23 +249,22 @@ extern "C" { namespace coreimage {
      * @param dest Core Image destination for pixel coordinates
      * @return RGBA with alpha mask (all channels identical for grayscale)
      */
-    float4 roundedRectAlphaMask(float widthPx,
-                                float heightPx,
-                                float cornerRadiusPx,
-                                float fadeInWidthPx,
-                                float inverted,
-                                coreimage::destination dest)
+    half4 roundedRectAlphaMask(float widthPx,
+                               float heightPx,
+                               float cornerRadiusPx,
+                               float fadeInWidthPx,
+                               float inverted,
+                               coreimage::destination dest)
     {
         float2 half_size = max(float2(widthPx, heightPx) * 0.5f, float2(1.0f));
         float2 p         = dest.coord() - float2(widthPx * 0.5f, heightPx * 0.5f);
-        
+
         float dist  = rounded_rect_sdf(p, half_size, max(cornerRadiusPx, 0.0f));
         float alpha = distance_to_alpha(dist, max(fadeInWidthPx, 0.0f));
-        
-        // Apply inversion if requested
+
         if (inverted > 0.5f) alpha = 1.0f - alpha;
-        
-        return float4(alpha);
+
+        return half4(half(alpha));
     }
     
     // --------------------------------------------------------------
@@ -341,13 +286,13 @@ extern "C" { namespace coreimage {
      * @param dest Pixel coordinate provider
      * @return RGBA grayscale mask
      */
-    float4 superellipseAlphaMask(float widthPx,
-                                 float heightPx,
-                                 float cornerRadiusPx,
-                                 float fadeInWidthPx,
-                                 float exponent,
-                                 float inverted,
-                                 coreimage::destination dest)
+    half4 superellipseAlphaMask(float widthPx,
+                                float heightPx,
+                                float cornerRadiusPx,
+                                float fadeInWidthPx,
+                                float exponent,
+                                float inverted,
+                                coreimage::destination dest)
     {
         float2 center = float2(widthPx * 0.5f, heightPx * 0.5f);
         float2 half_size = max(float2(widthPx * 0.5f, heightPx * 0.5f), float2(1.0f));
@@ -360,7 +305,7 @@ extern "C" { namespace coreimage {
 
         if (inverted > 0.5f) alpha = 1.0f - alpha;
 
-        return float4(alpha);
+        return half4(half(alpha));
     }
     
     // --------------------------------------------------------------
@@ -423,18 +368,18 @@ extern "C" { namespace coreimage {
      * @param dest Pixel coordinates
      * @return RGBA grayscale mask
      */
-    float4 roundedRectEaseAlphaMask(float widthPx,
-                                    float heightPx,
-                                    float cornerRadiusPx,
-                                    float fadeInWidthPx,
-                                    float inverted,
-                                    coreimage::destination dest)
+    half4 roundedRectEaseAlphaMask(float widthPx,
+                                   float heightPx,
+                                   float cornerRadiusPx,
+                                   float fadeInWidthPx,
+                                   float inverted,
+                                   coreimage::destination dest)
     {
         float2 half_size = max(float2(widthPx, heightPx) * 0.5f, float2(1.0f));
         float2 p         = dest.coord() - float2(widthPx * 0.5f, heightPx * 0.5f);
-        
+
         float dist = rounded_rect_sdf(p, half_size, max(cornerRadiusPx, 0.0f));
-        
+
         float alpha;
         if (fadeInWidthPx <= 0.0f) {
             alpha = (dist >= 0.0f) ? 1.0f : 0.0f;
@@ -442,10 +387,10 @@ extern "C" { namespace coreimage {
             float t = clamp(1.0f + dist / fadeInWidthPx, 0.0f, 1.0f);
             alpha = t * t;
         }
-        
+
         if (inverted > 0.5f) alpha = 1.0f - alpha;
-        
-        return float4(alpha);
+
+        return half4(half(alpha));
     }
     
     // --------------------------------------------------------------
@@ -462,11 +407,11 @@ extern "C" { namespace coreimage {
      * @param dest Pixel coordinates
      * @return Solid white RGBA (all channels 1.0)
      */
-    float4 uniformMask(float widthPx,
-                       float heightPx,
-                       coreimage::destination dest)
+    half4 uniformMask(float widthPx,
+                      float heightPx,
+                      coreimage::destination dest)
     {
-        return float4(1.0f);
+        return half4(1.0h);
     }
 
     // --------------------------------------------------------------
@@ -524,11 +469,11 @@ extern "C" { namespace coreimage {
      * @param dest Core Image destination providing current pixel coordinates
      * @return RGBA grayscale mask
      */
-    float4 linearMaskHorizontal(float widthPx,
-                                float heightPx,
-                                float startOffset,
-                                float inverted,
-                                coreimage::destination dest)
+    half4 linearMaskHorizontal(float widthPx,
+                               float heightPx,
+                               float startOffset,
+                               float inverted,
+                               coreimage::destination dest)
     {
         float x = dest.coord().x;
         float w = max(widthPx, 1.0f);
@@ -543,7 +488,7 @@ extern "C" { namespace coreimage {
             alpha = clamp((x - x0) / effective_w, 0.0f, 1.0f);
         }
 
-        return float4(alpha);
+        return half4(half(alpha));
     }
 
     // --------------------------------------------------------------
@@ -636,13 +581,13 @@ extern "C" { namespace coreimage {
      * @param dest Pixel coordinates
      * @return RGBA grayscale mask
      */
-    float4 superellipseEaseAlphaMask(float widthPx,
-                                     float heightPx,
-                                     float cornerRadiusPx,
-                                     float fadeInWidthPx,
-                                     float exponent,
-                                     float inverted,
-                                     coreimage::destination dest)
+    half4 superellipseEaseAlphaMask(float widthPx,
+                                    float heightPx,
+                                    float cornerRadiusPx,
+                                    float fadeInWidthPx,
+                                    float exponent,
+                                    float inverted,
+                                    coreimage::destination dest)
     {
         float2 center = float2(widthPx * 0.5f, heightPx * 0.5f);
         float2 half_size = max(float2(widthPx * 0.5f, heightPx * 0.5f), float2(1.0f));
@@ -660,10 +605,9 @@ extern "C" { namespace coreimage {
             alpha = t * t;
         }
 
-        // Apply inversion for cut-out effect
         if (inverted > 0.5f) alpha = 1.0f - alpha;
 
-        return float4(alpha);
+        return half4(half(alpha));
     }
     
 }} // extern "C" namespace coreimage

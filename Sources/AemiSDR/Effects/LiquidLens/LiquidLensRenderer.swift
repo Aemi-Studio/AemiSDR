@@ -15,7 +15,6 @@
     /// the effect into a `CAMetalLayer` drawable.
     @MainActor
     final class LiquidLensRenderer {
-
         // MARK: - Properties
 
         nonisolated private static let logger = Logger(
@@ -25,8 +24,7 @@
 
         let device: MTLDevice
         private let commandQueue: MTLCommandQueue
-        private let pipelineStateChromatic: MTLRenderPipelineState
-        private let pipelineStateMonochrome: MTLRenderPipelineState
+        private let pipelineCache: LiquidLensPipelineCache
         private let textureLoader: MTKTextureLoader
 
         /// Reusable render pass descriptor; only the color attachment's texture
@@ -56,14 +54,14 @@
                 return nil
             }
 
-            guard let pipelines = LiquidLensRenderer.sharedPipelines(for: device) else {
+            guard let cache = LiquidLensRenderer.sharedPipelineCache(for: device) else {
+                Self.logger.error("Failed to initialize LiquidLens pipeline cache.")
                 return nil
             }
 
             self.device = device
             self.commandQueue = commandQueue
-            self.pipelineStateChromatic = pipelines.chromatic
-            self.pipelineStateMonochrome = pipelines.monochrome
+            self.pipelineCache = cache
             self.textureLoader = LiquidLensRenderer.sharedTextureLoader(for: device)
         }
 
@@ -93,15 +91,17 @@
             guard width > 0, height > 0 else { return nil }
 
             let bytesPerRow = width * 4
-            guard let context = unsafe CGContext(
-                data: nil,
-                width: width,
-                height: height,
-                bitsPerComponent: 8,
-                bytesPerRow: bytesPerRow,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
-            ) else {
+            guard
+                let context = unsafe CGContext(
+                    data: nil,
+                    width: width,
+                    height: height,
+                    bitsPerComponent: 8,
+                    bytesPerRow: bytesPerRow,
+                    space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+                )
+            else {
                 Self.logger.error("Failed to create CGContext for texture conversion.")
                 return nil
             }
@@ -141,9 +141,16 @@
         func render(
             sourceTexture: MTLTexture,
             uniforms: LiquidLensUniforms,
+            pipelineKey: LiquidLensPipelineKey,
             drawable: CAMetalDrawable,
             onCompleted: (@Sendable () -> Void)? = nil
         ) {
+            guard let pipelineState = pipelineCache.pipeline(for: pipelineKey) else {
+                Self.logger.error("No pipeline available for key \(String(describing: pipelineKey)).")
+                onCompleted?()
+                return
+            }
+
             guard let commandBuffer = commandQueue.makeCommandBuffer() else {
                 // Even on early failure, fire the consumer's completion so the
                 // ZeroCopyTextureBridge slot doesn't stay in-flight forever.
@@ -163,9 +170,6 @@
             }
             encoder.label = "AemiSDR.LiquidLens.RenderEncoder"
 
-            let pipelineState = uniforms.chromaticAmount > 0.0001
-                ? pipelineStateChromatic
-                : pipelineStateMonochrome
             encoder.setRenderPipelineState(pipelineState)
             encoder.setFragmentTexture(sourceTexture, index: 0)
 
@@ -185,10 +189,11 @@
                     let maxX = min(drawableW, Int((uniforms.center.x + uniforms.halfSize.x + margin).rounded(.up)))
                     let maxY = min(drawableH, Int((uniforms.center.y + uniforms.halfSize.y + margin).rounded(.up)))
                     if maxX > minX, maxY > minY {
-                        encoder.setScissorRect(MTLScissorRect(
-                            x: minX, y: minY,
-                            width: maxX - minX, height: maxY - minY
-                        ))
+                        encoder.setScissorRect(
+                            MTLScissorRect(
+                                x: minX, y: minY,
+                                width: maxX - minX, height: maxY - minY
+                            ))
                     }
                 }
             }
@@ -225,21 +230,21 @@
         ///
         /// `MTLRenderPipelineState`, `MTLCommandQueue`, and `MTKTextureLoader`
         /// are documented thread-safe; sharing across instances is sound.
-        nonisolated(unsafe) private static var pipelineCache: [ObjectIdentifier: (chromatic: MTLRenderPipelineState, monochrome: MTLRenderPipelineState)] = [:]
+        nonisolated(unsafe) private static var pipelineCacheByDevice: [ObjectIdentifier: LiquidLensPipelineCache] = [:]
         nonisolated(unsafe) private static var commandQueueCache: [ObjectIdentifier: MTLCommandQueue] = [:]
         nonisolated(unsafe) private static var textureLoaderCache: [ObjectIdentifier: MTKTextureLoader] = [:]
         nonisolated private static let cacheLock = NSLock()
 
-        static func sharedPipelines(
+        static func sharedPipelineCache(
             for device: MTLDevice
-        ) -> (chromatic: MTLRenderPipelineState, monochrome: MTLRenderPipelineState)? {
+        ) -> LiquidLensPipelineCache? {
             let key = ObjectIdentifier(device)
             cacheLock.lock()
             defer { cacheLock.unlock() }
-            if let cached = unsafe pipelineCache[key] { return cached }
-            guard let built = buildPipelines(device: device) else { return nil }
-            unsafe pipelineCache[key] = built
-            return built
+            if let cached = unsafe pipelineCacheByDevice[key] { return cached }
+            guard let cache = LiquidLensPipelineCache(device: device) else { return nil }
+            unsafe pipelineCacheByDevice[key] = cache
+            return cache
         }
 
         static func sharedCommandQueue(for device: MTLDevice) -> MTLCommandQueue? {
@@ -262,29 +267,13 @@
             return loader
         }
 
-        // MARK: - Pipeline Construction
+        // MARK: - Library discovery (used by LiquidLensPipelineCache)
 
-        /// Attempts to build a render pipeline from candidate libraries.
-        ///
-        /// The named metallib (e.g. `LiquidLens.iOS.metallib`) compiled by the SPM build plugin
-        /// targets the device architecture. On simulator, `makeLibrary(URL:)` succeeds but
-        /// `makeRenderPipelineState` fails because the GPU IR is incompatible. We try the named
-        /// metallib first, and if pipeline creation fails, fall back to `default.metallib` which
-        /// Xcode auto-compiles for the active run destination.
-        private static func buildPipelines(
-            device: MTLDevice
-        ) -> (chromatic: MTLRenderPipelineState, monochrome: MTLRenderPipelineState)? {
-            for library in candidateLibraries(device: device) {
-                if let pipelines = tryBuildPipelines(device: device, library: library) {
-                    return pipelines
-                }
-            }
-
-            logger.error("Failed to build LiquidLens render pipelines from any available library.")
-            return nil
-        }
-
-        private static func candidateLibraries(device: MTLDevice) -> [MTLLibrary] {
+        /// Library discovery only touches `Bundle.module` (read-only) and
+        /// `MTLDevice.makeLibrary(URL:)` (thread-safe per Apple docs), so
+        /// it's safe to call from any actor context — `nonisolated` lets
+        /// the nonisolated `LiquidLensPipelineCache.init` use it.
+        nonisolated static func candidateLibraries(device: MTLDevice) -> [MTLLibrary] {
             var libraries: [MTLLibrary] = []
 
             let libraryName: String
@@ -303,7 +292,7 @@
 
             // Named metallib (works on device)
             if let url = Bundle.module.url(forResource: libraryName, withExtension: "metallib"),
-               let library = try? device.makeLibrary(URL: url)
+                let library = try? device.makeLibrary(URL: url)
             {
                 libraries.append(library)
             }
@@ -317,62 +306,96 @@
 
             return libraries
         }
+    }
 
-        private static func tryBuildPipelines(
-            device: MTLDevice,
-            library: MTLLibrary
-        ) -> (chromatic: MTLRenderPipelineState, monochrome: MTLRenderPipelineState)? {
-            guard let vertexFunction = library.makeFunction(name: "liquidLensVertex"),
-                  let chromaticFragment = makeFragmentFunction(library: library, chromaticEnabled: true),
-                  let monochromeFragment = makeFragmentFunction(library: library, chromaticEnabled: false)
-            else {
-                return nil
+    // MARK: - Pipeline Cache
+
+    /// Per-device lazy cache of specialized `MTLRenderPipelineState` instances,
+    /// one per `LiquidLensPipelineKey`. Thread-safe via internal lock; safe to
+    /// share across `LiquidLensRenderer` instances bound to the same device.
+    ///
+    /// The cache validates the library at init time by building one default
+    /// pipeline; if no candidate library works, init returns nil. Subsequent
+    /// pipeline requests reuse the validated library.
+    final class LiquidLensPipelineCache: @unchecked Sendable {
+        nonisolated private static let logger = Logger(
+            subsystem: "studio.aemi.AemiSDR",
+            category: "LiquidLensPipelineCache"
+        )
+
+        let device: MTLDevice
+        private let library: MTLLibrary
+        private let vertexFunction: MTLFunction
+        private var pipelines: [LiquidLensPipelineKey: MTLRenderPipelineState] = [:]
+        private let lock = NSLock()
+
+        /// Builds the cache for a device. Tries candidate libraries in order;
+        /// returns nil if no library can build the default-key pipeline.
+        init?(device: MTLDevice) {
+            for library in LiquidLensRenderer.candidateLibraries(device: device) {
+                guard let vertex = library.makeFunction(name: "liquidLensVertex") else { continue }
+                // Validate by building a default-key pipeline.
+                let defaultKey = LiquidLensPipelineKey(
+                    chromaticEnabled: true,
+                    falloffType: 5  // .exponential matches the configured default
+                )
+                if let pipeline = Self.makePipeline(device: device, library: library, vertex: vertex, key: defaultKey) {
+                    self.device = device
+                    self.library = library
+                    self.vertexFunction = vertex
+                    self.pipelines[defaultKey] = pipeline
+                    return
+                }
             }
-
-            let chromaticDescriptor = makePipelineDescriptor(
-                vertexFunction: vertexFunction,
-                fragmentFunction: chromaticFragment
-            )
-            chromaticDescriptor.label = "AemiSDR.LiquidLens.Pipeline.Chromatic"
-
-            let monochromeDescriptor = makePipelineDescriptor(
-                vertexFunction: vertexFunction,
-                fragmentFunction: monochromeFragment
-            )
-            monochromeDescriptor.label = "AemiSDR.LiquidLens.Pipeline.Monochrome"
-
-            guard let chromatic = try? device.makeRenderPipelineState(descriptor: chromaticDescriptor),
-                  let monochrome = try? device.makeRenderPipelineState(descriptor: monochromeDescriptor)
-            else {
-                return nil
-            }
-
-            return (chromatic, monochrome)
+            Self.logger.error("Failed to build any LiquidLens pipeline from candidate libraries.")
+            return nil
         }
 
-        private static func makeFragmentFunction(
+        /// Returns the cached pipeline for the given key, building it on first use.
+        func pipeline(for key: LiquidLensPipelineKey) -> MTLRenderPipelineState? {
+            lock.lock()
+            defer { lock.unlock() }
+            if let cached = pipelines[key] { return cached }
+            guard let pipeline = Self.makePipeline(device: device, library: library, vertex: vertexFunction, key: key)
+            else {
+                return nil
+            }
+            pipelines[key] = pipeline
+            return pipeline
+        }
+
+        private static func makePipeline(
+            device: MTLDevice,
             library: MTLLibrary,
-            chromaticEnabled: Bool
-        ) -> MTLFunction? {
-            var chromatic = chromaticEnabled
+            vertex: MTLFunction,
+            key: LiquidLensPipelineKey
+        ) -> MTLRenderPipelineState? {
+            var chromatic = key.chromaticEnabled
+            var falloff = key.falloffType
+            var fresnel = key.enableFresnel
+            var spectral = key.enableSpectral
+            var aspheric = key.enableAspheric
             let constants = MTLFunctionConstantValues()
             unsafe constants.setConstantValue(&chromatic, type: .bool, index: 0)
+            unsafe constants.setConstantValue(&falloff, type: .int, index: 1)
+            unsafe constants.setConstantValue(&fresnel, type: .bool, index: 2)
+            unsafe constants.setConstantValue(&spectral, type: .bool, index: 3)
+            unsafe constants.setConstantValue(&aspheric, type: .bool, index: 4)
 
-            return try? library.makeFunction(
-                name: "liquidLensFragment",
-                constantValues: constants
-            )
-        }
+            guard
+                let fragment = try? library.makeFunction(
+                    name: "liquidLensFragment",
+                    constantValues: constants
+                )
+            else {
+                return nil
+            }
 
-        private static func makePipelineDescriptor(
-            vertexFunction: MTLFunction,
-            fragmentFunction: MTLFunction
-        ) -> MTLRenderPipelineDescriptor {
             let descriptor = MTLRenderPipelineDescriptor()
-            descriptor.vertexFunction = vertexFunction
-            descriptor.fragmentFunction = fragmentFunction
-            // Must match `metalLayer.pixelFormat` in `LiquidLensUIView`. See
-            // that file for the simulator vs device rationale.
+            descriptor.vertexFunction = vertex
+            descriptor.fragmentFunction = fragment
+            descriptor.label = "AemiSDR.LiquidLens.Pipeline.\(key.label)"
+            // Must match `metalLayer.pixelFormat` in `LiquidLensUIView`.
             #if targetEnvironment(simulator)
                 descriptor.colorAttachments[0].pixelFormat = .bgra8Unorm_srgb
             #else
@@ -383,7 +406,21 @@
             descriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
             descriptor.colorAttachments[0].sourceAlphaBlendFactor = .one
             descriptor.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
-            return descriptor
+
+            return try? device.makeRenderPipelineState(descriptor: descriptor)
+        }
+    }
+
+    extension LiquidLensPipelineKey {
+        /// Human-readable label for pipeline state debugging in Xcode's Metal capture tool.
+        fileprivate var label: String {
+            var parts: [String] = []
+            parts.append(chromaticEnabled ? "C" : "M")
+            parts.append("F\(falloffType)")
+            if enableFresnel { parts.append("Fr") }
+            if enableSpectral { parts.append("Sp") }
+            if enableAspheric { parts.append("As") }
+            return parts.joined(separator: "-")
         }
     }
 #endif
