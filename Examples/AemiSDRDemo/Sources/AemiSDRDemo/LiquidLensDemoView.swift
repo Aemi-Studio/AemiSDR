@@ -34,7 +34,8 @@ import SwiftUI
 
 #endif
 
-
-#Preview {
-    LiquidSurfaceDemo()
-}
+#if os(iOS)
+    #Preview {
+        LiquidSurfaceDemo()
+    }
+#endif
