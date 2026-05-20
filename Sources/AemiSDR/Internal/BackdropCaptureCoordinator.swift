@@ -53,11 +53,6 @@
 
         private var displayLink: CADisplayLink?
         private var displayLinkProxy: DisplayLinkProxy?
-        private var backgroundObserver: NSObjectProtocol?
-        private var foregroundObserver: NSObjectProtocol?
-        private var reduceMotionObserver: NSObjectProtocol?
-        private var lowPowerObserver: NSObjectProtocol?
-        private var thermalObserver: NSObjectProtocol?
         /// User-initiated pause — `true` while the app is backgrounded. Set by
         /// `pauseDisplayLink` / `resumeDisplayLink` only. Kept separate from
         /// `systemPaused` so a reduce-motion / thermal pause that fires while
@@ -104,51 +99,13 @@
         }
 
         init() {
-            backgroundObserver = NotificationCenter.default.addObserver(
-                forName: UIApplication.didEnterBackgroundNotification,
-                object: nil, queue: .main
-            ) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    self?.pauseDisplayLink()
-                }
-            }
-            foregroundObserver = NotificationCenter.default.addObserver(
-                forName: UIApplication.willEnterForegroundNotification,
-                object: nil, queue: .main
-            ) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    self?.resumeDisplayLink()
-                }
-            }
-            // System-state observers: each just bumps the display-link rate via
-            // `updateDisplayLinkRate`, which reads `effectiveRefreshRate`.
-            // `UIAccessibility.reduceMotionStatusDidChangeNotification` is
-            // annotated `@unsafe` on iOS 26 SDK (it isn't on every SDK), so
-            // wrap the assignment expression accordingly.
-            reduceMotionObserver = unsafe NotificationCenter.default.addObserver(
-                forName: UIAccessibility.reduceMotionStatusDidChangeNotification,
-                object: nil, queue: .main
-            ) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    self?.updateDisplayLinkRate()
-                }
-            }
-            lowPowerObserver = NotificationCenter.default.addObserver(
-                forName: Notification.Name.NSProcessInfoPowerStateDidChange,
-                object: nil, queue: .main
-            ) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    self?.updateDisplayLinkRate()
-                }
-            }
-            thermalObserver = NotificationCenter.default.addObserver(
-                forName: ProcessInfo.thermalStateDidChangeNotification,
-                object: nil, queue: .main
-            ) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    self?.updateDisplayLinkRate()
-                }
-            }
+            // Lifecycle notifications are funnelled through a single
+            // process-wide registry that fans events out to every live
+            // coordinator. This caps observer registration at five per
+            // process — instead of five per `BackdropCaptureCoordinator`
+            // instance, which scaled linearly with the number of glass
+            // surfaces a host app composed.
+            BackdropCoordinatorRegistry.shared.register(self)
         }
 
         // MARK: - Effective Refresh Rate
@@ -558,16 +515,28 @@
             }
             bridge = nil
             bridgeConsumerID = nil
-            if let backgroundObserver { NotificationCenter.default.removeObserver(backgroundObserver) }
-            if let foregroundObserver { NotificationCenter.default.removeObserver(foregroundObserver) }
-            if let reduceMotionObserver { NotificationCenter.default.removeObserver(reduceMotionObserver) }
-            if let lowPowerObserver { NotificationCenter.default.removeObserver(lowPowerObserver) }
-            if let thermalObserver { NotificationCenter.default.removeObserver(thermalObserver) }
-            backgroundObserver = nil
-            foregroundObserver = nil
-            reduceMotionObserver = nil
-            lowPowerObserver = nil
-            thermalObserver = nil
+            BackdropCoordinatorRegistry.shared.unregister(self)
+        }
+
+        // MARK: - Registry callbacks
+
+        /// Invoked by `BackdropCoordinatorRegistry` when the host app
+        /// backgrounds. Exposed at file scope (not `private`) so the
+        /// registry can fan the lifecycle event out from a single observer.
+        fileprivate func handleBackground() {
+            pauseDisplayLink()
+        }
+
+        /// Invoked by `BackdropCoordinatorRegistry` when the host app
+        /// foregrounds.
+        fileprivate func handleForeground() {
+            resumeDisplayLink()
+        }
+
+        /// Invoked by `BackdropCoordinatorRegistry` when reduce-motion,
+        /// low-power, or thermal state changes.
+        fileprivate func handleRefreshRateChange() {
+            updateDisplayLinkRate()
         }
 
         // No explicit deinit: cleanup runs from `tearDown()` which SwiftUI
@@ -601,6 +570,87 @@
 
         @objc func fire(_ link: CADisplayLink) {
             target?.displayLinkFired(link)
+        }
+    }
+
+    // MARK: - Shared lifecycle registry
+
+    /// Process-wide fan-out for the five lifecycle signals every
+    /// `BackdropCaptureCoordinator` cares about: app background/foreground,
+    /// reduce-motion, low-power, and thermal-state changes. Registers the
+    /// `NotificationCenter` observers once on first access and broadcasts
+    /// each event to every live coordinator through a weak collection.
+    ///
+    /// Compared to per-coordinator registration this caps observer count at
+    /// five per process rather than five per glass surface — relevant when a
+    /// host app composes many `LiquidGlassView` instances (a list of cards,
+    /// for example).
+    @MainActor
+    private final class BackdropCoordinatorRegistry {
+        static let shared = BackdropCoordinatorRegistry()
+
+        /// Weak references to live coordinators. `NSHashTable.weakObjects()`
+        /// drops entries automatically when the coordinator deallocates, so
+        /// a missed `unregister(_:)` doesn't keep a coordinator alive.
+        private let coordinators = NSHashTable<BackdropCaptureCoordinator>.weakObjects()
+        private var observers: [NSObjectProtocol] = []
+
+        private init() {
+            installObservers()
+        }
+
+        func register(_ coordinator: BackdropCaptureCoordinator) {
+            coordinators.add(coordinator)
+        }
+
+        func unregister(_ coordinator: BackdropCaptureCoordinator) {
+            coordinators.remove(coordinator)
+        }
+
+        private func installObservers() {
+            let center = NotificationCenter.default
+            observers.append(center.addObserver(
+                forName: UIApplication.didEnterBackgroundNotification,
+                object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.broadcast { $0.handleBackground() } }
+            })
+            observers.append(center.addObserver(
+                forName: UIApplication.willEnterForegroundNotification,
+                object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.broadcast { $0.handleForeground() } }
+            })
+            // `UIAccessibility.reduceMotionStatusDidChangeNotification` is
+            // annotated `@unsafe` on iOS 26 SDK (it isn't on every SDK), so
+            // wrap the assignment expression accordingly.
+            observers.append(unsafe center.addObserver(
+                forName: UIAccessibility.reduceMotionStatusDidChangeNotification,
+                object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.broadcast { $0.handleRefreshRateChange() } }
+            })
+            observers.append(center.addObserver(
+                forName: Notification.Name.NSProcessInfoPowerStateDidChange,
+                object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.broadcast { $0.handleRefreshRateChange() } }
+            })
+            observers.append(center.addObserver(
+                forName: ProcessInfo.thermalStateDidChangeNotification,
+                object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.broadcast { $0.handleRefreshRateChange() } }
+            })
+        }
+
+        /// Iterates a snapshot of `allObjects` so a coordinator can safely
+        /// re-enter the registry (e.g. unregister itself during teardown)
+        /// from inside one of the lifecycle callbacks.
+        private func broadcast(_ block: (BackdropCaptureCoordinator) -> Void) {
+            for coordinator in coordinators.allObjects {
+                block(coordinator)
+            }
         }
     }
 #endif
