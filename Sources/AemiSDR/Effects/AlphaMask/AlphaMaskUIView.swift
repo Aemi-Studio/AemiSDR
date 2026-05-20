@@ -46,6 +46,19 @@
         private var currentScale: CGFloat { displayScale }
         private var reusableMaskLayer: CALayer?
 
+        /// Identity of the most recently *requested* mask. A background
+        /// generation publishes its result on main only when this matches —
+        /// a newer `updateMask` invalidates an in-flight task without race.
+        private var pendingMaskKey: MaskCacheKey?
+
+        /// Shared serial queue for off-main mask generation. Serialization
+        /// keeps the cost predictable when many alpha-mask views appear at
+        /// once (lists, transitions).
+        nonisolated(unsafe) private static let backgroundQueue = DispatchQueue(
+            label: "studio.aemi.AemiSDR.AlphaMaskUIView.maskGen",
+            qos: .userInitiated
+        )
+
         // MARK: - Initialization
 
         /// Creates a new alpha mask view with the specified configuration.
@@ -136,6 +149,10 @@
         private func updateMask(for size: CGSize) {
             guard size.width > 0, size.height > 0 else { return }
 
+            // Set white background so the mask effect is visible
+            // The alpha channel from the shader determines final transparency
+            backgroundColor = .white
+
             let scale = currentScale
             let key = MaskCacheKey.make(
                 size: size,
@@ -147,34 +164,72 @@
                 inverted: configuredInverted
             )
 
-            let maskImage = MaskCache.image(for: key) {
-                generateAlphaMask(size: size, scale: scale)
+            // Fast path: identical mask already cached. Stay on main and
+            // apply to the layer immediately — no flicker on reattach or
+            // common-config recycling.
+            if let cached = MaskCache.peek(for: key) {
+                pendingMaskKey = nil
+                applyMaskImage(cached)
+                return
             }
 
-            // Apply the generated mask to the layer
-            if let maskImage {
-                let maskLayer = reusableMaskLayer ?? CALayer()
-                reusableMaskLayer = maskLayer
-                maskLayer.frame = bounds
-                maskLayer.contents = maskImage
-                if layer.mask !== maskLayer {
-                    layer.mask = maskLayer
+            pendingMaskKey = key
+
+            let maskType = configuredMaskType
+            let startOffset = configuredStartOffset
+            let cornerRadius = configuredCornerRadius
+            let fadeWidth = configuredFadeWidth
+            let inverted = configuredInverted
+
+            AlphaMaskUIView.backgroundQueue.async { [weak self] in
+                let image = Self.generateAlphaMask(
+                    size: size,
+                    scale: scale,
+                    maskType: maskType,
+                    startOffset: startOffset,
+                    cornerRadius: cornerRadius,
+                    fadeWidth: fadeWidth,
+                    inverted: inverted
+                )
+                guard let image else { return }
+                MaskCache.insert(image, for: key)
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        guard self.pendingMaskKey == key else { return }
+                        self.pendingMaskKey = nil
+                        self.applyMaskImage(image)
+                    }
                 }
             }
-
-            // Set white background so the mask effect is visible
-            // The alpha channel from the shader determines final transparency
-            backgroundColor = .white
         }
 
-        private func generateAlphaMask(size: CGSize, scale: CGFloat) -> CGImage? {
+        private func applyMaskImage(_ image: CGImage) {
+            let maskLayer = reusableMaskLayer ?? CALayer()
+            reusableMaskLayer = maskLayer
+            maskLayer.frame = bounds
+            maskLayer.contents = image
+            if layer.mask !== maskLayer {
+                layer.mask = maskLayer
+            }
+        }
+
+        nonisolated private static func generateAlphaMask(
+            size: CGSize,
+            scale: CGFloat,
+            maskType: MaskType,
+            startOffset: CGFloat,
+            cornerRadius: CGFloat,
+            fadeWidth: CGFloat,
+            inverted: Bool
+        ) -> CGImage? {
             let scaledWidth = max(1, ceil(size.width * scale))
             let scaledHeight = max(1, ceil(size.height * scale))
             let extent = CGRect(x: 0, y: 0, width: scaledWidth, height: scaledHeight)
-            let descriptor = configuredMaskType.kernelDescriptor(
-                size: size, scale: scale, startOffset: configuredStartOffset,
-                cornerRadius: configuredCornerRadius, fadeWidth: configuredFadeWidth,
-                inverted: configuredInverted
+            let descriptor = maskType.kernelDescriptor(
+                size: size, scale: scale, startOffset: startOffset,
+                cornerRadius: cornerRadius, fadeWidth: fadeWidth,
+                inverted: inverted
             )
             return CIKernelCache.generateCGImage(
                 kernel: descriptor.kernel,

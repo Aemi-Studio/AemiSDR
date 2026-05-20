@@ -42,6 +42,21 @@
         private var configuredScale: CGFloat
         private var variableBlurFilter: NSObject?
 
+        /// Identity of the most recently *requested* mask. Background generations
+        /// publish their result back to main only when the latch still matches —
+        /// any newer `updateMask` call invalidates an in-flight task by writing
+        /// a different key here.
+        private var pendingMaskKey: MaskCacheKey?
+
+        /// Serializes mask CGImage generation off the main thread. A shared
+        /// `.userInitiated` queue keeps cost predictable when many blur views
+        /// scroll into view at once — without serialization, N simultaneous
+        /// `createCGImage` calls would all compete for the same `CIContext`.
+        nonisolated(unsafe) private static let backgroundQueue = DispatchQueue(
+            label: "studio.aemi.AemiSDR.VariableBlurUIView.maskGen",
+            qos: .userInitiated
+        )
+
         private var currentScale: CGFloat { displayScale }
 
         // MARK: - Initialization
@@ -233,24 +248,72 @@
                 inverted: configuredInverted
             )
 
-            guard let gradientImage = MaskCache.image(for: key, generate: {
-                generateMaskImage(size: size, scale: scale)
-            }) else {
-                logger.error("Failed to generate mask image")
+            // Fast path: identical mask already cached. NSCache lookup is
+            // O(1) hashed, and we're staying on main to apply the filter
+            // value immediately — no flicker on scroll-on / scroll-off of
+            // a list of blur cells that share the same configuration.
+            if let cached = MaskCache.peek(for: key) {
+                pendingMaskKey = nil
+                variableBlurFilter?.setValue(cached, forKey: _InternedKeys.maskParam)
                 return
             }
 
-            variableBlurFilter?.setValue(gradientImage, forKey: _InternedKeys.maskParam)
+            // Latch the requested key so a stale background result that
+            // returns after a newer call can be discarded without race.
+            pendingMaskKey = key
+
+            // Snapshot the mask inputs on main so the background queue can
+            // run without touching any `@MainActor` state. The CIContext and
+            // shared kernels (`CIKernelCache.maskContext`, `.linearMask`, …)
+            // are documented thread-safe.
+            let maskType = configuredMaskType
+            let startOffset = configuredStartOffset
+            let cornerRadius = configuredCornerRadius
+            let fadeWidth = configuredFadeWidth
+            let inverted = configuredInverted
+
+            VariableBlurUIView.backgroundQueue.async { [weak self, logger] in
+                let image = Self.generateMaskImage(
+                    size: size,
+                    scale: scale,
+                    maskType: maskType,
+                    startOffset: startOffset,
+                    cornerRadius: cornerRadius,
+                    fadeWidth: fadeWidth,
+                    inverted: inverted
+                )
+                guard let image else {
+                    logger.error("Failed to generate mask image off main")
+                    return
+                }
+                MaskCache.insert(image, for: key)
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        guard self.pendingMaskKey == key else { return }
+                        self.pendingMaskKey = nil
+                        self.variableBlurFilter?.setValue(image, forKey: _InternedKeys.maskParam)
+                    }
+                }
+            }
         }
 
-        private func generateMaskImage(size: CGSize, scale: CGFloat) -> CGImage? {
+        nonisolated private static func generateMaskImage(
+            size: CGSize,
+            scale: CGFloat,
+            maskType: MaskType,
+            startOffset: CGFloat,
+            cornerRadius: CGFloat,
+            fadeWidth: CGFloat,
+            inverted: Bool
+        ) -> CGImage? {
             let scaledWidth = max(1, ceil(size.width * scale))
             let scaledHeight = max(1, ceil(size.height * scale))
             let extent = CGRect(x: 0, y: 0, width: scaledWidth, height: scaledHeight)
-            let descriptor = configuredMaskType.kernelDescriptor(
-                size: size, scale: scale, startOffset: configuredStartOffset,
-                cornerRadius: configuredCornerRadius, fadeWidth: configuredFadeWidth,
-                inverted: configuredInverted
+            let descriptor = maskType.kernelDescriptor(
+                size: size, scale: scale, startOffset: startOffset,
+                cornerRadius: cornerRadius, fadeWidth: fadeWidth,
+                inverted: inverted
             )
             return CIKernelCache.generateCGImage(
                 kernel: descriptor.kernel,
