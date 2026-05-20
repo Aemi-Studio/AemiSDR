@@ -3,42 +3,44 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 100;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		249C00A56C14F857B23D529C /* AemiSDRDemoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 352B53E6DE749E61A7E27116 /* AemiSDRDemoApp.swift */; };
-		5B2C3D4E5F6A7B8C9D0E1F2A /* SharedScrollContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A1B2C3D4E5F6A7B8C9D0E1F /* SharedScrollContent.swift */; };
-		7D4E5F6A7B8C9D0E1F2A3B4C /* VariableBlurDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C3D4E5F6A7B8C9D0E1F2A3B /* VariableBlurDemo.swift */; };
+		25D434451DA645C34AD3FF1B /* AlphaMaskDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A2990C241736AD113774F93 /* AlphaMaskDemo.swift */; };
+		2E920D0CA074CAE1A9BEF46A /* DemoSettingsKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91D2BDAA98C575E5823E9C89 /* DemoSettingsKit.swift */; };
+		30E78E003D512624DA255D54 /* SharedScrollContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F980178FE12B58E2729CD69 /* SharedScrollContent.swift */; };
+		826F652289AB523BD100439C /* VariableBlurDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E1503DF0D5A22BF65DA6F3E /* VariableBlurDemo.swift */; };
 		96F19E49E674989A5C816474 /* AemiSDR in Frameworks */ = {isa = PBXBuildFile; productRef = CEA8847E49EFA98FAB92469D /* AemiSDR */; };
 		9DB1CD53D86B7214935637AE /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D86803916D55CF62A3F4C5E /* ContentView.swift */; };
-		9F6A7B8C9D0E1F2A3B4C5D6E /* AlphaMaskDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E5F6A7B8C9D0E1F2A3B4C5D /* AlphaMaskDemo.swift */; };
-		A7B3E41D92C8F5A01D4E6B73 /* LiquidSurfaceDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1C94A28E53D7B6C8A0F12D5 /* LiquidSurfaceDemo.swift */; };
-		B28C9D0E1F2A3B4C5D6E7F8A /* VisualEffectDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A17B8C9D0E1F2A3B4C5D6E7F /* VisualEffectDemo.swift */; };
-		C39D0E1F2A3B4C5D6E7F8A9B /* DemoSettingsKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = D40E1F2A3B4C5D6E7F8A9B0C /* DemoSettingsKit.swift */; };
+		C45028CC6000985785F5DC8C /* VisualEffectDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93449F432684DF4893DA96AB /* VisualEffectDemo.swift */; };
 		E282175F68C72EBEC2A3CFD1 /* LiquidLensDemoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E04ABA3304FE60909C3AAF8 /* LiquidLensDemoView.swift */; };
+		F4F7A64EB2E59C12ABE943F9 /* LiquidSurfaceDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DF798F7D26979078F0AA625 /* LiquidSurfaceDemo.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		2E04ABA3304FE60909C3AAF8 /* LiquidLensDemoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidLensDemoView.swift; sourceTree = "<group>"; };
+		2F980178FE12B58E2729CD69 /* SharedScrollContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedScrollContent.swift; sourceTree = "<group>"; };
 		352B53E6DE749E61A7E27116 /* AemiSDRDemoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AemiSDRDemoApp.swift; sourceTree = "<group>"; };
 		3D86803916D55CF62A3F4C5E /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		4A1B2C3D4E5F6A7B8C9D0E1F /* SharedScrollContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedScrollContent.swift; sourceTree = "<group>"; };
-		6C3D4E5F6A7B8C9D0E1F2A3B /* VariableBlurDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VariableBlurDemo.swift; sourceTree = "<group>"; };
-		8E5F6A7B8C9D0E1F2A3B4C5D /* AlphaMaskDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlphaMaskDemo.swift; sourceTree = "<group>"; };
+		5A2990C241736AD113774F93 /* AlphaMaskDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlphaMaskDemo.swift; sourceTree = "<group>"; };
+		5DF798F7D26979078F0AA625 /* LiquidSurfaceDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidSurfaceDemo.swift; sourceTree = "<group>"; };
+		7E1503DF0D5A22BF65DA6F3E /* VariableBlurDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VariableBlurDemo.swift; sourceTree = "<group>"; };
+		91D2BDAA98C575E5823E9C89 /* DemoSettingsKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoSettingsKit.swift; sourceTree = "<group>"; };
 		933E9578A57834EE9CCC63D3 /* AemiSDR */ = {isa = PBXFileReference; lastKnownFileType = folder; name = AemiSDR; path = ../..; sourceTree = SOURCE_ROOT; };
-		A17B8C9D0E1F2A3B4C5D6E7F /* VisualEffectDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectDemo.swift; sourceTree = "<group>"; };
-		D40E1F2A3B4C5D6E7F8A9B0C /* DemoSettingsKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoSettingsKit.swift; sourceTree = "<group>"; };
-		D64C8E2AC38905CDDF32F2A6 /* AemiSDRDemo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AemiSDRDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		F1C94A28E53D7B6C8A0F12D5 /* LiquidSurfaceDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidSurfaceDemo.swift; sourceTree = "<group>"; };
+		93449F432684DF4893DA96AB /* VisualEffectDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectDemo.swift; sourceTree = "<group>"; };
+		D64C8E2AC38905CDDF32F2A6 /* AemiSDRDemo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AemiSDRDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		3FCDDE71C2DFC43E9D9A3687 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
 			files = (
 				96F19E49E674989A5C816474 /* AemiSDR in Frameworks */,
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
@@ -55,14 +57,14 @@
 			isa = PBXGroup;
 			children = (
 				352B53E6DE749E61A7E27116 /* AemiSDRDemoApp.swift */,
+				5A2990C241736AD113774F93 /* AlphaMaskDemo.swift */,
 				3D86803916D55CF62A3F4C5E /* ContentView.swift */,
-				D40E1F2A3B4C5D6E7F8A9B0C /* DemoSettingsKit.swift */,
-				F1C94A28E53D7B6C8A0F12D5 /* LiquidSurfaceDemo.swift */,
+				91D2BDAA98C575E5823E9C89 /* DemoSettingsKit.swift */,
 				2E04ABA3304FE60909C3AAF8 /* LiquidLensDemoView.swift */,
-				4A1B2C3D4E5F6A7B8C9D0E1F /* SharedScrollContent.swift */,
-				6C3D4E5F6A7B8C9D0E1F2A3B /* VariableBlurDemo.swift */,
-				8E5F6A7B8C9D0E1F2A3B4C5D /* AlphaMaskDemo.swift */,
-				A17B8C9D0E1F2A3B4C5D6E7F /* VisualEffectDemo.swift */,
+				5DF798F7D26979078F0AA625 /* LiquidSurfaceDemo.swift */,
+				2F980178FE12B58E2729CD69 /* SharedScrollContent.swift */,
+				7E1503DF0D5A22BF65DA6F3E /* VariableBlurDemo.swift */,
+				93449F432684DF4893DA96AB /* VisualEffectDemo.swift */,
 			);
 			name = AemiSDRDemo;
 			path = Sources/AemiSDRDemo;
@@ -97,6 +99,8 @@
 			);
 			buildRules = (
 			);
+			dependencies = (
+			);
 			name = AemiSDRDemo;
 			packageProductDependencies = (
 				CEA8847E49EFA98FAB92469D /* AemiSDR */,
@@ -112,9 +116,10 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 2640;
+				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					C60B804238C1CD616B0DEDDD = {
+						DevelopmentTeam = NP94WB3P75;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -131,7 +136,8 @@
 			packageReferences = (
 				E277BA374F5EAF00B451AB79 /* XCLocalSwiftPackageReference "../.." */,
 			);
-			preferredProjectObjectVersion = 100;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = E23D89620AEC4054D6DE2FCB /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -143,26 +149,27 @@
 /* Begin PBXSourcesBuildPhase section */
 		608F98C2CCF2C1496A89BC11 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
 			files = (
 				249C00A56C14F857B23D529C /* AemiSDRDemoApp.swift in Sources */,
+				25D434451DA645C34AD3FF1B /* AlphaMaskDemo.swift in Sources */,
 				9DB1CD53D86B7214935637AE /* ContentView.swift in Sources */,
-				C39D0E1F2A3B4C5D6E7F8A9B /* DemoSettingsKit.swift in Sources */,
-				A7B3E41D92C8F5A01D4E6B73 /* LiquidSurfaceDemo.swift in Sources */,
+				2E920D0CA074CAE1A9BEF46A /* DemoSettingsKit.swift in Sources */,
 				E282175F68C72EBEC2A3CFD1 /* LiquidLensDemoView.swift in Sources */,
-				5B2C3D4E5F6A7B8C9D0E1F2A /* SharedScrollContent.swift in Sources */,
-				7D4E5F6A7B8C9D0E1F2A3B4C /* VariableBlurDemo.swift in Sources */,
-				9F6A7B8C9D0E1F2A3B4C5D6E /* AlphaMaskDemo.swift in Sources */,
-				B28C9D0E1F2A3B4C5D6E7F8A /* VisualEffectDemo.swift in Sources */,
+				F4F7A64EB2E59C12ABE943F9 /* LiquidSurfaceDemo.swift in Sources */,
+				30E78E003D512624DA255D54 /* SharedScrollContent.swift in Sources */,
+				826F652289AB523BD100439C /* VariableBlurDemo.swift in Sources */,
+				C45028CC6000985785F5DC8C /* VisualEffectDemo.swift in Sources */,
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		268EEB4D1401A22E65E2DAF2 /* Release configuration for PBXProject "AemiSDRDemo" */ = {
+		268EEB4D1401A22E65E2DAF2 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -194,7 +201,6 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = JR87XK4R3M;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -210,58 +216,58 @@
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
 		};
-		57101B86F9CD5D7D418C1525 /* Release configuration for PBXNativeTarget "AemiSDRDemo" */ = {
+		57101B86F9CD5D7D418C1525 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = NP94WB3P75;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = maintastic.AemiSDRDemo;
+				PRODUCT_BUNDLE_IDENTIFIER = studio.aemi.AemiSDRDemo;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
-		5FC5270DD3D1020F54F9D49F /* Debug configuration for PBXNativeTarget "AemiSDRDemo" */ = {
+		5FC5270DD3D1020F54F9D49F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = NP94WB3P75;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = maintastic.AemiSDRDemo;
+				PRODUCT_BUNDLE_IDENTIFIER = studio.aemi.AemiSDRDemo;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
-		B895AC5A8566E0A8A9BCCEA0 /* Debug configuration for PBXProject "AemiSDRDemo" */ = {
+		B895AC5A8566E0A8A9BCCEA0 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -293,7 +299,6 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = JR87XK4R3M;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -316,7 +321,6 @@
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -329,17 +333,19 @@
 		334E9C3BE22A82AEE5D93AB7 /* Build configuration list for PBXNativeTarget "AemiSDRDemo" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				5FC5270DD3D1020F54F9D49F /* Debug configuration for PBXNativeTarget "AemiSDRDemo" */,
-				57101B86F9CD5D7D418C1525 /* Release configuration for PBXNativeTarget "AemiSDRDemo" */,
+				5FC5270DD3D1020F54F9D49F /* Debug */,
+				57101B86F9CD5D7D418C1525 /* Release */,
 			);
+			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
 		E34154F69762CFA7AD4B5AFC /* Build configuration list for PBXProject "AemiSDRDemo" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				B895AC5A8566E0A8A9BCCEA0 /* Debug configuration for PBXProject "AemiSDRDemo" */,
-				268EEB4D1401A22E65E2DAF2 /* Release configuration for PBXProject "AemiSDRDemo" */,
+				B895AC5A8566E0A8A9BCCEA0 /* Debug */,
+				268EEB4D1401A22E65E2DAF2 /* Release */,
 			);
+			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
