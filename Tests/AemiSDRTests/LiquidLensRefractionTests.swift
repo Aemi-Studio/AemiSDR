@@ -101,11 +101,14 @@ struct LiquidLensRefractionTests {
             cosTheta: 0,
             eta: 0.751
         )
-        // Disp points opposite to outward direction (refracted ray bends inward).
-        // Magnitude should be ~0.88 for water.
+        // Refracted ray bends inward, so the 2D image-plane displacement
+        // points opposite to the outward direction. The analytic magnitude
+        // for water (eta ≈ 0.751) is ≈ 0.879; tolerance ±0.02 keeps the
+        // test responsive to a real regression in the refraction math
+        // without false-failing on the last-bit precision differences
+        // across compiler versions.
         let magnitude = simd_length(disp)
-        #expect(magnitude > 0.5)
-        #expect(magnitude < 1.5)
+        #expect(abs(magnitude - 0.879) < 0.02)
     }
 
     // MARK: - Chromatic ordering
