@@ -3,10 +3,13 @@ import SwiftUI
 
 #if os(iOS)
     struct VariableBlurDemo: View {
-        enum BlurMode: String, CaseIterable {
+        enum BlurMode: String, CaseIterable, Identifiable {
             case edgeBlur = "Edge Blur"
             case uniformBlur = "Uniform Blur"
             case centerBlur = "Center Blur"
+            case roundedRectBlur = "Rounded Rectangle"
+
+            var id: Self { self }
         }
 
         enum EdgeSelection: String, CaseIterable {
@@ -17,6 +20,17 @@ import SwiftUI
                 case .top: .top
                 case .bottom: .bottom
                 case .both: .all
+                }
+            }
+        }
+
+        enum CornerStyleSelection: String, CaseIterable {
+            case circular, continuous
+
+            var cornerStyle: RoundedCornerStyle {
+                switch self {
+                case .circular: .circular
+                case .continuous: .continuous
                 }
             }
         }
@@ -32,6 +46,12 @@ import SwiftUI
         // Edge-blur shape
         @State private var edges: EdgeSelection = .both
         @State private var transition: TransitionAlgorithm = .eased
+
+        // Rounded-rect-blur shape
+        @State private var rrCornerStyle: CornerStyleSelection = .continuous
+        @State private var rrCornerRadius: CGFloat = 32
+        @State private var rrFadeWidth: CGFloat = 16
+        @State private var rrInverted: Bool = false
 
         // Capture
         @State private var captureScale: CGFloat = 1.0
@@ -78,6 +98,18 @@ import SwiftUI
                         ignoreSafeArea: ignoreSafeArea,
                         scale: captureScale
                     )
+            case .roundedRectBlur:
+                SharedScrollContent()
+                    .roundedRectBlur(
+                        rrCornerStyle.cornerStyle,
+                        cornerRadius: rrCornerRadius,
+                        fadeWidth: rrFadeWidth,
+                        maxBlurRadius: maxBlurRadius,
+                        transition: transition,
+                        inverted: rrInverted,
+                        ignoreSafeArea: ignoreSafeArea,
+                        scale: captureScale
+                    )
             }
         }
 
@@ -85,7 +117,7 @@ import SwiftUI
             Form {
                 Section("Mode") {
                     Picker("Blur Mode", selection: $blurMode) {
-                        ForEach(BlurMode.allCases, id: \.self) { mode in
+                        ForEach(BlurMode.allCases) { mode in
                             Text(mode.rawValue).tag(mode)
                         }
                     }
@@ -94,7 +126,11 @@ import SwiftUI
                 Section("Blur") {
                     ParameterSlider("Max Radius", value: $maxBlurRadius, range: 1...40, format: "%.1f pt")
 
-                    if blurMode != .uniformBlur {
+                    // Band length only applies to vertical edge / center modes.
+                    // Uniform blur covers the whole view; rounded-rect blur is
+                    // sized by the shape's corner radius + fade-width band, not
+                    // a height knob.
+                    if blurMode == .edgeBlur || blurMode == .centerBlur {
                         Toggle("Full Height", isOn: $useFullHeight)
                         if !useFullHeight {
                             ParameterSlider("Height", value: $height, range: 20...400, format: "%.0f pt")
@@ -114,6 +150,23 @@ import SwiftUI
                             Text("Linear").tag(TransitionAlgorithm.linear)
                             Text("Eased").tag(TransitionAlgorithm.eased)
                         }
+                    }
+                }
+
+                if blurMode == .roundedRectBlur {
+                    Section("Shape") {
+                        Picker("Corner Style", selection: $rrCornerStyle) {
+                            ForEach(CornerStyleSelection.allCases, id: \.self) { value in
+                                Text(value.rawValue.capitalized).tag(value)
+                            }
+                        }
+                        ParameterSlider("Corner Radius", value: $rrCornerRadius, range: 0...120, format: "%.0f pt")
+                        ParameterSlider("Fade Width", value: $rrFadeWidth, range: 0...64, format: "%.0f pt")
+                        Picker("Transition", selection: $transition) {
+                            Text("Linear").tag(TransitionAlgorithm.linear)
+                            Text("Eased").tag(TransitionAlgorithm.eased)
+                        }
+                        Toggle("Inverted", isOn: $rrInverted)
                     }
                 }
 
