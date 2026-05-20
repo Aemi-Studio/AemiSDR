@@ -303,27 +303,32 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
     ///   - scale: Display scale factor (points → pixels). Pass `contentsScale` from `CAMetalLayer`.
     /// - Returns: A `LiquidLensUniforms` ready to be passed to the GPU.
     public func toUniforms(textureSize: SIMD2<Float>, scale: Float = 1.0) -> LiquidLensUniforms {
-        let coefficients = Self.sellmeierCoefficients(for: material)
         assert(
             MemoryLayout<LiquidLensUniforms>.stride == 128,
             "LiquidLensUniforms layout mismatch — Metal expects 128-byte stride, got \(MemoryLayout<LiquidLensUniforms>.stride)"
         )
 
-        let nRed = Self.sellmeierIndex(wavelength: Self.redWavelength, coefficients: coefficients)
-        let nGreen = Self.sellmeierIndex(wavelength: Self.greenWavelength, coefficients: coefficients)
-        let nBlue = Self.sellmeierIndex(wavelength: Self.blueWavelength, coefficients: coefficients)
-        let nSpec0 = Self.sellmeierIndex(wavelength: Self.spectral0Wavelength, coefficients: coefficients)
-        let nSpec1 = Self.sellmeierIndex(wavelength: Self.spectral1Wavelength, coefficients: coefficients)
-
+        // Per-material refractive indices depend only on the material's
+        // Sellmeier coefficients and the fixed visible-band wavelengths, so
+        // the entire (n_λ + n_air/n_λ) bundle can be precomputed once per
+        // material and reused across renders. The cache holds five entries
+        // (one per `LiquidLensMaterial` case) and is built lazily on first
+        // access. Each cache hit drops 5 `sqrt`s + 4 `/`s from the per-frame
+        // path; the render hot loop only does the curvature-dependent Snell
+        // work below.
+        let indices = Self.precomputedIndices(for: material)
         let clampedCurvature = min(max(lensCurvature, 0), 1)
         let nAir = Self.airRefractiveIndex
 
         // Scalar rim deviations for the fast chromatic path:
         // θ_rim = asin(lensCurvature); dev_λ = asin((n_air / n_λ)·sinθ_rim) − θ_rim.
         let surfaceAngle = asin(clampedCurvature)
-        let devRed = Self.snellDeviation(incidentAngle: surfaceAngle, n1: nAir, n2: nRed)
-        let devGreen = Self.snellDeviation(incidentAngle: surfaceAngle, n1: nAir, n2: nGreen)
-        let devBlue = Self.snellDeviation(incidentAngle: surfaceAngle, n1: nAir, n2: nBlue)
+        let devRed = Self.snellDeviation(
+            incidentAngle: surfaceAngle, n1: nAir, n2: indices.refractiveIndex.x)
+        let devGreen = Self.snellDeviation(
+            incidentAngle: surfaceAngle, n1: nAir, n2: indices.refractiveIndex.y)
+        let devBlue = Self.snellDeviation(
+            incidentAngle: surfaceAngle, n1: nAir, n2: indices.refractiveIndex.z)
 
         return LiquidLensUniforms(
             center: center * scale,
@@ -339,11 +344,11 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
             diagonalBand: max(diagonalBand, 0) * scale,
             asphericK2: asphericK2,
             asphericK4: asphericK4,
-            refractiveIndex: SIMD3(nRed, nGreen, nBlue),
-            airOver: SIMD3(nAir / nRed, nAir / nGreen, nAir / nBlue),
+            refractiveIndex: indices.refractiveIndex,
+            airOver: indices.airOver,
             deviation: SIMD3(devRed, devGreen, devBlue),
-            spectralAirOver0: nAir / nSpec0,
-            spectralAirOver1: nAir / nSpec1
+            spectralAirOver0: indices.spectralAirOver0,
+            spectralAirOver1: indices.spectralAirOver1
         )
     }
 }
@@ -460,5 +465,51 @@ extension LiquidLensConfiguration {
         let t4 = coefficients.b4 == 0 ? 0 : (coefficients.b4 * l2) / (l2 - coefficients.c4)
         let n2 = 1.0 + t1 + t2 + t3 + t4
         return sqrt(max(Float(1.0), n2))
+    }
+
+    /// Bundle of material-derived refractive quantities that the GPU
+    /// uniform buffer consumes. None of these depend on lens geometry or
+    /// curvature, so they're cached per material at module-load time.
+    fileprivate struct PrecomputedMaterialIndices: Sendable {
+        let refractiveIndex: SIMD3<Float>
+        let airOver: SIMD3<Float>
+        let spectralAirOver0: Float
+        let spectralAirOver1: Float
+    }
+
+    /// Lazily-built per-material lookup table for the refractive quantities
+    /// that appear in `LiquidLensUniforms`. The five `LiquidLensMaterial`
+    /// cases each produce a fixed (refractiveIndex, airOver, spectralAirOver*)
+    /// bundle from their Sellmeier coefficients and the standard Fraunhofer
+    /// wavelengths, so the heavy `sqrt`/`/` math runs at most once per
+    /// material across the process lifetime.
+    private static let precomputedIndicesTable: [LiquidLensMaterial: PrecomputedMaterialIndices] = {
+        var table: [LiquidLensMaterial: PrecomputedMaterialIndices] = [:]
+        table.reserveCapacity(LiquidLensMaterial.allCases.count)
+        let nAir = airRefractiveIndex
+        for material in LiquidLensMaterial.allCases {
+            let coefficients = sellmeierCoefficients(for: material)
+            let nRed = sellmeierIndex(wavelength: redWavelength, coefficients: coefficients)
+            let nGreen = sellmeierIndex(wavelength: greenWavelength, coefficients: coefficients)
+            let nBlue = sellmeierIndex(wavelength: blueWavelength, coefficients: coefficients)
+            let nSpec0 = sellmeierIndex(wavelength: spectral0Wavelength, coefficients: coefficients)
+            let nSpec1 = sellmeierIndex(wavelength: spectral1Wavelength, coefficients: coefficients)
+            table[material] = PrecomputedMaterialIndices(
+                refractiveIndex: SIMD3(nRed, nGreen, nBlue),
+                airOver: SIMD3(nAir / nRed, nAir / nGreen, nAir / nBlue),
+                spectralAirOver0: nAir / nSpec0,
+                spectralAirOver1: nAir / nSpec1
+            )
+        }
+        return table
+    }()
+
+    fileprivate static func precomputedIndices(for material: LiquidLensMaterial) -> PrecomputedMaterialIndices {
+        // `allCases` enumerates every enum case at table-build time, so the
+        // dictionary always has an entry. The force-unwrap fails only if a
+        // new case is added to `LiquidLensMaterial` without rebuilding the
+        // table — easy to catch in tests and locally during development.
+        // swift-format-ignore: NeverForceUnwrap
+        precomputedIndicesTable[material]!
     }
 }
