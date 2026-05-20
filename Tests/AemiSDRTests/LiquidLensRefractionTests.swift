@@ -59,7 +59,7 @@ struct LiquidLensRefractionTests {
             material: material
         )
         let uniforms = config.toUniforms(textureSize: SIMD2(200, 200), scale: 1)
-        return (uniforms.airOverRed, uniforms.airOverGreen, uniforms.airOverBlue)
+        return (uniforms.airOver.x, uniforms.airOver.y, uniforms.airOver.z)
     }
 
     // MARK: - Apex behavior
@@ -142,8 +142,8 @@ struct LiquidLensRefractionTests {
             )
             let uniforms = config.toUniforms(textureSize: SIMD2(200, 200), scale: 1)
             // Normal dispersion: n_blue > n_green > n_red
-            #expect(uniforms.refractiveIndexBlue > uniforms.refractiveIndexGreen)
-            #expect(uniforms.refractiveIndexGreen > uniforms.refractiveIndexRed)
+            #expect(uniforms.refractiveIndex.z > uniforms.refractiveIndex.y)
+            #expect(uniforms.refractiveIndex.y > uniforms.refractiveIndex.x)
         }
     }
 
