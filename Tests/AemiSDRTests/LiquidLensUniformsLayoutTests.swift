@@ -10,18 +10,18 @@ import Testing
 @Suite("LiquidLensUniforms Layout")
 struct LiquidLensUniformsLayoutTests {
     /// The Swift `LiquidLensUniforms` must match the Metal struct byte-for-byte.
-    /// The 128-byte stride is set by `SIMD3<Float>` alignment (16 bytes) on
-    /// the trailing `refractiveIndex` / `airOver` / `deviation` triplets.
-    @Test func uniformsStrideIs128() {
-        #expect(MemoryLayout<LiquidLensUniforms>.stride == 128)
+    /// The 112-byte stride is set by `SIMD3<Float>` alignment (16 bytes) on
+    /// the trailing `airOver` / `deviation` triplets.
+    @Test func uniformsStrideIs112() {
+        #expect(MemoryLayout<LiquidLensUniforms>.stride == 112)
     }
 
     @Test func uniformsLazyStrideMatches() {
-        #expect(LiquidLensUniforms._stride == 128)
+        #expect(LiquidLensUniforms._stride == 112)
     }
 
     /// Pin every field's offset so a reorder is caught even if stride happens
-    /// to stay 128. Field order must match the Metal struct in `LiquidLens.metal`.
+    /// to stay 112. Field order must match the Metal struct in `LiquidLens.metal`.
     @Test func uniformsFieldOffsets() {
         #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.center) == 0)
         #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.textureSize) == 8)
@@ -38,10 +38,9 @@ struct LiquidLensUniformsLayoutTests {
         #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.asphericK4) == 60)
         // SIMD3<Float> fields occupy 16-byte slots; they are 16-byte aligned
         // and Swift pads the field to 16 bytes even though the data is 12.
-        #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.refractiveIndex) == 64)
-        #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.airOver) == 80)
-        #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.deviation) == 96)
-        #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.spectralAirOver0) == 112)
-        #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.spectralAirOver1) == 116)
+        #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.airOver) == 64)
+        #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.deviation) == 80)
+        #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.spectralAirOver0) == 96)
+        #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.spectralAirOver1) == 100)
     }
 }
