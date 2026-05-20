@@ -51,6 +51,16 @@
         /// a newer `updateMask` invalidates an in-flight task without race.
         private var pendingMaskKey: MaskCacheKey?
 
+        /// Whether a mask CGImage has ever been installed on the layer mask.
+        /// Before the first install the view's `.mask` is `nil`, so the host
+        /// content draws unmasked. Until the first mask is applied we keep
+        /// `updateMask` on the synchronous path so the very first visible
+        /// frame already carries the intended alpha — otherwise a brief
+        /// "no mask" window would appear at view start. Subsequent updates
+        /// can flow through the async path because a previous mask layer
+        /// is still attached while the new one is being built.
+        private var hasAppliedMask = false
+
         /// Shared serial queue for off-main mask generation. Serialization
         /// keeps the cost predictable when many alpha-mask views appear at
         /// once (lists, transitions).
@@ -170,16 +180,43 @@
             if let cached = MaskCache.peek(for: key) {
                 pendingMaskKey = nil
                 applyMaskImage(cached)
+                hasAppliedMask = true
                 return
             }
-
-            pendingMaskKey = key
 
             let maskType = configuredMaskType
             let startOffset = configuredStartOffset
             let cornerRadius = configuredCornerRadius
             let fadeWidth = configuredFadeWidth
             let inverted = configuredInverted
+
+            // First-paint path: no cached image and no mask has ever been
+            // installed on this view. Generate synchronously so the very
+            // first visible frame already carries the intended alpha.
+            // Hopping to a background queue here would briefly expose the
+            // view with no `.mask` set, producing the "starts wrong, fixes
+            // on interaction" symptom.
+            if !hasAppliedMask {
+                if let image = Self.generateAlphaMask(
+                    size: size,
+                    scale: scale,
+                    maskType: maskType,
+                    startOffset: startOffset,
+                    cornerRadius: cornerRadius,
+                    fadeWidth: fadeWidth,
+                    inverted: inverted
+                ) {
+                    MaskCache.insert(image, for: key)
+                    applyMaskImage(image)
+                    hasAppliedMask = true
+                    pendingMaskKey = nil
+                    return
+                }
+            }
+
+            // Subsequent updates flow through the async path; a previous
+            // mask is still installed while the new one is built.
+            pendingMaskKey = key
 
             AlphaMaskUIView.backgroundQueue.async { [weak self] in
                 let image = Self.generateAlphaMask(
@@ -199,6 +236,7 @@
                         guard self.pendingMaskKey == key else { return }
                         self.pendingMaskKey = nil
                         self.applyMaskImage(image)
+                        self.hasAppliedMask = true
                     }
                 }
             }
