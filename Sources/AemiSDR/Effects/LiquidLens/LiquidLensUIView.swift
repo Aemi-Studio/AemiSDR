@@ -22,7 +22,6 @@
     /// view.setSourceImage(someImage)
     /// ```
     open class LiquidLensUIView: UIView {
-
         // MARK: - Properties
 
         private let logger = Logger(
@@ -66,6 +65,7 @@
         // overrides `layerClass` would invalidate this — `open` permits
         // subclassing, so a future maintainer adding a subclass must override
         // both or accept the trap. The cost of `as?` per render is non-zero.
+        // swift-format-ignore: NeverForceUnwrap
         private var metalLayer: CAMetalLayer { layer as! CAMetalLayer }
 
         // MARK: - Initialization
@@ -208,9 +208,9 @@
 
         private func fireReadyIfPossible() {
             guard !didFireReady,
-                  window != nil,
-                  bounds.width > 0,
-                  bounds.height > 0
+                window != nil,
+                bounds.width > 0,
+                bounds.height > 0
             else { return }
             didFireReady = true
             onReadyForFirstCapture?()
@@ -274,6 +274,7 @@
             renderer.render(
                 sourceTexture: sourceTexture,
                 uniforms: uniforms,
+                pipelineKey: configuration.pipelineKey(),
                 drawable: drawable,
                 onCompleted: consumed
             )

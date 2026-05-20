@@ -13,7 +13,6 @@
 
     /// Pre-built shape path providers for common clip shapes.
     public enum LiquidLensClipShape {
-
         /// Rounded rectangle with uniform corner radius and continuous (superellipse) corners.
         public static func roundedRect(cornerRadius: CGFloat) -> ShapePathProvider {
             { rect in

@@ -35,7 +35,8 @@
         ) {
             self.configuration = configuration
             self.clipShapePath = { rect in shape.path(in: rect).cgPath }
-            self.cornerRadius = cornerRadius
+            self.cornerRadius =
+                cornerRadius
                 ?? LiquidShapeCornerRadiusResolver.inferCornerRadius(from: shape)
         }
 

@@ -3,13 +3,13 @@
 //  AemiSDRTests
 //
 
-import Testing
 import Foundation
+import Testing
+
 @testable import AemiSDR
 
 @Suite("MaskCacheKey quantization")
 struct MaskCacheKeyTests {
-
     @Test func identicalInputsProduceEqualKeys() {
         let a = MaskCacheKey.make(
             size: CGSize(width: 100, height: 200),

@@ -38,7 +38,8 @@
             cornerRadius: LiquidLensCornerRadius? = nil,
             ignoreSafeArea: Bool = true
         ) -> some View {
-            let resolvedCornerRadius = cornerRadius
+            let resolvedCornerRadius =
+                cornerRadius
                 ?? LiquidShapeCornerRadiusResolver.inferCornerRadius(from: shape)
 
             liquidBackground(
@@ -77,7 +78,8 @@
             cornerRadius: LiquidLensCornerRadius? = nil,
             ignoreSafeArea: Bool = true
         ) -> some View {
-            let resolvedCornerRadius = cornerRadius
+            let resolvedCornerRadius =
+                cornerRadius
                 ?? LiquidShapeCornerRadiusResolver.inferCornerRadius(from: shape)
 
             liquidOverlay(
