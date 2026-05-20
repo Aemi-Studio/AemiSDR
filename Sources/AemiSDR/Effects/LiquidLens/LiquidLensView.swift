@@ -20,7 +20,6 @@
     /// ))
     /// ```
     public struct LiquidLensView: UIViewRepresentable {
-
         public var image: UIImage?
         public var configuration: LiquidLensConfiguration
         public var clipShapePath: ShapePathProvider?

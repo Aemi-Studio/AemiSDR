@@ -6,8 +6,8 @@
 //  These tests verify the theoretical properties of the signed distance fields.
 //
 
-import Testing
 import Foundation
+import Testing
 import simd
 
 @testable import AemiSDR
@@ -18,7 +18,6 @@ import simd
 /// These verify the theoretical correctness of the distance calculations.
 @Suite("Rounded Rectangle SDF Tests")
 struct RoundedRectSDFTests {
-
     // MARK: - Test Helper Functions
 
     /// Swift implementation of rounded_rect_sdf for CPU-side verification.
@@ -147,7 +146,7 @@ struct RoundedRectSDFTests {
     @Test("Radius equals min dimension produces capsule/circle")
     func maxRadius() {
         let halfSize = SIMD2<Float>(50, 30)
-        let radius: Float = 30 // Max allowed radius
+        let radius: Float = 30  // Max allowed radius
 
         // Center should still be valid
         let dist = roundedRectSDF(p: .zero, halfSize: halfSize, radius: radius)
@@ -160,7 +159,6 @@ struct RoundedRectSDFTests {
 
 @Suite("Superellipse SDF Tests")
 struct SuperellipseSDFTests {
-
     /// Swift implementation of simple_squircle_sdf for CPU verification.
     func simpleSquircleSDF(p: SIMD2<Float>, halfSize: SIMD2<Float>, radius: Float, n: Float) -> Float {
         let r = Swift.min(Swift.max(radius, 0), Swift.min(halfSize.x, halfSize.y))
@@ -212,12 +210,12 @@ struct SuperellipseSDFTests {
     func boundaryExact() {
         let halfSize = SIMD2<Float>(50, 50)
         let radius: Float = 20
-        let n: Float = 5 // iOS squircle
+        let n: Float = 5  // iOS squircle
 
         // Test point on the superellipse boundary using parametric form
         // x = a * |cos(t)|^(2/n) * sign(cos(t))
         // y = b * |sin(t)|^(2/n) * sign(sin(t))
-        let t: Float = .pi / 4 // 45 degrees
+        let t: Float = .pi / 4  // 45 degrees
         let cornerCenter = halfSize - SIMD2<Float>(repeating: radius)
         let x = cornerCenter.x + radius * pow(abs(cos(t)), 2 / n)
         let y = cornerCenter.y + radius * pow(abs(sin(t)), 2 / n)
@@ -246,7 +244,7 @@ struct SuperellipseSDFTests {
         let radius: Float = 20
         let n: Float = 5
 
-        let p = SIMD2<Float>(60, 60) // Outside the shape
+        let p = SIMD2<Float>(60, 60)  // Outside the shape
         let dist = simpleSquircleSDF(p: p, halfSize: halfSize, radius: radius, n: n)
 
         #expect(dist > 0, "Outside point should have positive distance")
@@ -258,7 +256,7 @@ struct SuperellipseSDFTests {
         let radius: Float = 20
         let n: Float = 5
 
-        let p = SIMD2<Float>(20, 20) // Inside the shape
+        let p = SIMD2<Float>(20, 20)  // Inside the shape
         let dist = simpleSquircleSDF(p: p, halfSize: halfSize, radius: radius, n: n)
 
         #expect(dist < 0, "Inside point should have negative distance")
@@ -269,7 +267,6 @@ struct SuperellipseSDFTests {
 
 @Suite("Distance to Alpha Tests")
 struct DistanceToAlphaTests {
-
     /// Swift implementation of distance_to_alpha for verification.
     func distanceToAlpha(dist: Float, fadeWidth: Float) -> Float {
         if fadeWidth <= 0 {
@@ -277,7 +274,7 @@ struct DistanceToAlphaTests {
         }
 
         let t = min(max(1 + dist / fadeWidth, 0), 1)
-        return t * t * (3 - 2 * t) // Hermite smoothstep
+        return t * t * (3 - 2 * t)  // Hermite smoothstep
     }
 
     @Test("Outside shape has alpha = 1")
@@ -300,13 +297,13 @@ struct DistanceToAlphaTests {
 
     @Test("At fade edge has alpha = 0")
     func fadeEdgeTransparent() {
-        let alpha = distanceToAlpha(dist: -5, fadeWidth: 5) // dist = -fadeWidth
+        let alpha = distanceToAlpha(dist: -5, fadeWidth: 5)  // dist = -fadeWidth
         #expect(abs(alpha) < 0.001, "At fade edge should be transparent, got \(alpha)")
     }
 
     @Test("Halfway through fade zone has alpha ≈ 0.5")
     func halfwayFade() {
-        let alpha = distanceToAlpha(dist: -2.5, fadeWidth: 5) // dist = -fadeWidth/2
+        let alpha = distanceToAlpha(dist: -2.5, fadeWidth: 5)  // dist = -fadeWidth/2
         // Hermite smoothstep at t=0.5: 0.5^2 * (3 - 2*0.5) = 0.25 * 2 = 0.5
         #expect(abs(alpha - 0.5) < 0.01, "Halfway should be alpha≈0.5, got \(alpha)")
     }
@@ -338,7 +335,6 @@ struct DistanceToAlphaTests {
 
 @Suite("Distance to Alpha with Plateau Tests")
 struct DistanceToAlphaPlateauTests {
-
     /// Swift implementation of distance_to_alpha_with_plateau for verification.
     func distanceToAlphaWithPlateau(dist: Float, plateauWidth: Float, fadeWidth: Float) -> Float {
         if fadeWidth <= 0 && plateauWidth <= 0 {
@@ -399,56 +395,36 @@ struct DistanceToAlphaPlateauTests {
     }
 }
 
-// MARK: - Fast Power Function Tests
+// MARK: - Safe Power Function Tests
+//
+// Mirrors the new `safe_pow(x, n) = pow(max(x, 1e-6), n)` used by the squircle
+// SDF (replaces the deleted `fast_pow` with its dead-code branch ladder).
 
-@Suite("Fast Power Function Tests")
-struct FastPowTests {
-
-    /// Swift implementation of fast_pow for verification.
-    func fastPow(_ x: Float, _ n: Float) -> Float {
-        if x <= 0 { return 0 }
-        if x == 0 && n == 0 { return 1 }
-        if n == 0 { return 1 }
-        if n == 1 { return x }
-        if n == 2 { return x * x }
-
-        let safeN = min(max(n, 0), 100)
-        return pow(min(max(x, 1e-6), 1e6), safeN)
+@Suite("Safe Power Function Tests")
+struct SafePowTests {
+    func safePow(_ x: Float, _ n: Float) -> Float {
+        return pow(max(x, 1e-6), n)
     }
 
-    @Test("x^0 = 1")
-    func zeroExponent() {
-        #expect(abs(fastPow(5, 0) - 1) < 0.001)
-        #expect(abs(fastPow(0.5, 0) - 1) < 0.001)
+    @Test("Positive base with positive exponent")
+    func positiveBaseAndExponent() {
+        #expect(abs(safePow(2, 5) - 32) < 0.001)
+        #expect(abs(safePow(0.5, 2) - 0.25) < 0.001)
+        #expect(abs(safePow(4, 0.5) - 2) < 0.001)
     }
 
-    @Test("x^1 = x")
-    func oneExponent() {
-        #expect(abs(fastPow(5, 1) - 5) < 0.001)
-        #expect(abs(fastPow(0.5, 1) - 0.5) < 0.001)
+    @Test("Tiny base is floored to 1e-6")
+    func tinyBaseFloor() {
+        // safePow(0, 5) = pow(1e-6, 5) = 1e-30 (very small, but defined)
+        let result = safePow(0, 5)
+        #expect(result.isFinite)
+        #expect(result < 1e-20)
     }
 
-    @Test("x^2 = x*x")
-    func squareExponent() {
-        #expect(abs(fastPow(3, 2) - 9) < 0.001)
-        #expect(abs(fastPow(0.5, 2) - 0.25) < 0.001)
-    }
-
-    @Test("Negative base returns 0")
-    func negativeBase() {
-        #expect(fastPow(-5, 2) == 0)
-        #expect(fastPow(-1, 3) == 0)
-    }
-
-    @Test("Zero base returns 0 (except 0^0)")
-    func zeroBase() {
-        #expect(fastPow(0, 2) == 0)
-        #expect(fastPow(0, 5) == 0)
-    }
-
-    @Test("Fractional exponent works")
-    func fractionalExponent() {
-        let result = fastPow(4, 0.5)
-        #expect(abs(result - 2) < 0.01, "4^0.5 should be 2, got \(result)")
+    @Test("Large exponent does not blow up")
+    func largeExponentStable() {
+        let result = safePow(0.5, 50)
+        #expect(result.isFinite)
+        #expect(result > 0)
     }
 }

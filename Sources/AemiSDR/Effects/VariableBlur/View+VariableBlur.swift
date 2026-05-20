@@ -100,20 +100,24 @@ import SwiftUI
             let needsSpacer = hasTop && hasBottom || height != .infinity
 
             // Convention: Apple's variableBlur CAFilter reads the mask as
-            // luminance-drives-blur — white pixels (alpha=1) receive
-            // maximum blur, black pixels (alpha=0) are left crisp. So a
-            // top band needs alpha=1 *at* the top edge fading to 0 going
-            // inward; the gradient that produces that profile is the
-            // "Bottom-to-Top" mask (peaks at the top, troughs at the
-            // bottom of the band). The trailing band is symmetric. This
-            // is the inverse of what the case names superficially imply —
-            // the names describe the *gradient direction*, not which side
-            // ends up blurred.
+            // luminance-drives-blur — white pixels (alpha=1) receive maximum
+            // blur, black pixels (alpha=0) are left crisp.
+            //
+            // For the TOP band (placed at the top of the view), max blur
+            // should land at the band's TOP edge (= the view's outermost
+            // edge), fading to 0 as we move down into the content. The
+            // mask whose alpha peaks at the top is `.linearTopToBottom` /
+            // `.easeInTopToBottom` — the case names match the docstring
+            // semantics ("top is masked/blurred" = alpha peaks at top).
+            //
+            // For the BOTTOM band (placed at the bottom of the view), max
+            // blur should land at the band's BOTTOM edge — `.linearBottomToTop`
+            // / `.easeInBottomToTop`.
             overlay {
                 VStack(spacing: 0) {
                     if hasTop {
                         let topType: MaskType =
-                            transition == .linear ? .linearBottomToTop : .easeInBottomToTop
+                            transition == .linear ? .linearTopToBottom : .easeInTopToBottom
                         VariableBlurView(
                             maxBlurRadius: maxBlurRadius,
                             type: topType,
@@ -129,7 +133,7 @@ import SwiftUI
 
                     if hasBottom {
                         let bottomType: MaskType =
-                            transition == .linear ? .linearTopToBottom : .easeInTopToBottom
+                            transition == .linear ? .linearBottomToTop : .easeInBottomToTop
                         VariableBlurView(
                             maxBlurRadius: maxBlurRadius,
                             type: bottomType,

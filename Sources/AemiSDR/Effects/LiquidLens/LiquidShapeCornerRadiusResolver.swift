@@ -45,7 +45,7 @@
 
                 let nestedMirror = Mirror(reflecting: child.value)
                 if !nestedMirror.children.isEmpty,
-                   let nested = extractCornerRadius(from: nestedMirror, depth: depth + 1)
+                    let nested = extractCornerRadius(from: nestedMirror, depth: depth + 1)
                 {
                     candidates.append(nested)
                 }
