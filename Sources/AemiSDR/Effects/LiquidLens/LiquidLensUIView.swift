@@ -167,15 +167,35 @@
 
         // MARK: - UIView Lifecycle
 
+        /// Last drawable size + contents scale pushed to the `CAMetalLayer`.
+        /// `layoutSubviews` and `didMoveToWindow` both fire on the same first
+        /// attach, so the metric write + render is gated on a real change to
+        /// avoid two identical render passes back-to-back.
+        private var lastDrawableSize: CGSize = .zero
+        private var lastContentsScale: CGFloat = 0
+
+        @discardableResult
+        private func syncDrawableMetrics() -> Bool {
+            let scale = displayScale
+            let size = CGSize(
+                width: bounds.width * scale,
+                height: bounds.height * scale
+            )
+            guard size != lastDrawableSize || scale != lastContentsScale else { return false }
+            metalLayer.contentsScale = scale
+            metalLayer.drawableSize = size
+            lastDrawableSize = size
+            lastContentsScale = scale
+            return true
+        }
+
         override open func layoutSubviews() {
             super.layoutSubviews()
-            metalLayer.contentsScale = displayScale
-            metalLayer.drawableSize = CGSize(
-                width: bounds.width * displayScale,
-                height: bounds.height * displayScale
-            )
+            let metricsChanged = syncDrawableMetrics()
             updateClipMask()
-            renderIfNeeded()
+            if metricsChanged {
+                renderIfNeeded()
+            }
             fireReadyIfPossible()
         }
 
@@ -183,12 +203,9 @@
             super.didMoveToWindow()
             guard window != nil else { return }
             onContentHierarchyChanged?()
-            metalLayer.contentsScale = displayScale
-            metalLayer.drawableSize = CGSize(
-                width: bounds.width * displayScale,
-                height: bounds.height * displayScale
-            )
-            renderIfNeeded()
+            if syncDrawableMetrics() {
+                renderIfNeeded()
+            }
             fireReadyIfPossible()
         }
 
