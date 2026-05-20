@@ -49,7 +49,7 @@ struct SharedScrollContent: View {
                         Stepper("Count: \(stepperValue)", value: $stepperValue, in: 0...10)
                     }
                 }
-                .background(Color(.secondarySystemGroupedBackground))
+                .background(Self.secondaryGroupedBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(.horizontal)
 
@@ -69,9 +69,12 @@ struct SharedScrollContent: View {
                     Button("Secondary") {}
                         .buttonStyle(.bordered)
                         .controlSize(.large)
-                    Button(role: .destructive) {} label: { Text("Delete") }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
+                    Button(role: .destructive) {
+                    } label: {
+                        Text("Delete")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
                 }
                 .padding(.horizontal)
 
@@ -96,7 +99,7 @@ struct SharedScrollContent: View {
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(.secondarySystemGroupedBackground))
+                .background(Self.secondaryGroupedBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(.horizontal)
 
@@ -118,7 +121,7 @@ struct SharedScrollContent: View {
                             .foregroundStyle(.tertiary)
                     }
                     .padding(12)
-                    .background(Color(.secondarySystemGroupedBackground))
+                    .background(Self.secondaryGroupedBackground)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .padding(.horizontal)
                 }
@@ -141,5 +144,15 @@ struct SharedScrollContent: View {
         content()
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
+    }
+
+    /// Cross-platform "secondary grouped background" colour. iOS exposes the
+    /// dedicated semantic colour; macOS falls back to a subtle tinted layer.
+    static var secondaryGroupedBackground: Color {
+        #if os(iOS)
+            Color(.secondarySystemGroupedBackground)
+        #else
+            Color.gray.opacity(0.12)
+        #endif
     }
 }
