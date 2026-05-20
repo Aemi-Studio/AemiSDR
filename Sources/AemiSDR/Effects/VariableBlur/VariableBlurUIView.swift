@@ -52,7 +52,7 @@
         /// `.userInitiated` queue keeps cost predictable when many blur views
         /// scroll into view at once — without serialization, N simultaneous
         /// `createCGImage` calls would all compete for the same `CIContext`.
-        nonisolated(unsafe) private static let backgroundQueue = DispatchQueue(
+        nonisolated private static let backgroundQueue = DispatchQueue(
             label: "studio.aemi.AemiSDR.VariableBlurUIView.maskGen",
             qos: .userInitiated
         )

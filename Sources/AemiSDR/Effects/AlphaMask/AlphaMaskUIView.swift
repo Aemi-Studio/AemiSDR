@@ -54,7 +54,7 @@
         /// Shared serial queue for off-main mask generation. Serialization
         /// keeps the cost predictable when many alpha-mask views appear at
         /// once (lists, transitions).
-        nonisolated(unsafe) private static let backgroundQueue = DispatchQueue(
+        nonisolated private static let backgroundQueue = DispatchQueue(
             label: "studio.aemi.AemiSDR.AlphaMaskUIView.maskGen",
             qos: .userInitiated
         )
