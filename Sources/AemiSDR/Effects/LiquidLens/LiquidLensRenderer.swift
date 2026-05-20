@@ -13,6 +13,33 @@
     /// Loads the compiled `LiquidLens` metallib from `Bundle.module` and creates
     /// the render pipeline state, sampler, and command queue needed to render
     /// the effect into a `CAMetalLayer` drawable.
+    ///
+    /// ## Single-pass architecture
+    ///
+    /// The capture and lens steps are intentionally decoupled:
+    ///
+    ///   1. `BackdropCaptureCoordinator` rasterizes the underlying SwiftUI /
+    ///      UIKit content into an IOSurface via `UIView.drawHierarchy(in:)`,
+    ///      exposed to Metal through `ZeroCopyTextureBridge` as a
+    ///      `CVMetalTexture`. This step is CPU-side; the surface uses the
+    ///      `.shared` storage mode because Metal must read pixels the CPU
+    ///      just wrote.
+    ///   2. `render(...)` runs a single Metal render pass: the lens fragment
+    ///      shader samples the captured surface and writes the displaced
+    ///      result directly to the `CAMetalLayer` drawable. One fragment
+    ///      shader invocation per output pixel, one texture read, one
+    ///      framebuffer write.
+    ///
+    /// There are no intermediate render targets. Programmable blending and
+    /// memoryless tile storage — useful patterns for fusing successive
+    /// fragment passes — don't apply here because the input texture comes
+    /// from IOSurface, not from a prior render-pass color attachment, and
+    /// the captured surface must persist across the CPU→GPU handoff (so it
+    /// can't live in tile memory).
+    ///
+    /// Future contributors: resist the temptation to "add a render pass for
+    /// the capture" — the IOSurface path is already optimal for this
+    /// architecture and would only add cost.
     @MainActor
     final class LiquidLensRenderer {
         // MARK: - Properties
