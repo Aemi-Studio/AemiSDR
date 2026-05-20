@@ -48,6 +48,14 @@
         /// a different key here.
         private var pendingMaskKey: MaskCacheKey?
 
+        /// Whether a mask CGImage has ever been applied to the filter. The first
+        /// `updateMask` call needs to install a mask before the filter is
+        /// composited; until then the backdrop layer would render with the
+        /// filter active and no mask param, which Core Animation surfaces as
+        /// a black/empty region. Subsequent updates can flow through the async
+        /// path because there's always a *previous* mask still installed.
+        private var hasAppliedMask = false
+
         /// Serializes mask CGImage generation off the main thread. A shared
         /// `.userInitiated` queue keeps cost predictable when many blur views
         /// scroll into view at once — without serialization, N simultaneous
@@ -279,25 +287,63 @@
             if let cached = MaskCache.peek(for: key) {
                 pendingMaskKey = nil
                 variableBlurFilter?.setValue(cached, forKey: _InternedKeys.maskParam)
+                hasAppliedMask = true
                 logger.debug(
                     "updateMask: cache HIT size=\(String(describing: size)) mask=\(String(describing: self.configuredMaskType)) inverted=\(self.configuredInverted) cgImage=\(cached.width)x\(cached.height) filterPresent=\(self.variableBlurFilter != nil)"
                 )
                 return
             }
 
-            // Latch the requested key so a stale background result that
-            // returns after a newer call can be discarded without race.
-            pendingMaskKey = key
-
-            // Snapshot the mask inputs on main so the background queue can
-            // run without touching any `@MainActor` state. The CIContext and
-            // shared kernels (`CIKernelCache.maskContext`, `.linearMask`, …)
-            // are documented thread-safe.
+            // Snapshot the mask inputs on main so the eventual generation
+            // (sync first-paint or async background) doesn't touch any
+            // `@MainActor` state. The CIContext and shared kernels
+            // (`CIKernelCache.maskContext`, `.linearMask`, …) are documented
+            // thread-safe.
             let maskType = configuredMaskType
             let startOffset = configuredStartOffset
             let cornerRadius = configuredCornerRadius
             let fadeWidth = configuredFadeWidth
             let inverted = configuredInverted
+
+            // First-paint path: no cached image and no mask has ever been
+            // applied to this filter instance. Generate synchronously so the
+            // very first visible frame already carries a mask. If we hopped
+            // to a background queue here, CA would composite the filter with
+            // a nil mask param for one or more frames — surfacing as a black
+            // / empty region until the async result lands. After this first
+            // generation, every subsequent `updateMask` can go through the
+            // async path because a previous mask is still installed on the
+            // filter while the new one is built.
+            if !hasAppliedMask {
+                if let image = Self.generateMaskImage(
+                    size: size,
+                    scale: scale,
+                    maskType: maskType,
+                    startOffset: startOffset,
+                    cornerRadius: cornerRadius,
+                    fadeWidth: fadeWidth,
+                    inverted: inverted
+                ) {
+                    MaskCache.insert(image, for: key)
+                    variableBlurFilter?.setValue(image, forKey: _InternedKeys.maskParam)
+                    hasAppliedMask = true
+                    pendingMaskKey = nil
+                    logger.debug(
+                        "updateMask: first-paint SYNC mask=\(String(describing: maskType)) cgImage=\(image.width)x\(image.height)"
+                    )
+                    return
+                } else {
+                    logger.error(
+                        "updateMask: first-paint sync gen FAILED mask=\(String(describing: maskType)) size=\(String(describing: size))"
+                    )
+                }
+            }
+
+            // Subsequent updates: hop to a background queue and apply on
+            // main when the result is ready. A previous mask is still
+            // installed on the filter while the new one is being built, so
+            // the visible frame stays correct.
+            pendingMaskKey = key
 
             logger.debug(
                 "updateMask: cache MISS size=\(String(describing: size)) mask=\(String(describing: maskType)) inverted=\(inverted) — dispatching background gen"
@@ -339,6 +385,7 @@
                             return
                         }
                         filter.setValue(image, forKey: _InternedKeys.maskParam)
+                        self.hasAppliedMask = true
                         // Force CA to re-evaluate the filter chain with the
                         // freshly assigned mask. `setValue(_:forKey:)` mutates
                         // the filter object in place but does not by itself
