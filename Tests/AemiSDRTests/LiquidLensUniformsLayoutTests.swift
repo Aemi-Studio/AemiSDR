@@ -12,16 +12,16 @@ struct LiquidLensUniformsLayoutTests {
     /// `LiquidLensUniforms` must match the Metal-side struct byte-for-byte.
     /// When this fails, the Metal `LiquidLensUniforms` struct in `LiquidLens.metal`
     /// must be updated to match.
-    @Test func uniformsStrideIs104() {
-        #expect(MemoryLayout<LiquidLensUniforms>.stride == 104)
+    @Test func uniformsStrideIs120() {
+        #expect(MemoryLayout<LiquidLensUniforms>.stride == 120)
     }
 
     @Test func uniformsLazyStrideMatches() {
-        #expect(LiquidLensUniforms._stride == 104)
+        #expect(LiquidLensUniforms._stride == 120)
     }
 
     /// Pin every field's offset so a reorder is caught even if stride happens
-    /// to stay 104. Matches the Metal struct order in `LiquidLens.metal`.
+    /// to stay 120. Matches the Metal struct order in `LiquidLens.metal`.
     @Test func uniformsFieldOffsets() {
         #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.center) == 0)
         #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.textureSize) == 8)
@@ -46,5 +46,8 @@ struct LiquidLensUniformsLayoutTests {
         #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.asphericK4) == 92)
         #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.spectralAirOver0) == 96)
         #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.spectralAirOver1) == 100)
+        #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.deviationRed) == 104)
+        #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.deviationGreen) == 108)
+        #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.deviationBlue) == 112)
     }
 }

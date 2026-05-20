@@ -375,12 +375,14 @@
             var fresnel = key.enableFresnel
             var spectral = key.enableSpectral
             var aspheric = key.enableAspheric
+            var highFidelity = key.highFidelityRefraction
             let constants = MTLFunctionConstantValues()
             unsafe constants.setConstantValue(&chromatic, type: .bool, index: 0)
             unsafe constants.setConstantValue(&falloff, type: .int, index: 1)
             unsafe constants.setConstantValue(&fresnel, type: .bool, index: 2)
             unsafe constants.setConstantValue(&spectral, type: .bool, index: 3)
             unsafe constants.setConstantValue(&aspheric, type: .bool, index: 4)
+            unsafe constants.setConstantValue(&highFidelity, type: .bool, index: 5)
 
             guard
                 let fragment = try? library.makeFunction(

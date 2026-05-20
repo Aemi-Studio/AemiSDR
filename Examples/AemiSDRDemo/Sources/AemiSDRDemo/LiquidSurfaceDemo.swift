@@ -66,6 +66,7 @@ import SwiftUI
         @State private var enableFresnel = false
         @State private var enableSpectral = false
         @State private var enableAspheric = false
+        @State private var enableHighFidelityRefraction = false
         @State private var asphericK2: Double = 0.0
         @State private var asphericK4: Double = 0.0
 
@@ -118,7 +119,8 @@ import SwiftUI
                 asphericK4: Float(asphericK4),
                 enableFresnel: enableFresnel,
                 enableSpectral: enableSpectral,
-                enableAspheric: enableAspheric
+                enableAspheric: enableAspheric,
+                enableHighFidelityRefraction: enableHighFidelityRefraction
             )
         }
 
@@ -383,6 +385,7 @@ import SwiftUI
                         range: 0...32,
                         format: "%.1f pt"
                     )
+                    Toggle("High-Fidelity Refraction", isOn: $enableHighFidelityRefraction)
                     Toggle("Fresnel Attenuation", isOn: $enableFresnel)
                     Toggle("Spectral Integration", isOn: $enableSpectral)
                     Toggle("Aspheric Profile", isOn: $enableAspheric)
@@ -394,7 +397,7 @@ import SwiftUI
                     Text("Physical Fidelity")
                 } footer: {
                     Text(
-                        "Function-constant-gated pipeline variants. Each enabled toggle builds a specialized shader on first use."
+                        "Function-constant-gated pipeline variants. Each enabled toggle builds a specialized shader on first use. High-Fidelity Refraction uses per-fragment MSL refract() 3D form — strictly more accurate at large incidence angles but ~3× the chromatic-path ALU. Off by default for performance."
                     )
                     .font(.caption2)
                 }
