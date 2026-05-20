@@ -191,11 +191,15 @@
 
         override open func layoutSubviews() {
             super.layoutSubviews()
-            let metricsChanged = syncDrawableMetrics()
+            syncDrawableMetrics()
             updateClipMask()
-            if metricsChanged {
-                renderIfNeeded()
-            }
+            // Always attempt a render: `renderIfNeeded` is a no-op when no
+            // source texture is set yet (early `drainPendingConsumer` exit).
+            // Gating this on `metricsChanged` skipped the retry that lets a
+            // late-arriving source texture redraw on the next layout pass —
+            // visible as "starts blank, fixes on interaction" the first time
+            // the view becomes visible after the lens was added.
+            renderIfNeeded()
             fireReadyIfPossible()
         }
 
@@ -203,9 +207,8 @@
             super.didMoveToWindow()
             guard window != nil else { return }
             onContentHierarchyChanged?()
-            if syncDrawableMetrics() {
-                renderIfNeeded()
-            }
+            syncDrawableMetrics()
+            renderIfNeeded()
             fireReadyIfPossible()
         }
 
