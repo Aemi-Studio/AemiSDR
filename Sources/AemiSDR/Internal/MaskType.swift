@@ -278,4 +278,19 @@ enum MaskCache {
         unsafe storage.setObject(image, forKey: box)
         return image
     }
+
+    /// Returns the cached image for `key` without generating one on miss.
+    /// Useful when the caller wants to take a different (e.g. async) path
+    /// for the generation step.
+    static func peek(for key: MaskCacheKey) -> CGImage? {
+        let box = MaskCacheKeyBox(key)
+        return unsafe storage.object(forKey: box)
+    }
+
+    /// Stores `image` under `key`. Intended for callers that produced the
+    /// image off the main thread and need to publish it back into the cache.
+    static func insert(_ image: CGImage, for key: MaskCacheKey) {
+        let box = MaskCacheKeyBox(key)
+        unsafe storage.setObject(image, forKey: box)
+    }
 }
