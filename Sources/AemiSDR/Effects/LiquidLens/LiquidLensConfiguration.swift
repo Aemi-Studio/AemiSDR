@@ -17,19 +17,22 @@ public struct LiquidLensPipelineKey: Hashable, Sendable {
     public let enableFresnel: Bool  // function_constant(2)
     public let enableSpectral: Bool  // function_constant(3)
     public let enableAspheric: Bool  // function_constant(4)
+    public let highFidelityRefraction: Bool  // function_constant(5)
 
     public init(
         chromaticEnabled: Bool,
         falloffType: Int32,
         enableFresnel: Bool = false,
         enableSpectral: Bool = false,
-        enableAspheric: Bool = false
+        enableAspheric: Bool = false,
+        highFidelityRefraction: Bool = false
     ) {
         self.chromaticEnabled = chromaticEnabled
         self.falloffType = falloffType
         self.enableFresnel = enableFresnel
         self.enableSpectral = enableSpectral
         self.enableAspheric = enableAspheric
+        self.highFidelityRefraction = highFidelityRefraction
     }
 }
 
@@ -100,6 +103,14 @@ public struct LiquidLensUniforms: Sendable, Equatable {
     /// `n_air / n_λ` ratio at 580 nm (yellow) for 5-wavelength spectral
     /// integration.
     public var spectralAirOver1: Float
+    /// Scalar Snell deviation (radians) at the rim, `asin(airOver_red ·
+    /// sin θ_rim) − θ_rim` for `θ_rim = asin(lensCurvature)`. Consumed by
+    /// the fast chromatic path in the shader when `kHighFidelityRefraction`
+    /// is false. Per-fragment displacement is `outwardDir · deviation ·
+    /// displacementScale`.
+    public var deviationRed: Float
+    public var deviationGreen: Float
+    public var deviationBlue: Float
 }
 
 /// Configuration for the liquid lens distortion effect.
@@ -186,6 +197,13 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
     /// `asphericK2` / `asphericK4`.
     public var enableAspheric: Bool
 
+    /// Enables per-fragment MSL `refract()` 3D refraction with proper
+    /// image-plane projection. Strictly higher fidelity than the default
+    /// scalar-deviation path at large incidence angles, but **~3× the
+    /// per-fragment ALU in chromatic mode**. Off by default — toggle on for
+    /// physical accuracy when performance budget allows.
+    public var enableHighFidelityRefraction: Bool
+
     public init(
         center: SIMD2<Float> = .zero,
         halfSize: SIMD2<Float> = SIMD2(150, 150),
@@ -203,7 +221,8 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
         asphericK4: Float = 0.0,
         enableFresnel: Bool = false,
         enableSpectral: Bool = false,
-        enableAspheric: Bool = false
+        enableAspheric: Bool = false,
+        enableHighFidelityRefraction: Bool = false
     ) {
         self.center = center
         self.halfSize = halfSize
@@ -222,6 +241,7 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
         self.enableFresnel = enableFresnel
         self.enableSpectral = enableSpectral
         self.enableAspheric = enableAspheric
+        self.enableHighFidelityRefraction = enableHighFidelityRefraction
     }
 
     /// Returns the function-constant key identifying which compiled fragment
@@ -234,7 +254,8 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
             falloffType: Int32(falloff.rawValue),
             enableFresnel: enableFresnel,
             enableSpectral: enableSpectral,
-            enableAspheric: enableAspheric
+            enableAspheric: enableAspheric,
+            highFidelityRefraction: enableHighFidelityRefraction
         )
     }
 
@@ -247,8 +268,8 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
     public func toUniforms(textureSize: SIMD2<Float>, scale: Float = 1.0) -> LiquidLensUniforms {
         let coefficients = Self.sellmeierCoefficients(for: material)
         assert(
-            MemoryLayout<LiquidLensUniforms>.stride == 104,
-            "LiquidLensUniforms layout mismatch — Metal expects 104-byte stride, got \(MemoryLayout<LiquidLensUniforms>.stride)"
+            MemoryLayout<LiquidLensUniforms>.stride == 120,
+            "LiquidLensUniforms layout mismatch — Metal expects 120-byte stride, got \(MemoryLayout<LiquidLensUniforms>.stride)"
         )
 
         let nRed = Self.sellmeierIndex(wavelength: Self.redWavelength, coefficients: coefficients)
@@ -260,10 +281,13 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
         let clampedCurvature = min(max(lensCurvature, 0), 1)
         let nAir = Self.airRefractiveIndex
 
-        // `lensCurvature` is clamped here so the shader can use it directly
-        // (per-fragment `asin(normalizedRadius · lensCurvature)` is now
-        // computed via MSL `refract()` on a 3D normal; clamping CPU-side keeps
-        // the GPU free of one `clamp` per fragment).
+        // Scalar rim deviations for the fast chromatic path.
+        // `θ_rim = asin(lensCurvature)`; `dev_λ = asin((n_air/n_λ)·sinθ_rim) − θ_rim`.
+        let surfaceAngle = asin(clampedCurvature)
+        let devRed = Self.snellDeviation(incidentAngle: surfaceAngle, n1: nAir, n2: nRed)
+        let devGreen = Self.snellDeviation(incidentAngle: surfaceAngle, n1: nAir, n2: nGreen)
+        let devBlue = Self.snellDeviation(incidentAngle: surfaceAngle, n1: nAir, n2: nBlue)
+
         return LiquidLensUniforms(
             center: center * scale,
             textureSize: textureSize,
@@ -287,7 +311,10 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
             asphericK2: asphericK2,
             asphericK4: asphericK4,
             spectralAirOver0: nAir / nSpec0,
-            spectralAirOver1: nAir / nSpec1
+            spectralAirOver1: nAir / nSpec1,
+            deviationRed: devRed,
+            deviationGreen: devGreen,
+            deviationBlue: devBlue
         )
     }
 }
@@ -295,11 +322,11 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
 // MARK: - Layout Verification
 
 extension LiquidLensUniforms {
-    /// Compile-time sanity check — Metal shader expects exactly 104 bytes.
+    /// Compile-time sanity check — Metal shader expects exactly 120 bytes.
     @usableFromInline
     static let _stride: Int = {
         let s = MemoryLayout<LiquidLensUniforms>.stride
-        assert(s == 104, "LiquidLensUniforms stride changed to \(s) — update Metal struct to match")
+        assert(s == 120, "LiquidLensUniforms stride changed to \(s) — update Metal struct to match")
         return s
     }()
 }

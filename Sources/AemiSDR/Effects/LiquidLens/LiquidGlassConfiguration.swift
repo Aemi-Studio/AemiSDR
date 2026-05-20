@@ -95,6 +95,12 @@
         /// Enables the aspheric surface-tilt model.
         public var enableAspheric: Bool
 
+        /// Enables per-fragment MSL `refract()` 3D refraction (slow, accurate)
+        /// instead of the default scalar-deviation form (fast). See
+        /// `LiquidLensConfiguration.enableHighFidelityRefraction` for the
+        /// physics trade-off.
+        public var enableHighFidelityRefraction: Bool
+
         public init(
             strength: Float = 0.5,
             lensCurvature: Float = 1.0,
@@ -113,7 +119,8 @@
             asphericK4: Float = 0.0,
             enableFresnel: Bool = false,
             enableSpectral: Bool = false,
-            enableAspheric: Bool = false
+            enableAspheric: Bool = false,
+            enableHighFidelityRefraction: Bool = false
         ) {
             self.strength = strength
             self.lensCurvature = lensCurvature
@@ -135,6 +142,7 @@
             self.enableFresnel = enableFresnel
             self.enableSpectral = enableSpectral
             self.enableAspheric = enableAspheric
+            self.enableHighFidelityRefraction = enableHighFidelityRefraction
         }
     }
 
@@ -185,7 +193,8 @@
                 asphericK4: asphericK4,
                 enableFresnel: enableFresnel,
                 enableSpectral: enableSpectral,
-                enableAspheric: enableAspheric
+                enableAspheric: enableAspheric,
+                enableHighFidelityRefraction: enableHighFidelityRefraction
             )
             configuration.overlayMode = overlayMode
             return configuration

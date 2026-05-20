@@ -68,6 +68,15 @@ struct LiquidLensUniforms {
     // Extra wavelengths sampled in spectral integration mode.
     float spectralAirOver0;   // 440 nm (deep blue)
     float spectralAirOver1;   // 580 nm (yellow)
+    // Scalar Snell deviation (radians) at the rim (sinθ = lensCurvature),
+    // precomputed CPU-side. Used by the fast chromatic path when
+    // `kHighFidelityRefraction` is false — per-fragment displacement is
+    // `outwardDir * deviation * displacementScale`. Faster than the 3D
+    // `refract()` form (3× ALU savings in chromatic mode) at the cost of
+    // first-order accuracy only at large incidence angles.
+    float deviationRed;
+    float deviationGreen;
+    float deviationBlue;
 };
 
 // MARK: - Vertex Types
@@ -108,11 +117,18 @@ vertex VertexOut liquidLensVertex(uint vertexID [[vertex_id]]) {
 // load time. The renderer caches one MTLRenderPipelineState per active key
 // combination — pipelines are built lazily on first use.
 
-constant bool  kEnableChromatic [[function_constant(0)]];
-constant int   kFalloffType     [[function_constant(1)]];
-constant bool  kEnableFresnel   [[function_constant(2)]];
-constant bool  kEnableSpectral  [[function_constant(3)]];
-constant bool  kEnableAspheric  [[function_constant(4)]];
+constant bool  kEnableChromatic         [[function_constant(0)]];
+constant int   kFalloffType             [[function_constant(1)]];
+constant bool  kEnableFresnel           [[function_constant(2)]];
+constant bool  kEnableSpectral          [[function_constant(3)]];
+constant bool  kEnableAspheric          [[function_constant(4)]];
+/// When true, displacement is computed per-fragment via MSL `refract()` 3D
+/// form with image-plane projection — physically accurate but ~3× the ALU
+/// of the scalar path. When false (default), use the CPU-precomputed scalar
+/// rim deviation directly, scaling by `outwardDir`. The scalar form is the
+/// original (fast) behavior and produces visually equivalent results at
+/// typical lens curvatures.
+constant bool  kHighFidelityRefraction  [[function_constant(5)]];
 
 // MARK: - Falloff Transition Functions
 //
@@ -343,10 +359,16 @@ fragment half4 liquidLensFragment(
         fresnelT = half(fresnelTransmission(cosTheta, cosT, 1.000293f, n2));
     }
 
-    // Non-chromatic specialization: single refract, green channel only.
+    // Non-chromatic specialization: single sample at the green displacement.
     if (!kEnableChromatic) {
-        float2 dispG = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOverGreen)
-                       * displacementScale * signFactor;
+        float2 dispG;
+        if (kHighFidelityRefraction) {
+            dispG = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOverGreen)
+                    * displacementScale * signFactor;
+        } else {
+            // Fast scalar path: per-fragment displacement = outwardDir * (rim deviation).
+            dispG = outwardDir * (uniforms.deviationGreen * displacementScale * signFactor);
+        }
         float2 uv = (position + dispG) / uniforms.textureSize;
         half4 c = sourceTexture.sample(texSampler, uv);
         return half4(c.rgb * fresnelT, c.a);
@@ -382,24 +404,41 @@ fragment half4 liquidLensFragment(
     }
 
     // RGB-discrete chromatic specialization.
-    float2 dispR = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOverRed);
-    float2 dispG = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOverGreen);
-    float2 dispB = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOverBlue);
+    float2 dispR2D, dispG2D, dispB2D;
+    if (kHighFidelityRefraction) {
+        // Per-fragment 3D refract — accurate at all incidence angles.
+        float2 rDir = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOverRed);
+        float2 gDir = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOverGreen);
+        float2 bDir = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOverBlue);
+        dispR2D = rDir * displacementScale * signFactor;
+        dispG2D = gDir * displacementScale * signFactor;
+        dispB2D = bDir * displacementScale * signFactor;
+    } else {
+        // Fast scalar path: rim deviation × outwardDir. ~3× less ALU than the
+        // refract() path; the chromatic mix below stretches the per-channel
+        // displacement in the same direction as the original implementation.
+        float dispGreenScalar = uniforms.deviationGreen * displacementScale * signFactor;
+        float dispRedScalar   = uniforms.deviationRed   * displacementScale * signFactor;
+        float dispBlueScalar  = uniforms.deviationBlue  * displacementScale * signFactor;
+        dispG2D = outwardDir * dispGreenScalar;
+        dispR2D = outwardDir * dispRedScalar;
+        dispB2D = outwardDir * dispBlueScalar;
+    }
 
     if (clampedChromatic < 0.0001f) {
-        float2 uv = (position + dispG * displacementScale * signFactor) / uniforms.textureSize;
+        float2 uv = (position + dispG2D) / uniforms.textureSize;
         half4 c = sourceTexture.sample(texSampler, uv);
         return half4(c.rgb * fresnelT, c.a);
     }
 
     // Chromatic amplifier: extrapolate per-channel displacement from green.
-    dispR = mix(dispG, dispR, clampedChromatic);
-    dispB = mix(dispG, dispB, clampedChromatic);
+    dispR2D = mix(dispG2D, dispR2D, clampedChromatic);
+    dispB2D = mix(dispG2D, dispB2D, clampedChromatic);
 
     float2 invSize = 1.0f / uniforms.textureSize;
-    half4 redSample   = sourceTexture.sample(texSampler, (position + dispR * displacementScale * signFactor) * invSize);
-    half4 greenSample = sourceTexture.sample(texSampler, (position + dispG * displacementScale * signFactor) * invSize);
-    half4 blueSample  = sourceTexture.sample(texSampler, (position + dispB * displacementScale * signFactor) * invSize);
+    half4 redSample   = sourceTexture.sample(texSampler, (position + dispR2D) * invSize);
+    half4 greenSample = sourceTexture.sample(texSampler, (position + dispG2D) * invSize);
+    half4 blueSample  = sourceTexture.sample(texSampler, (position + dispB2D) * invSize);
 
     half4 result;
     result.r = redSample.r * fresnelT;
