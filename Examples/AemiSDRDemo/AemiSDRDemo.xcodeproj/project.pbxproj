@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 100;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -36,11 +36,9 @@
 /* Begin PBXFrameworksBuildPhase section */
 		3FCDDE71C2DFC43E9D9A3687 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				96F19E49E674989A5C816474 /* AemiSDR in Frameworks */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
@@ -99,8 +97,6 @@
 			);
 			buildRules = (
 			);
-			dependencies = (
-			);
 			name = AemiSDRDemo;
 			packageProductDependencies = (
 				CEA8847E49EFA98FAB92469D /* AemiSDR */,
@@ -116,7 +112,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1430;
+				LastUpgradeCheck = 2640;
 				TargetAttributes = {
 					C60B804238C1CD616B0DEDDD = {
 						ProvisioningStyle = Automatic;
@@ -124,7 +120,6 @@
 				};
 			};
 			buildConfigurationList = E34154F69762CFA7AD4B5AFC /* Build configuration list for PBXProject "AemiSDRDemo" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -136,6 +131,7 @@
 			packageReferences = (
 				E277BA374F5EAF00B451AB79 /* XCLocalSwiftPackageReference "../.." */,
 			);
+			preferredProjectObjectVersion = 100;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -147,7 +143,6 @@
 /* Begin PBXSourcesBuildPhase section */
 		608F98C2CCF2C1496A89BC11 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				249C00A56C14F857B23D529C /* AemiSDRDemoApp.swift in Sources */,
 				9DB1CD53D86B7214935637AE /* ContentView.swift in Sources */,
@@ -159,15 +154,15 @@
 				9F6A7B8C9D0E1F2A3B4C5D6E /* AlphaMaskDemo.swift in Sources */,
 				B28C9D0E1F2A3B4C5D6E7F8A /* VisualEffectDemo.swift in Sources */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		268EEB4D1401A22E65E2DAF2 /* Release */ = {
+		268EEB4D1401A22E65E2DAF2 /* Release configuration for PBXProject "AemiSDRDemo" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -199,6 +194,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = JR87XK4R3M;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -214,19 +210,19 @@
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
 		};
-		57101B86F9CD5D7D418C1525 /* Release */ = {
+		57101B86F9CD5D7D418C1525 /* Release configuration for PBXNativeTarget "AemiSDRDemo" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = JR87XK4R3M;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -241,13 +237,12 @@
 			};
 			name = Release;
 		};
-		5FC5270DD3D1020F54F9D49F /* Debug */ = {
+		5FC5270DD3D1020F54F9D49F /* Debug configuration for PBXNativeTarget "AemiSDRDemo" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = JR87XK4R3M;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -262,10 +257,11 @@
 			};
 			name = Debug;
 		};
-		B895AC5A8566E0A8A9BCCEA0 /* Debug */ = {
+		B895AC5A8566E0A8A9BCCEA0 /* Debug configuration for PBXProject "AemiSDRDemo" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -297,6 +293,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = JR87XK4R3M;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -319,6 +316,7 @@
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -331,19 +329,17 @@
 		334E9C3BE22A82AEE5D93AB7 /* Build configuration list for PBXNativeTarget "AemiSDRDemo" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				5FC5270DD3D1020F54F9D49F /* Debug */,
-				57101B86F9CD5D7D418C1525 /* Release */,
+				5FC5270DD3D1020F54F9D49F /* Debug configuration for PBXNativeTarget "AemiSDRDemo" */,
+				57101B86F9CD5D7D418C1525 /* Release configuration for PBXNativeTarget "AemiSDRDemo" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
 		E34154F69762CFA7AD4B5AFC /* Build configuration list for PBXProject "AemiSDRDemo" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				B895AC5A8566E0A8A9BCCEA0 /* Debug */,
-				268EEB4D1401A22E65E2DAF2 /* Release */,
+				B895AC5A8566E0A8A9BCCEA0 /* Debug configuration for PBXProject "AemiSDRDemo" */,
+				268EEB4D1401A22E65E2DAF2 /* Release configuration for PBXProject "AemiSDRDemo" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
