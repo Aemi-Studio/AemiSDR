@@ -11,9 +11,13 @@
 //   - Snell refraction via MSL `refract(I, N, η)` where I = (0, 0, -1) is the
 //     incident ray and η = n_air / n_λ (precomputed CPU-side per channel).
 //   - Image-plane displacement = T.xy / (−T.z) (geometric projection of the
-//     refracted ray onto the underlying texture). This naturally produces
-//     zero displacement at the apex (r=0) and maximum at the rim (r=1),
-//     replacing the old falloff-envelope hack.
+//     refracted ray onto the underlying texture). The projection by `−T.z`
+//     gives `tan(α)`, the exact lateral offset on the texture plane;
+//     using `α` directly (or any first-order approximation) understates
+//     the offset at grazing angles where most chromatic visibility lives.
+//     The form also self-vanishes at the apex (r=0 ⇒ T.xy=0) and peaks at
+//     the rim, so no separate falloff envelope is needed to mask the
+//     interior.
 //   - Chromatic aberration: three independent `refract()` calls (RGB), or
 //     five for spectral integration mode.
 //   - SDF gradient inside the inner-rect uses a fixed-width smoothstep band
@@ -188,13 +192,17 @@ inline float sdRoundedRect(float2 p, float2 halfSize, float cornerRadius) {
 // direction outside a fixed-pixel-width transition band and smoothstep
 // between (1,0) and (0,1) inside it. This:
 //
-//   - Eliminates the previous `normalize((dy, dx))` formula's 2× angular
-//     rate-of-change peak at the diagonal (most visible as a soft seam in
-//     elongated lenses near the inner-rect corner).
-//   - Removes the NaN at q = (0, 0) that `normalize((0, 0))` would produce.
 //   - Gives the *true* SDF normal everywhere outside the band, so the
 //     displacement direction is physically correct over >99 % of the lens
 //     interior.
+//   - Smooths the diagonal discontinuity over a configurable band rather
+//     than along a single pixel-thin seam. A smoother interpolant
+//     (`normalize((dy, dx))`) would also remove the discontinuity but it
+//     doubles the angular rate of change at the diagonal, producing a
+//     visible soft seam in elongated lenses near the inner-rect corner;
+//     the smoothstep keeps the angular velocity bounded.
+//   - Defines a finite vector at q = (0, 0), where `normalize((0, 0))`
+//     would return NaN.
 //
 // The signP smoothstep on |p| tapers the gradient magnitude across the
 // shape's medial axis (p.x = 0 or p.y = 0) to zero — preventing the
