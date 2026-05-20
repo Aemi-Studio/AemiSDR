@@ -60,28 +60,30 @@ public enum LiquidLensCornerRadius: Sendable, Equatable, Hashable {
 
 /// Uniform buffer matching the Metal `LiquidLensUniforms` struct layout.
 ///
-/// Layout (128-byte stride, 16-byte aligned because of the trailing
+/// Layout (112-byte stride, 16-byte aligned because of the trailing
 /// `SIMD3<Float>` triplets). Grouped by access pattern:
 ///
 ///   - Geometry first (`center`, `textureSize`, `halfSize`) — read once per
 ///     fragment to derive pixel-space coordinates.
 ///   - Scalar shape parameters next (`strength`..`asphericK4`) — read by
 ///     branch gates and the displacement scaling step.
-///   - Three `SIMD3<Float>` channel triplets last (`refractiveIndex`,
-///     `airOver`, `deviation`) — read together as vectors in the chromatic
-///     path.
+///   - Two `SIMD3<Float>` channel triplets (`airOver`, `deviation`) — read
+///     together as vectors in the chromatic path.
 ///
 /// The RGB triplets use `SIMD3<Float>` rather than three independent scalars
 /// so the GPU can emit a single 16-byte vector load per triplet. The struct
 /// alignment is 16 bytes because of the SIMD types; the trailing scalar
 /// `spectralAirOver*` fields fit inside the 16-byte tail. Verify the layout
-/// with `MemoryLayout<LiquidLensUniforms>.stride == 128`.
+/// with `MemoryLayout<LiquidLensUniforms>.stride == 112`.
 ///
 /// `falloffType` does not appear here — the chosen polynomial is resolved
 /// at pipeline build time via the `kFalloffType` function constant, so the
 /// shader has no use for a runtime field. `materialType` is likewise absent
-/// because all per-material values reach the GPU through the three channel
-/// triplets, not through a material ID.
+/// because all per-material values reach the GPU through the two channel
+/// triplets. The per-channel refractive indices (`n_λ`) are CPU-only state
+/// used to derive `airOver` and `deviation`; carrying them through the
+/// uniform buffer would add 16 bytes (one vector slot) of upload bandwidth
+/// per frame for data the shader never reads.
 public struct LiquidLensUniforms: Sendable, Equatable {
     // Geometry.
     public var center: SIMD2<Float>
@@ -105,12 +107,6 @@ public struct LiquidLensUniforms: Sendable, Equatable {
     public var asphericK2: Float
     /// Fourth-order aspheric coefficient. See `asphericK2`.
     public var asphericK4: Float
-
-    /// Per-channel refractive indices at the standard Fraunhofer wavelengths.
-    /// `.x` = 656.3 nm (C line), `.y` = 546.1 nm (e), `.z` = 486.1 nm (F).
-    /// Kept as informational data; the shader's refraction path uses
-    /// `airOver` directly.
-    public var refractiveIndex: SIMD3<Float>
 
     /// Per-channel `η = n_air / n_λ`. Feeds MSL `refract(I, N, η)` for the
     /// 3D refraction path, and also used to compute `airOver.g` in the
@@ -304,8 +300,8 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
     /// - Returns: A `LiquidLensUniforms` ready to be passed to the GPU.
     public func toUniforms(textureSize: SIMD2<Float>, scale: Float = 1.0) -> LiquidLensUniforms {
         assert(
-            MemoryLayout<LiquidLensUniforms>.stride == 128,
-            "LiquidLensUniforms layout mismatch — Metal expects 128-byte stride, got \(MemoryLayout<LiquidLensUniforms>.stride)"
+            MemoryLayout<LiquidLensUniforms>.stride == 112,
+            "LiquidLensUniforms layout mismatch — Metal expects 112-byte stride, got \(MemoryLayout<LiquidLensUniforms>.stride)"
         )
 
         // Per-material refractive indices depend only on the material's
@@ -344,7 +340,6 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
             diagonalBand: max(diagonalBand, 0) * scale,
             asphericK2: asphericK2,
             asphericK4: asphericK4,
-            refractiveIndex: indices.refractiveIndex,
             airOver: indices.airOver,
             deviation: SIMD3(devRed, devGreen, devBlue),
             spectralAirOver0: indices.spectralAirOver0,
@@ -356,14 +351,14 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
 // MARK: - Layout Verification
 
 extension LiquidLensUniforms {
-    /// Compile-time sanity check — Metal shader expects exactly 128 bytes.
+    /// Compile-time sanity check — Metal shader expects exactly 112 bytes.
     /// The stride is set by `SIMD3<Float>` alignment (16 bytes), not by the
     /// sum of field sizes; keep this constant in sync if the Metal struct
     /// reorders or adds members.
     @usableFromInline
     static let _stride: Int = {
         let s = MemoryLayout<LiquidLensUniforms>.stride
-        assert(s == 128, "LiquidLensUniforms stride changed to \(s) — update Metal struct to match")
+        assert(s == 112, "LiquidLensUniforms stride changed to \(s) — update Metal struct to match")
         return s
     }()
 }
@@ -467,10 +462,14 @@ extension LiquidLensConfiguration {
         return sqrt(max(Float(1.0), n2))
     }
 
-    /// Bundle of material-derived refractive quantities that the GPU
-    /// uniform buffer consumes. None of these depend on lens geometry or
-    /// curvature, so they're cached per material at module-load time.
-    fileprivate struct PrecomputedMaterialIndices: Sendable {
+    /// Bundle of material-derived refractive quantities. `airOver` and the
+    /// spectral ratios feed the GPU uniform buffer; `refractiveIndex`
+    /// (the per-channel n_λ values) is kept CPU-side so callers and tests
+    /// can verify the Sellmeier output without having to recompute it.
+    ///
+    /// None of these depend on lens geometry or curvature, so the bundle is
+    /// cached per material at module-load time.
+    internal struct PrecomputedMaterialIndices: Sendable {
         let refractiveIndex: SIMD3<Float>
         let airOver: SIMD3<Float>
         let spectralAirOver0: Float
@@ -504,7 +503,7 @@ extension LiquidLensConfiguration {
         return table
     }()
 
-    fileprivate static func precomputedIndices(for material: LiquidLensMaterial) -> PrecomputedMaterialIndices {
+    internal static func precomputedIndices(for material: LiquidLensMaterial) -> PrecomputedMaterialIndices {
         // `allCases` enumerates every enum case at table-build time, so the
         // dictionary always has an entry. The force-unwrap fails only if a
         // new case is added to `LiquidLensMaterial` without rebuilding the

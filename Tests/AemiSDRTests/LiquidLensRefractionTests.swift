@@ -135,15 +135,10 @@ struct LiquidLensRefractionTests {
     @Test("Chromatic spread vs Sellmeier index match: refractiveIndexBlue > Green > Red")
     func sellmeierRefractiveIndexOrdering() {
         for material: LiquidLensMaterial in [.crownGlass, .flintGlass, .water, .acrylic, .diamond] {
-            let config = LiquidLensConfiguration(
-                halfSize: SIMD2(100, 100),
-                lensCurvature: 1.0,
-                material: material
-            )
-            let uniforms = config.toUniforms(textureSize: SIMD2(200, 200), scale: 1)
+            let indices = LiquidLensConfiguration.precomputedIndices(for: material)
             // Normal dispersion: n_blue > n_green > n_red
-            #expect(uniforms.refractiveIndex.z > uniforms.refractiveIndex.y)
-            #expect(uniforms.refractiveIndex.y > uniforms.refractiveIndex.x)
+            #expect(indices.refractiveIndex.z > indices.refractiveIndex.y)
+            #expect(indices.refractiveIndex.y > indices.refractiveIndex.x)
         }
     }
 
