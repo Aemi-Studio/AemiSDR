@@ -263,6 +263,24 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
         self.enableHighFidelityRefraction = enableHighFidelityRefraction
     }
 
+    /// Applies the chosen quality preset's flag combination to this
+    /// configuration. Returns `self` after mutation so the call can be
+    /// chained at the use site.
+    ///
+    /// The preset overrides only the feature flags it owns
+    /// (`enableHighFidelityRefraction`, `enableFresnel`, `enableSpectral`,
+    /// `enableAspheric`). All other fields (strength, curvature,
+    /// chromaticAmount, material, falloff, etc.) are left intact. Callers
+    /// can override any flag after applying a preset.
+    @discardableResult
+    public mutating func apply(_ quality: LiquidLensQuality) -> Self {
+        enableHighFidelityRefraction = quality.usesHighFidelityRefraction
+        enableFresnel = quality.usesFresnel
+        enableSpectral = quality.usesSpectral
+        enableAspheric = quality.usesAspheric
+        return self
+    }
+
     /// Returns the function-constant key identifying which compiled fragment
     /// shader variant the renderer should use for this configuration.
     public func pipelineKey() -> LiquidLensPipelineKey {
