@@ -58,7 +58,16 @@
         private var reduceMotionObserver: NSObjectProtocol?
         private var lowPowerObserver: NSObjectProtocol?
         private var thermalObserver: NSObjectProtocol?
-        private var isPaused = false
+        /// User-initiated pause — `true` while the app is backgrounded. Set by
+        /// `pauseDisplayLink` / `resumeDisplayLink` only. Kept separate from
+        /// `systemPaused` so a reduce-motion / thermal pause that fires while
+        /// the app is backgrounded doesn't strand the link in the paused state
+        /// after the app foregrounds.
+        private var userPaused = false
+        /// System-state pause — `true` when `effectiveRefreshRate` resolves to 0
+        /// (reduce-motion enabled or thermal `.critical`). Recomputed every
+        /// time `applyFrameRate` runs.
+        private var systemPaused = false
         private var bridge: ZeroCopyTextureBridge?
         private var bridgeConsumerID: BridgeConsumerID?
         private var captureView: BackdropCaptureView?
@@ -242,15 +251,15 @@
 
         private func applyFrameRate(to link: CADisplayLink) {
             let fps = effectiveRefreshRate
-            // 0 fps = "should pause"; toggle `isPaused` rather than the rate.
-            if fps <= 0 {
-                link.isPaused = true
-                return
-            }
-            // Reactivate if we were previously paused for accessibility/thermal.
-            if !isPaused, link.isPaused {
-                link.isPaused = false
-            }
+            // `systemPaused` is a derived flag: it's true exactly when the
+            // accessibility/thermal/lowPower state resolves to 0 fps. The
+            // effective pause-state is `userPaused || systemPaused`, so the
+            // user-paused branch (background) and system-paused branch
+            // (reduce-motion, thermal `.critical`) can coexist without one
+            // wiping the other.
+            systemPaused = (fps <= 0)
+            link.isPaused = userPaused || systemPaused
+            guard fps > 0 else { return }
             if #available(iOS 15.0, *) {
                 let fpsFloat = Float(fps)
                 link.preferredFrameRateRange = CAFrameRateRange(
@@ -262,14 +271,17 @@
         }
 
         private func pauseDisplayLink() {
-            isPaused = true
+            userPaused = true
             displayLink?.isPaused = true
         }
 
         private func resumeDisplayLink() {
             guard continuousCapture else { return }
-            isPaused = false
-            displayLink?.isPaused = false
+            userPaused = false
+            // Only un-pause if the system state also permits it. A pending
+            // reduce-motion / thermal-critical pause must keep the link
+            // suspended even though the user-pause has cleared.
+            displayLink?.isPaused = systemPaused
         }
 
         fileprivate func displayLinkFired(_ link: CADisplayLink) {
