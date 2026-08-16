@@ -1,13 +1,13 @@
 {
-  "originHash" : "2ab4e7502729949ab3ea64da112f9f3d689696ecfd3ff4eb341a1fc77e177e60",
+  "originHash" : "d88c01df0d5d4a0ec1af17f5a04e0969ec6571233b5f9d9060063fcc68d98c3e",
   "pins" : [
     {
-      "identity" : "internedstrings",
+      "identity" : "aemi",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/g-cqd/InternedStrings.git",
+      "location" : "https://github.com/Aemi-Studio/aemi.git",
       "state" : {
         "branch" : "main",
-        "revision" : "0812aa8989c1368115bad4af38b7e0d762c61517"
+        "revision" : "3930ecdab69611ea240a48a3a540f9f1f4cffe46"
       }
     },
     {
