@@ -11,8 +11,8 @@ private let swiftSettings: [SwiftSetting] = [
 private let package = Package(
     name: "AemiSDR",
     platforms: [
-        .iOS(.v14),
-        .macOS(.v11),
+        .iOS(.v17),
+        .macOS(.v14),
     ],
     products: [
         .library(
@@ -21,14 +21,14 @@ private let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/g-cqd/InternedStrings.git", branch: "main")
+        .package(url: "https://github.com/Aemi-Studio/aemi.git", branch: "main")
     ],
     targets: [
         // Main library target
         .target(
             name: "AemiSDR",
             dependencies: [
-                .product(name: "InternedStrings", package: "InternedStrings")
+                .product(name: "InternedStrings", package: "aemi")
             ],
             resources: [
                 .process("Previews/Assets.xcassets"),
