@@ -11,8 +11,8 @@ private let swiftSettings: [SwiftSetting] = [
 private let package = Package(
     name: "AemiSDR",
     platforms: [
-        .iOS(.v17),
-        .macOS(.v14),
+        .iOS(.v18),
+        .macOS(.v15),
     ],
     products: [
         .library(
