@@ -8,6 +8,7 @@
     ///
     /// Usage:
     ///   MetalCompilerTool --input <path> --ios-output <path> --macos-output <path>
+    ///                     [--ios-simulator-output <path>]
     ///                     [--ios-min-version <version>] [--macos-min-version <version>]
     ///                     [--mode <ci|standard>]
 
@@ -200,6 +201,7 @@
         inputPath: String,
         iosOutput: String,
         macosOutput: String,
+        iosSimulatorOutput: String?,
         iosMinVersion: String,
         macosMinVersion: String,
         mode: CompilationMode
@@ -225,6 +227,9 @@
             throw CompilerError.missingArgument("--macos-output")
         }
 
+        // Optional so existing invocations keep their two-platform behavior.
+        let iosSimulatorOutput = getArg("--ios-simulator-output")
+
         let iosMinVersion = getArg("--ios-min-version") ?? "14.0"
         let macosMinVersion = getArg("--macos-min-version") ?? "11.0"
         let mode = resolveCompilationMode(inputPath: inputPath, explicitMode: getArg("--mode"))
@@ -233,11 +238,27 @@
         // any output outside that root. SwiftPM's plugin sandbox already enforces
         // similar boundaries, but a path-confined tool is robust against
         // out-of-plugin invocations where the sandbox profile may differ.
+        //
+        // Both sides are canonicalized the same way because the build system
+        // may hand the outputs and the root different spellings of one
+        // location — `/private/tmp/…` for one and `/tmp/…` for the other —
+        // and `standardizingPath` strips `/private` only from paths that
+        // already exist, which outputs never do. The comparison also stops at
+        // a component boundary so a sibling that merely shares the root's
+        // prefix cannot pass.
         if let allowedRoot = getArg("--allowed-root") {
-            let root = (allowedRoot as NSString).standardizingPath
-            for path in [iosOutput, macosOutput] {
+            func canonicalized(_ path: String) -> String {
                 let standardized = (path as NSString).standardizingPath
-                if !standardized.hasPrefix(root) {
+                let privatePrefix = "/private/"
+                if standardized.hasPrefix(privatePrefix) {
+                    return String(standardized.dropFirst(privatePrefix.count - 1))
+                }
+                return standardized
+            }
+            let root = canonicalized(allowedRoot)
+            for path in [iosOutput, macosOutput, iosSimulatorOutput].compactMap({ $0 }) {
+                let standardized = canonicalized(path)
+                if standardized != root, !standardized.hasPrefix(root + "/") {
                     throw CompilerError.missingArgument(
                         "output path '\(standardized)' is outside --allowed-root '\(root)'"
                     )
@@ -245,7 +266,7 @@
             }
         }
 
-        return (inputPath, iosOutput, macosOutput, iosMinVersion, macosMinVersion, mode)
+        return (inputPath, iosOutput, macosOutput, iosSimulatorOutput, iosMinVersion, macosMinVersion, mode)
     }
 
     func resolveCompilationMode(inputPath: String, explicitMode: String?) -> CompilationMode {
@@ -264,15 +285,19 @@
     // MARK: - Main Entry Point
 
     do {
-        let (inputPath, iosOutput, macosOutput, iosMinVersion, macosMinVersion, mode) = try parseArguments()
+        let (inputPath, iosOutput, macosOutput, iosSimulatorOutput, iosMinVersion, macosMinVersion, mode) =
+            try parseArguments()
 
         print("AemiSDR Metal Compiler (\(mode) mode)")
         print("Input: \(inputPath)")
         print("iOS Output: \(iosOutput)")
         print("macOS Output: \(macosOutput)")
+        if let iosSimulatorOutput {
+            print("iOS Simulator Output: \(iosSimulatorOutput)")
+        }
         print("")
 
-        let platforms = [
+        var platforms = [
             PlatformConfig(
                 name: "iOS",
                 sdk: "iphoneos",
@@ -290,6 +315,18 @@
                 mode: mode
             ),
         ]
+        if let iosSimulatorOutput {
+            platforms.append(
+                PlatformConfig(
+                    name: "iOS Simulator",
+                    sdk: "iphonesimulator",
+                    minVersionFlag: "-mios-simulator-version-min=",
+                    minVersion: iosMinVersion,
+                    outputPath: iosSimulatorOutput,
+                    mode: mode
+                )
+            )
+        }
 
         try compileMetalShaders(inputPath: inputPath, platforms: platforms)
 

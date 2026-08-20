@@ -71,13 +71,16 @@ class CIKernelCache {
     /// Platform-specific Metal library resource name.
     ///
     /// Returns the appropriate Metal library filename based on the current platform.
-    /// - iOS/tvOS/watchOS/visionOS: Uses the iOS-compiled library
+    /// - iOS/tvOS/watchOS/visionOS devices: Uses the iOS-compiled library
+    /// - Simulators: Uses the simulator-compiled library
     /// - macOS: Uses the macOS-compiled library
     private static var platformLibraryName: String {
         #if os(macOS)
-        return "AemiSDR.macOS"
+            return "AemiSDR.macOS"
+        #elseif targetEnvironment(simulator)
+            return "AemiSDR.iOSSimulator"
         #else
-        return "AemiSDR.iOS"
+            return "AemiSDR.iOS"
         #endif
     }
 
@@ -87,7 +90,8 @@ class CIKernelCache {
     /// The library is loaded once and cached for subsequent kernel creation operations.
     ///
     /// **Platform Support**:
-    /// - iOS, tvOS, watchOS, visionOS: Loads `AemiSDR.iOS.metallib` (compiled with iOS 14.0+ target)
+    /// - iOS, tvOS, watchOS, visionOS devices: Loads `AemiSDR.iOS.metallib` (compiled with iOS 14.0+ target)
+    /// - Simulators: Loads `AemiSDR.iOSSimulator.metallib` (compiled with iOS 14.0+ target)
     /// - macOS: Loads `AemiSDR.macOS.metallib` (compiled with macOS 11.0+ target)
     ///
     /// This platform-specific loading ensures Metal library compatibility across all
