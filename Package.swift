@@ -30,8 +30,15 @@ private let package = Package(
             dependencies: [
                 .product(name: "InternedStrings", package: "aemi")
             ],
+            // The shader plugin compiles these into per-destination metallibs;
+            // leaving them in the sources would also compile them natively
+            // into a redundant default.metallib (and trips a Swift Build
+            // planner warning about the bundle's executable directory).
+            exclude: [
+                "Shaders"
+            ],
             resources: [
-                .process("Previews/Assets.xcassets"),
+                .process("Previews/Assets.xcassets")
             ],
             swiftSettings: swiftSettings,
             plugins: [
@@ -59,6 +66,6 @@ private let package = Package(
             name: "AemiSDRTests",
             dependencies: ["AemiSDR"],
             swiftSettings: swiftSettings
-        )
+        ),
     ]
 )
