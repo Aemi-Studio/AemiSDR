@@ -322,33 +322,29 @@
         nonisolated static func candidateLibraries(device: MTLDevice) -> [MTLLibrary] {
             var libraries: [MTLLibrary] = []
 
+            // The shader plugin compiles one library per destination, so every
+            // environment — macOS, device, simulator — loads the one built
+            // for it.
             let libraryName: String
             #if os(macOS)
                 libraryName = "LiquidLens.macOS"
+            #elseif targetEnvironment(simulator)
+                libraryName = "LiquidLens.iOSSimulator"
             #else
                 libraryName = "LiquidLens.iOS"
             #endif
 
-            // On simulator, prefer default.metallib built for the active destination.
-            #if targetEnvironment(simulator)
-                if let library = try? device.makeDefaultLibrary(bundle: Bundle.module) {
-                    libraries.append(library)
-                }
-            #endif
-
-            // Named metallib (works on device)
             if let url = Bundle.module.url(forResource: libraryName, withExtension: "metallib"),
                 let library = try? device.makeLibrary(URL: url)
             {
                 libraries.append(library)
             }
 
-            // default.metallib (Xcode auto-compiles for the active run destination — simulator or device)
-            #if !targetEnvironment(simulator)
-                if let library = try? device.makeDefaultLibrary(bundle: Bundle.module) {
-                    libraries.append(library)
-                }
-            #endif
+            // default.metallib, in case a host build system compiled the
+            // shaders natively for the active destination anyway.
+            if let library = try? device.makeDefaultLibrary(bundle: Bundle.module) {
+                libraries.append(library)
+            }
 
             return libraries
         }
