@@ -53,10 +53,35 @@
 
     // MARK: - Command Execution
 
+    /// The environment for compiler subprocesses, with a `DEVELOPER_DIR` that
+    /// `xcrun` would reject removed.
+    ///
+    /// Swift Build exports `DEVELOPER_DIR` pointing at the running toolchain when
+    /// a build uses a standalone swift.org toolchain rather than Xcode's. `xcrun`
+    /// validates the variable the same way this check does — a developer
+    /// directory must hold `usr/bin/xcrun`, an app bundle
+    /// `Contents/Developer/usr/bin/xcrun` — and aborts on an `.xctoolchain` path,
+    /// which failed this plugin for every consumer building with such a
+    /// toolchain. Dropping the invalid value lets `xcrun` fall back to the
+    /// `xcode-select` path; a valid value, either shape, is left alone.
+    func sanitizedEnvironment() -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        guard let developerDir = environment["DEVELOPER_DIR"] else { return environment }
+
+        let isValid = ["/usr/bin/xcrun", "/Contents/Developer/usr/bin/xcrun"].contains { suffix in
+            FileManager.default.isExecutableFile(atPath: developerDir + suffix)
+        }
+        if !isValid {
+            environment["DEVELOPER_DIR"] = nil
+        }
+        return environment
+    }
+
     func execute(_ command: String, arguments: [String]) throws -> (output: String, exitCode: Int32) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: command)
         process.arguments = arguments
+        process.environment = sanitizedEnvironment()
 
         let pipe = Pipe()
         process.standardOutput = pipe
