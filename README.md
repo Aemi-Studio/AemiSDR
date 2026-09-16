@@ -1,6 +1,6 @@
 # AemiSDR
 
-A lightweight, App Store-safe SwiftUI library for GPU-accelerated blurs, masks, backdrop effects, and physics-based liquid distortion.
+A SwiftUI library for GPU-accelerated blurs, masks, backdrop effects, and physics-based liquid distortion.
 
 AemiSDR works seamlessly with `ScrollView` and dynamic content, providing high-performance effects through a modifier-based API.
 
@@ -24,8 +24,8 @@ https://github.com/user-attachments/assets/41c106cc-6c1d-4a43-bbaa-09cf44c9bfcc
 
 ## Requirements
 
-- iOS 14+ / macOS 11+
-- Swift 6.2 Toolchain
+- iOS 18+ / macOS 15+
+- Swift 6.3 or newer (required by the shared Aemi dependency)
 - SwiftUI
 
 
@@ -111,21 +111,21 @@ ScrollView {
 
 ## API
 
-### Variable Blur (iOS 15+)
+### Variable Blur (iOS 18+)
 
 | Modifier | Description |
 |---|---|
 | `roundedRectBlur(...)` | Overlay blur shaped as a rounded rectangle or superellipse |
 | `verticalEdgeBlur(...)` | Blur applied to the top and/or bottom edges of a view |
 
-### Alpha Mask (iOS 15+)
+### Alpha Mask (iOS 18+)
 
 | Modifier | Description |
 |---|---|
 | `roundedRectMask(...)` | Alpha mask shaped as a rounded rectangle or superellipse |
 | `verticalEdgeMask(...)` | Alpha mask for vertical edges, ideal for scroll views |
 
-### Backdrop Blur (iOS 15+ / macOS 12+)
+### Backdrop Blur (iOS 18+ / macOS 15+)
 
 | Modifier | Description |
 |---|---|
@@ -150,7 +150,7 @@ config.colorTintAlpha = 0.1
 BackdropBlurView(configuration: config)
 ```
 
-### Liquid Background (iOS 15+)
+### Liquid Background (iOS 18+)
 
 | Modifier | Description |
 |---|---|
