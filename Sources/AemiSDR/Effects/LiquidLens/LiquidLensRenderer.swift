@@ -418,6 +418,7 @@
             var spectral = key.enableSpectral
             var aspheric = key.enableAspheric
             var highFidelity = key.highFidelityRefraction
+            var thickLens = key.enableThickLens
             let constants = MTLFunctionConstantValues()
             unsafe constants.setConstantValue(&chromatic, type: .bool, index: 0)
             unsafe constants.setConstantValue(&falloff, type: .int, index: 1)
@@ -425,6 +426,7 @@
             unsafe constants.setConstantValue(&spectral, type: .bool, index: 3)
             unsafe constants.setConstantValue(&aspheric, type: .bool, index: 4)
             unsafe constants.setConstantValue(&highFidelity, type: .bool, index: 5)
+            unsafe constants.setConstantValue(&thickLens, type: .bool, index: 6)
 
             guard
                 let fragment = try? library.makeFunction(
@@ -464,6 +466,8 @@
             if enableFresnel { parts.append("Fr") }
             if enableSpectral { parts.append("Sp") }
             if enableAspheric { parts.append("As") }
+            if highFidelityRefraction { parts.append("HF") }
+            if enableThickLens { parts.append("Th") }
             return parts.joined(separator: "-")
         }
     }

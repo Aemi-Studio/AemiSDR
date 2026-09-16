@@ -29,6 +29,19 @@ https://github.com/user-attachments/assets/41c106cc-6c1d-4a43-bbaa-09cf44c9bfcc
 - SwiftUI
 
 
+## Renderer scope
+
+The Metal liquid lens supports a conic surface profile and optional refraction
+through a symmetric second surface. The model assumes parallel incident rays
+and ignores propagation between the surfaces; it is a displacement effect,
+not a focusing lens simulation. Existing configurations retain single-surface
+refraction by default.
+
+The Core Image and AppleGlass experiments are archived separately and are not
+part of the supported renderer. GPU regression tests execute the actual Metal
+shader for conic normals and second-surface refraction, including total internal
+reflection. These tests require a Metal device and report a skip without one.
+
 ## Installation
 
 Add the package in Xcode (`File` → `Add Package Dependencies…`) using the repository URL, or add it to your `Package.swift`:

@@ -85,6 +85,12 @@
         /// Fourth-order aspheric coefficient (active when `enableAspheric` is `true`).
         public var asphericK4: Float
 
+        /// Conic constant `k` (active when `enableAspheric` is `true` and `k ≠ 0`).
+        /// Forwards to `LiquidLensConfiguration.asphericK`. `-1` paraboloid,
+        /// `< -1` hyperboloid, `> 0` oblate ellipsoid; default `0` keeps the
+        /// paraxial sphere behavior.
+        public var asphericK: Float
+
         /// Enables Fresnel transmission attenuation at the lens surface.
         /// Off by default to preserve the artistic look.
         public var enableFresnel: Bool
@@ -100,6 +106,12 @@
         /// `LiquidLensConfiguration.enableHighFidelityRefraction` for the
         /// physics trade-off.
         public var enableHighFidelityRefraction: Bool
+
+        /// Enables the opt-in second refraction at a symmetric biconvex back
+        /// surface (thin-lens approximation). Forwards to
+        /// `LiquidLensConfiguration.enableThickLens`. The second surface
+        /// changes chromatic separation; adjust `chromaticAmount` as needed.
+        public var enableThickLens: Bool
 
         public init(
             strength: Float = 0.5,
@@ -117,10 +129,12 @@
             diagonalBand: Float = 6.0,
             asphericK2: Float = 0.0,
             asphericK4: Float = 0.0,
+            asphericK: Float = 0.0,
             enableFresnel: Bool = false,
             enableSpectral: Bool = false,
             enableAspheric: Bool = false,
-            enableHighFidelityRefraction: Bool = false
+            enableHighFidelityRefraction: Bool = false,
+            enableThickLens: Bool = false
         ) {
             self.strength = strength
             self.lensCurvature = lensCurvature
@@ -139,10 +153,12 @@
             self.diagonalBand = diagonalBand
             self.asphericK2 = asphericK2
             self.asphericK4 = asphericK4
+            self.asphericK = asphericK
             self.enableFresnel = enableFresnel
             self.enableSpectral = enableSpectral
             self.enableAspheric = enableAspheric
             self.enableHighFidelityRefraction = enableHighFidelityRefraction
+            self.enableThickLens = enableThickLens
         }
     }
 
@@ -185,6 +201,25 @@
             chromaticAmount: 0.0,
             material: .water
         )
+
+        /// Default preset — full-strength water lens with spectral integration
+        /// and modest chromatic separation. Uses a capture
+        /// scale of 0.5 and a 120 fps cap, with the
+        /// 5-wavelength spectral path on. All other physical-fidelity opt-ins
+        /// (Fresnel / aspheric / high-fidelity refraction / thick lens) stay off.
+        public static let standard = LiquidGlassConfiguration(
+            strength: 1.0,
+            lensCurvature: 1.0,
+            falloff: .easeInOut,
+            falloffLength: 1.0,
+            falloffIntensity: 1.0,
+            chromaticAmount: 3.0,
+            material: .water,
+            refreshRate: 120,
+            captureScale: 0.5,
+            diagonalBand: 0.0,
+            enableSpectral: true
+        )
     }
 
     extension LiquidGlassConfiguration {
@@ -209,14 +244,15 @@
                 diagonalBand: diagonalBand,
                 asphericK2: asphericK2,
                 asphericK4: asphericK4,
+                asphericK: asphericK,
                 enableFresnel: enableFresnel,
                 enableSpectral: enableSpectral,
                 enableAspheric: enableAspheric,
-                enableHighFidelityRefraction: enableHighFidelityRefraction
+                enableHighFidelityRefraction: enableHighFidelityRefraction,
+                enableThickLens: enableThickLens
             )
             configuration.overlayMode = overlayMode
             return configuration
         }
-
     }
 #endif

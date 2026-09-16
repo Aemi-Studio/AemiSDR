@@ -4,6 +4,22 @@
 //
 // Physics-based liquid lens distortion with per-fragment Snell refraction.
 //
+// Model scope (what this shader does and deliberately does NOT do):
+//   • Camera:      Orthographic. The incident ray is hardcoded
+//                  `I = (0, 0, -1)` — all rays parallel to the optical
+//                  axis. The image-plane projection `T.xy / (−T.z)` derives
+//                  lateral offset under this assumption. A perspective
+//                  camera would require a per-pixel `I` and a different
+//                  projection step.
+//   • Surfaces:    Single refracting interface by default. Opt-in second
+//                  surface via the `kEnableThickLens` function constant
+//                  (biconvex symmetric, thin-lens approximation — lateral
+//                  propagation between surfaces is ignored).
+//   • Convergence: NOT modelled. This is a displacement field, not a
+//                  focusing lens — no focal point, no defocus blur, no
+//                  Airy disk, no caustics. Compose with a separate blur
+//                  pass if focus-driven effects are needed.
+//
 // Physical model (paraxial single-surface refraction):
 //   - Lens surface = spherical cap (optionally aspheric) with local outward
 //     normal N = (outwardDir·sinθ, cosθ) where θ = asin(r·c) is the surface
@@ -25,11 +41,13 @@
 //     smooth blend inside, controlled by `uniforms.diagonalBand`.
 //
 // Function constants (compile-time specialization):
-//   0: kEnableChromatic    bool — RGB-discrete chromatic sampling
-//   1: kFalloffType        int  — 0..5, selects polynomial falloff curve
-//   2: kEnableFresnel      bool — surface Fresnel transmission attenuation
-//   3: kEnableSpectral     bool — 5-wavelength integration (implies chromatic)
-//   4: kEnableAspheric     bool — non-spherical surface profile (k2, k4)
+//   0: kEnableChromatic        bool — RGB-discrete chromatic sampling
+//   1: kFalloffType            int  — 0..5, selects polynomial falloff curve
+//   2: kEnableFresnel          bool — surface Fresnel transmission attenuation
+//   3: kEnableSpectral         bool — 5-wavelength integration (implies chromatic)
+//   4: kEnableAspheric         bool — non-spherical surface profile (conic k, k2, k4)
+//   5: kHighFidelityRefraction bool — per-fragment 3D refract vs scalar deviation
+//   6: kEnableThickLens        bool — opt-in second-surface refraction (biconvex)
 //
 // References:
 //   - Snell's law / refraction:  Hecht, "Optics", §4.4
@@ -101,6 +119,12 @@ struct LiquidLensUniforms {
     // Extra wavelengths consumed only when `kEnableSpectral` is true.
     float spectralAirOver0;   // 440 nm (deep blue)
     float spectralAirOver1;   // 580 nm (yellow)
+
+    // Conic constant `k` for the aspheric surface. Fits in the 8-byte
+    // trailing padding after spectralAirOver1; the struct stride stays at 112
+    // because the next 16-byte boundary after offset 108 is already 112.
+    // See `surfaceTilt` for the formula and `k` interpretation.
+    float asphericK;
 };
 
 // MARK: - Vertex Types
@@ -153,6 +177,16 @@ constant bool  kEnableAspheric          [[function_constant(4)]];
 /// original (fast) behavior and produces visually equivalent results at
 /// typical lens curvatures.
 constant bool  kHighFidelityRefraction  [[function_constant(5)]];
+
+/// When true, the displacement is computed by refracting through TWO surfaces
+/// in sequence (biconvex symmetric thin-lens approximation): air → glass at
+/// the front, glass → air at the back, both at the same lateral position
+/// (lateral propagation inside the glass is ignored — valid for thin lenses
+/// where `thickness ≪ R`). Implies `kHighFidelityRefraction = true` semantics
+/// (the scalar-deviation fast path doesn't model two surfaces). When false
+/// (default), only the front surface refracts — the original single-surface
+/// model.
+constant bool  kEnableThickLens         [[function_constant(6)]];
 
 // MARK: - Falloff Transition Functions
 //
@@ -245,13 +279,25 @@ inline float2 computeSDFGradient(float2 p, float2 halfSize, float cornerRadius, 
 
 // MARK: - Per-fragment refraction helpers
 
-/// Computes the local surface tilt (`sinθ`) for a spherical or aspheric cap
-/// at normalized radial position `r ∈ [0, 1]` with curvature `c ∈ [0, 1]`.
-/// When `kEnableAspheric` is true the surface follows a 4th-order aspheric
-/// polynomial; otherwise it's the pure spherical-cap form `r·c`.
-inline float surfaceTilt(float r, float c, float k2, float k4) {
+/// Computes the local surface tilt (`sinθ`) for a spherical, conic, or
+/// aspheric cap at normalized radial position `r ∈ [0, 1]` with curvature
+/// `c ∈ [0, 1]`. The default (`kEnableAspheric = false`) is the paraxial
+/// spherical form `sinθ = r·c`.
+///
+/// The conic sag has slope `u / sqrt(1 - (1+k)*u*u)`. Normalizing
+/// its normal gives `sin(theta) = u / sqrt(1 - k*u*u)`; using the
+/// unnormalized slope as the sine overstates the surface tilt.
+/// Polynomial K2/K4 terms then reshape the tilt envelope.
+inline float surfaceTilt(float r, float c, float k, float k2, float k4) {
     float u = r * c;
     if (kEnableAspheric) {
+        // Conic scaling is opt-in (gated on `k != 0`) so that legacy
+        // configs with K2/K4 only see identical output to pre-conic builds.
+        if (k != 0.0f) {
+            float u2 = u * u;
+            float gate = 1.0f - k * u2;
+            u = u * rsqrt(max(gate, 1e-4f));
+        }
         u = u * (1.0f + k2 * u * u + k4 * u * u * u * u);
     }
     return clamp(u, 0.0f, 1.0f);
@@ -277,6 +323,52 @@ inline float2 refractDisplacement(float2 outwardDir,
     // the `max` floor guards against -T.z ≤ 0 (would yield NaN/Inf).
     float invTz = 1.0f / max(-T.z, 1e-4f);
     return T.xy * invTz;
+}
+
+/// Thick-lens variant: refract through the front surface (air → glass),
+/// then through a symmetric back surface (glass → air) at the SAME lateral
+/// position (thin-lens approximation — propagation between surfaces is
+/// ignored).
+///
+/// Convention (matches `refract`'s GLSL-style semantics where `N` points
+/// into the incident medium):
+///   • Front surface: `N_f = (outwardDir·sinθ, +cosθ)` points into air
+///     (camera side, +Z). `η = n_air / n_glass`.
+///   • Back surface: the biconvex back mirrors the front across the lens
+///     midplane, so its "into-incident-medium" normal — for a ray now
+///     travelling through glass toward -Z — has the SAME +Z component
+///     but the radial component flips because the surface tangent slopes
+///     the other way relative to the ray's direction of travel:
+///     `N_b = (-outwardDir·sinθ, +cosθ)`. The exit refraction uses the
+///     reciprocal eta `1/η = n_glass / n_air`.
+inline float2 refractDisplacementThick(float2 outwardDir,
+                                       float sinTheta,
+                                       float cosTheta,
+                                       float eta) {
+    float3 Nf = float3(outwardDir * sinTheta, cosTheta);
+    const float3 I = float3(0.0f, 0.0f, -1.0f);
+    float3 T1 = refract(I, Nf, eta);
+    float3 Nb = float3(-outwardDir * sinTheta, cosTheta);
+    // Reciprocal eta — `1/eta` is fine in fp32; we already guard against
+    // the degenerate eta → 0 case at uniform-build time (airOver values
+    // are bounded below by ~0.4 for diamond, the densest material).
+    float3 T2 = refract(T1, Nb, 1.0f / eta);
+    float invTz = 1.0f / max(-T2.z, 1e-4f);
+    return T2.xy * invTz;
+}
+
+/// Dispatch wrapper — picks the thick-lens helper when `kEnableThickLens`
+/// is true, falling back to the single-surface form otherwise. Function
+/// constants are compile-time, so the unused branch is dead-code-eliminated
+/// per pipeline variant.
+inline float2 refractDisplacementDispatch(float2 outwardDir,
+                                          float sinTheta,
+                                          float cosTheta,
+                                          float eta) {
+    if (kEnableThickLens) {
+        return refractDisplacementThick(outwardDir, sinTheta, cosTheta, eta);
+    }
+    return refractDisplacement(outwardDir, sinTheta, cosTheta, eta);
 }
 
 /// Schlick approximation of the Fresnel reflection coefficient
@@ -376,6 +468,7 @@ fragment half4 liquidLensFragment(
     // value would be offset by the conversion cost across multiple uses.
     float sinTheta = surfaceTilt(float(normalizedRadius),
                                  uniforms.lensCurvature,
+                                 uniforms.asphericK,
                                  uniforms.asphericK2,
                                  uniforms.asphericK4);
     float cosTheta = sqrt(max(1.0f - sinTheta * sinTheta, 0.0f));
@@ -402,6 +495,7 @@ fragment half4 liquidLensFragment(
         half oneMinusEta = 1.0h - etaG;
         half onePlusEta  = 1.0h + etaG;
         half r0Root = oneMinusEta / max(onePlusEta, 1e-3h);
+        // Approximate channel-dependent reflectance with the green index.
         half F0 = r0Root * r0Root;
         fresnelT = fresnelSchlickTransmission(half(cosTheta), F0);
         // One half-precision Schlick polynomial vs four squares + two divisions
@@ -413,8 +507,11 @@ fragment half4 liquidLensFragment(
     // Non-chromatic specialization: single sample at the green displacement.
     if (!kEnableChromatic) {
         float2 dispG;
-        if (kHighFidelityRefraction) {
-            dispG = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOver.g)
+        // Thick-lens always implies high-fidelity (the scalar fast path can't
+        // model two surfaces). Use dispatch for the 3D path, fall back to
+        // scalar when neither HF nor thick-lens is enabled.
+        if (kHighFidelityRefraction || kEnableThickLens) {
+            dispG = refractDisplacementDispatch(outwardDir, sinTheta, cosTheta, uniforms.airOver.g)
                     * displacementScale * signFactor;
         } else {
             // Fast scalar path: per-fragment displacement = outwardDir · (rim deviation).
@@ -433,11 +530,11 @@ fragment half4 liquidLensFragment(
     // Spectral integration specialization: 5 wavelengths reconstructed into RGB.
     if (kEnableSpectral) {
         float2 disp[5];
-        disp[0] = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.spectralAirOver0); // 440
-        disp[1] = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOver.b);        // 486
-        disp[2] = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOver.g);        // 546
-        disp[3] = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.spectralAirOver1); // 580
-        disp[4] = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOver.r);        // 656
+        disp[0] = refractDisplacementDispatch(outwardDir, sinTheta, cosTheta, uniforms.spectralAirOver0); // 440
+        disp[1] = refractDisplacementDispatch(outwardDir, sinTheta, cosTheta, uniforms.airOver.b);        // 486
+        disp[2] = refractDisplacementDispatch(outwardDir, sinTheta, cosTheta, uniforms.airOver.g);        // 546
+        disp[3] = refractDisplacementDispatch(outwardDir, sinTheta, cosTheta, uniforms.spectralAirOver1); // 580
+        disp[4] = refractDisplacementDispatch(outwardDir, sinTheta, cosTheta, uniforms.airOver.r);        // 656
 
         // Apply chromatic amplifier: mix green (middle) toward each spectral
         // sample by `clampedChromatic`. amount=0 collapses to single sample.
@@ -462,12 +559,13 @@ fragment half4 liquidLensFragment(
 
     // RGB-discrete chromatic specialization.
     float2 dispR2D, dispG2D, dispB2D;
-    if (kHighFidelityRefraction) {
+    if (kHighFidelityRefraction || kEnableThickLens) {
         // Per-fragment 3D refract — accurate at all incidence angles. Three
-        // separate refract calls because the per-channel η differs.
-        float2 rDir = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOver.r);
-        float2 gDir = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOver.g);
-        float2 bDir = refractDisplacement(outwardDir, sinTheta, cosTheta, uniforms.airOver.b);
+        // separate refract calls because the per-channel η differs. The
+        // dispatch wrapper picks the thick-lens variant when enabled.
+        float2 rDir = refractDisplacementDispatch(outwardDir, sinTheta, cosTheta, uniforms.airOver.r);
+        float2 gDir = refractDisplacementDispatch(outwardDir, sinTheta, cosTheta, uniforms.airOver.g);
+        float2 bDir = refractDisplacementDispatch(outwardDir, sinTheta, cosTheta, uniforms.airOver.b);
         dispR2D = rDir * displacementScale * signFactor;
         dispG2D = gDir * displacementScale * signFactor;
         dispB2D = bDir * displacementScale * signFactor;

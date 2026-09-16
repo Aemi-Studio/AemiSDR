@@ -8,10 +8,11 @@ import SwiftUI
         // MARK: - Enums
 
         private enum Preset: String, CaseIterable {
-            case subtle, regular, clear
+            case standard, subtle, regular, clear
 
             var configuration: LiquidGlassConfiguration {
                 switch self {
+                case .standard: .standard
                 case .subtle: .subtle
                 case .regular: .regular
                 case .clear: .clear
@@ -83,29 +84,34 @@ import SwiftUI
 
         // MARK: - Liquid Glass State
 
-        @State private var preset: Preset = .regular
-        @State private var strength: Double = 0.5
+        @State private var preset: Preset = .standard
+        // Initial values mirror `LiquidGlassConfiguration.standard` so the
+        // first rendered frame already matches the selected preset — no need
+        // for a settings-sheet visit to populate state.
+        @State private var strength: Double = 1.0
         @State private var lensCurvature: Double = 1.0
-        @State private var chromaticAmount: Double = 15
-        @State private var material: LiquidLensMaterial = .acrylic
-        @State private var falloff: LiquidLensFalloff = .exponential
+        @State private var chromaticAmount: Double = 3.0
+        @State private var material: LiquidLensMaterial = .water
+        @State private var falloff: LiquidLensFalloff = .easeInOut
         @State private var falloffLength: Double = 1.0
         @State private var falloffIntensity: Double = 1.0
         @State private var continuousCapture = true
-        @State private var refreshRate: Int = 40
+        @State private var refreshRate: Int = 120
         @State private var captureScale: Double = 0.5
         @State private var forceCaptureEveryFrame = true
         @State private var headerCornerRadius: Double = 16
 
         // Physical fidelity opt-ins (function-constant gated in the shader).
-        @State private var diagonalBand: Double = 6.0
+        @State private var diagonalBand: Double = 0.0
         @State private var enableFresnel = false
-        @State private var enableSpectral = false
+        @State private var enableSpectral = true
         @State private var enableAspheric = false
         @State private var enableHighFidelityRefraction = false
         @State private var quality: LiquidLensQuality = .balanced
         @State private var asphericK2: Double = 0.0
         @State private var asphericK4: Double = 0.0
+        @State private var asphericK: Double = 0.0
+        @State private var enableThickLens = false
 
         // MARK: - Header Blur State
 
@@ -161,10 +167,12 @@ import SwiftUI
                 diagonalBand: Float(diagonalBand),
                 asphericK2: Float(asphericK2),
                 asphericK4: Float(asphericK4),
+                asphericK: Float(asphericK),
                 enableFresnel: enableFresnel,
                 enableSpectral: enableSpectral,
                 enableAspheric: enableAspheric,
-                enableHighFidelityRefraction: enableHighFidelityRefraction
+                enableHighFidelityRefraction: enableHighFidelityRefraction,
+                enableThickLens: enableThickLens
             )
         }
 
@@ -225,7 +233,7 @@ import SwiftUI
                 .clipShape(RoundedRectangle(cornerRadius: headerCornerRadius, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: headerCornerRadius, style: .continuous)
-                        .strokeBorder(.black.opacity(0.2), lineWidth: 1)
+                        .strokeBorder(.primary.quinary, lineWidth: 1)
                 }
                 .shadow(color: .black.opacity(0.18), radius: 24, y: 10)
         }
@@ -410,7 +418,7 @@ import SwiftUI
             .clipShape(Capsule())
             .overlay {
                 Capsule()
-                    .strokeBorder(.black.opacity(0.2), lineWidth: 1)
+                    .strokeBorder(.primary.quinary, lineWidth: 1)
             }
             .shadow(color: .black.opacity(0.18), radius: 24, y: 10)
         }
@@ -581,8 +589,15 @@ import SwiftUI
                     Toggle("High-Fidelity Refraction", isOn: $enableHighFidelityRefraction)
                     Toggle("Fresnel Attenuation", isOn: $enableFresnel)
                     Toggle("Spectral Integration", isOn: $enableSpectral)
+                    Toggle("Thick Lens (Back Surface)", isOn: $enableThickLens)
                     Toggle("Aspheric Profile", isOn: $enableAspheric)
                     if enableAspheric {
+                        ParameterSlider(
+                            "Conic K",
+                            value: $asphericK,
+                            range: -2...1,
+                            format: "%+.2f"
+                        )
                         ParameterSlider("Asph K₂", value: $asphericK2, range: -1...1, format: "%+.2f")
                         ParameterSlider("Asph K₄", value: $asphericK4, range: -1...1, format: "%+.2f")
                     }
@@ -590,7 +605,10 @@ import SwiftUI
                     Text("Physical Fidelity")
                 } footer: {
                     Text(
-                        "Function-constant-gated pipeline variants. Each enabled toggle builds a specialized shader on first use. High-Fidelity Refraction uses per-fragment MSL refract() 3D form — strictly more accurate at large incidence angles but ~3× the chromatic-path ALU. Off by default for performance."
+                        "Function-constant-gated pipeline variants. Each enabled toggle builds a specialized shader on first use. "
+                            + "High-Fidelity Refraction uses the 3D refraction model. "
+                            + "Thick Lens adds a symmetric back surface; reduce Chromatic if the color separation is too strong. "
+                            + "Aspheric Conic K: 0 = paraxial sphere (legacy), −1 paraboloid, < −1 hyperboloid, > 0 oblate. K₂/K₄ stack multiplicatively on top to correct spherical aberration."
                     )
                     .font(.caption2)
                 }
@@ -655,9 +673,12 @@ import SwiftUI
             diagonalBand = Double(value.diagonalBand)
             asphericK2 = Double(value.asphericK2)
             asphericK4 = Double(value.asphericK4)
+            asphericK = Double(value.asphericK)
             enableFresnel = value.enableFresnel
             enableSpectral = value.enableSpectral
             enableAspheric = value.enableAspheric
+            enableHighFidelityRefraction = value.enableHighFidelityRefraction
+            enableThickLens = value.enableThickLens
         }
     }
 #endif
