@@ -27,7 +27,8 @@ jobs:
         run: swift package update
       - name: Test renderer
         run: swift test
-      - name: Build iOS renderer
+      - name: Build iOS renderer with the Xcode toolchain
+        if: matrix.swift == '6.3'
         run: >-
-          xcodebuild -scheme AemiSDR -destination 'generic/platform=iOS Simulator'
+          xcodebuild -skipMacroValidation -skipPackagePluginValidation -scheme AemiSDR -destination 'generic/platform=iOS Simulator'
           -derivedDataPath "$RUNNER_TEMP/AemiSDR" CODE_SIGNING_ALLOWED=NO build
