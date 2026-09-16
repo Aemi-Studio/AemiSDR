@@ -6,7 +6,8 @@ options:
 
 packages:
   AemiSDR:
-    path: ../..
+    url: https://github.com/Aemi-Studio/AemiSDR.git
+    branch: main
 
 targets:
   AemiSDRDemo:
