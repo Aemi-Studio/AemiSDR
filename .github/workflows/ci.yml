@@ -29,6 +29,10 @@ jobs:
         run: swift test
       - name: Build iOS renderer with the Xcode toolchain
         if: matrix.swift == '6.3'
-        run: >-
-          xcodebuild -skipMacroValidation -skipPackagePluginValidation -scheme AemiSDR -destination 'generic/platform=iOS Simulator'
-          -derivedDataPath "$RUNNER_TEMP/AemiSDR" CODE_SIGNING_ALLOWED=NO build
+        run: |
+          # The checked-in navigation workspace exposes only the demo scheme.
+          # Let Xcode discover schemes from Package.swift for this package build.
+          mv AemiSDR.xcworkspace "$RUNNER_TEMP/AemiSDR-navigation.xcworkspace"
+          xcodebuild -skipMacroValidation -skipPackagePluginValidation \
+            -scheme AemiSDR -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/AemiSDR" CODE_SIGNING_ALLOWED=NO build
