@@ -18,6 +18,8 @@ public struct LiquidLensPipelineKey: Hashable, Sendable {
     public let enableSpectral: Bool  // function_constant(3)
     public let enableAspheric: Bool  // function_constant(4)
     public let highFidelityRefraction: Bool  // function_constant(5)
+    /// Selects refraction through the symmetric second surface.
+    public let enableThickLens: Bool  // function_constant(6)
 
     public init(
         chromaticEnabled: Bool,
@@ -25,7 +27,8 @@ public struct LiquidLensPipelineKey: Hashable, Sendable {
         enableFresnel: Bool = false,
         enableSpectral: Bool = false,
         enableAspheric: Bool = false,
-        highFidelityRefraction: Bool = false
+        highFidelityRefraction: Bool = false,
+        enableThickLens: Bool = false
     ) {
         self.chromaticEnabled = chromaticEnabled
         self.falloffType = falloffType
@@ -33,6 +36,7 @@ public struct LiquidLensPipelineKey: Hashable, Sendable {
         self.enableSpectral = enableSpectral
         self.enableAspheric = enableAspheric
         self.highFidelityRefraction = highFidelityRefraction
+        self.enableThickLens = enableThickLens
     }
 }
 
@@ -126,6 +130,19 @@ public struct LiquidLensUniforms: Sendable, Equatable {
     /// `n_air / n_λ` ratio at 580 nm (yellow). Sampled only when the
     /// pipeline is specialized with `kEnableSpectral = true`.
     public var spectralAirOver1: Float
+
+    /// Conic constant `k` for the aspheric surface profile.
+    /// Consumed by `surfaceTilt` only when the pipeline is specialized with
+    /// `kEnableAspheric = true` AND `k ≠ 0`. Standard optics values:
+    /// `k = 0` sphere, `k = -1` paraboloid,
+    /// `k < -1` hyperboloid, `k > 0` oblate ellipsoid. Defaults to `0` so
+    /// legacy aspheric configs with K2/K4 only are bit-identical to
+    /// pre-conic builds.
+    ///
+    /// Fits in the trailing 8-byte padding after `spectralAirOver1`; the
+    /// struct stride stays at 112 bytes (next 16-byte boundary after
+    /// offset 108 is 112).
+    public var asphericK: Float
 }
 
 /// Configuration for the liquid lens distortion effect.
@@ -195,6 +212,14 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
     /// Fourth-order aspheric coefficient. See `asphericK2`.
     public var asphericK4: Float
 
+    /// Conic constant `k` for the aspheric surface profile. Active only when
+    /// `enableAspheric` is true AND `k ≠ 0`; otherwise the surface uses the
+    /// paraxial spherical form (legacy behavior). Standard optics values:
+    /// `0` paraxial sphere (no conic correction), `-1` paraboloid,
+    /// `< -1` hyperboloid, `> 0` oblate ellipsoid. Stacks multiplicatively
+    /// with the K2/K4 polynomial correction.
+    public var asphericK: Float
+
     /// Enables Fresnel transmission attenuation in the shader. Real lens
     /// surfaces lose 4–30% of light to reflection (more at grazing angles).
     /// Off by default to preserve the bright artistic look. Triggers a
@@ -219,6 +244,14 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
     /// physical accuracy when performance budget allows.
     public var enableHighFidelityRefraction: Bool
 
+    /// Enables an opt-in second refraction at a symmetric biconvex back
+    /// surface (thin-lens approximation — lateral propagation between
+    /// surfaces is ignored). The second surface bends each wavelength again;
+    /// adjust `chromaticAmount` for the desired separation. Implies the
+    /// 3D refract path (the scalar deviation fast path cannot model two
+    /// surfaces meaningfully). Off by default.
+    public var enableThickLens: Bool
+
     public init(
         center: SIMD2<Float> = .zero,
         halfSize: SIMD2<Float> = SIMD2(150, 150),
@@ -234,10 +267,12 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
         diagonalBand: Float = 6.0,
         asphericK2: Float = 0.0,
         asphericK4: Float = 0.0,
+        asphericK: Float = 0.0,
         enableFresnel: Bool = false,
         enableSpectral: Bool = false,
         enableAspheric: Bool = false,
-        enableHighFidelityRefraction: Bool = false
+        enableHighFidelityRefraction: Bool = false,
+        enableThickLens: Bool = false
     ) {
         self.center = center
         self.halfSize = halfSize
@@ -253,10 +288,12 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
         self.diagonalBand = diagonalBand
         self.asphericK2 = asphericK2
         self.asphericK4 = asphericK4
+        self.asphericK = asphericK
         self.enableFresnel = enableFresnel
         self.enableSpectral = enableSpectral
         self.enableAspheric = enableAspheric
         self.enableHighFidelityRefraction = enableHighFidelityRefraction
+        self.enableThickLens = enableThickLens
     }
 
     /// Applies the chosen quality preset's flag combination to this
@@ -288,7 +325,8 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
             enableFresnel: enableFresnel,
             enableSpectral: enableSpectral,
             enableAspheric: enableAspheric,
-            highFidelityRefraction: enableHighFidelityRefraction
+            highFidelityRefraction: enableHighFidelityRefraction,
+            enableThickLens: enableThickLens
         )
     }
 
@@ -343,7 +381,8 @@ public struct LiquidLensConfiguration: Sendable, Equatable, Hashable {
             airOver: indices.airOver,
             deviation: SIMD3(devRed, devGreen, devBlue),
             spectralAirOver0: indices.spectralAirOver0,
-            spectralAirOver1: indices.spectralAirOver1
+            spectralAirOver1: indices.spectralAirOver1,
+            asphericK: asphericK
         )
     }
 }

@@ -1,0 +1,33 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    name: Swift ${{ matrix.swift }}
+    runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        swift: ['6.3', '6.4']
+    steps:
+      - uses: actions/checkout@v6
+      - name: Select SDK
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+      - name: Install Swift 6.4
+        if: matrix.swift == '6.4'
+        uses: Aemi-Studio/aemi/.github/actions/setup-swift@main
+      - name: Install Metal compiler
+        run: xcodebuild -downloadComponent MetalToolchain
+      - name: Resolve published dependencies
+        run: swift package update
+      - name: Test renderer
+        run: swift test
+      - name: Build iOS renderer
+        run: >-
+          xcodebuild -scheme AemiSDR -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath "$RUNNER_TEMP/AemiSDR" CODE_SIGNING_ALLOWED=NO build

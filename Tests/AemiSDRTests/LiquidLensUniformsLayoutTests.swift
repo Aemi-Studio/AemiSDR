@@ -42,5 +42,8 @@ struct LiquidLensUniformsLayoutTests {
         #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.deviation) == 80)
         #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.spectralAirOver0) == 96)
         #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.spectralAirOver1) == 100)
+        // `asphericK` lives in the trailing 8-byte padding — offset 104 keeps
+        // the struct stride at 112 (next 16-byte boundary after 108 is 112).
+        #expect(MemoryLayout<LiquidLensUniforms>.offset(of: \.asphericK) == 104)
     }
 }
