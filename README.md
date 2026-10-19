@@ -29,6 +29,16 @@ https://github.com/user-attachments/assets/41c106cc-6c1d-4a43-bbaa-09cf44c9bfcc
 - SwiftUI
 
 
+## Working on AemiSDR
+
+- [White paper](docs/WHITE-PAPER.md): the principles, including the private-API doctrine.
+- [ADRs](docs/adr): decisions, one per file.
+- [Roadmap](docs/roadmap): one unit of work per file, each with a `status:`.
+- [Diary](docs/diary): probe history, at most 256 lines per file.
+
+The documentation law is checked by `DocumentationLayoutTests` in the test target.
+
+
 ## Renderer scope
 
 The Metal liquid lens supports a conic surface profile and optional refraction
