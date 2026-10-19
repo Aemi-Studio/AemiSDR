@@ -1,13 +1,12 @@
 {
-  "originHash" : "e44d6a1d2d2610fc81d2696ca489efd408d543c8a111d51414af97c59206c485",
+  "originHash" : "919a6636ba1836a26448bd236719d6c551f2cfdd5ce9b2221cbd8a4804110f87",
   "pins" : [
     {
       "identity" : "aemi",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/Aemi-Studio/aemi.git",
       "state" : {
-        "branch" : "main",
-        "revision" : "b05d5f867c219bddbf848757c70ddcfdf1e59d45"
+        "revision" : "70762bbd2cf97ca8aa37c1608db7b3744db21f53"
       }
     },
     {
@@ -15,8 +14,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-collections.git",
       "state" : {
-        "revision" : "a0cb0954ecb21e4e31b0070e6ed5674e8556685a",
-        "version" : "1.6.0"
+        "revision" : "35a1edcb8ebd2bfe251d587f0b69e62af28f508c",
+        "version" : "1.7.3"
       }
     },
     {

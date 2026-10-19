@@ -21,7 +21,12 @@ private let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/Aemi-Studio/aemi.git", branch: "main")
+        // Pinned by revision, the ecosystem's mechanism (TerminalKit ADR-0005): a fresh clone resolves to the graph a
+        // developer tested, and moving the pin is a reviewed commit. CI resolves; it never updates (ADR-0004).
+        .package(
+            url: "https://github.com/Aemi-Studio/aemi.git",
+            revision: "70762bbd2cf97ca8aa37c1608db7b3744db21f53"
+        )
     ],
     targets: [
         // Main library target
