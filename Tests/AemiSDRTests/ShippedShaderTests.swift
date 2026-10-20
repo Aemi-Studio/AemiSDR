@@ -88,7 +88,7 @@
         }
 
         /// A deterministic source image: smooth colour with hard edges, so refraction visibly moves something.
-        private func sourceTexture(_ device: MTLDevice, side: Int = ShippedShaderTests.size) throws -> MTLTexture {
+        static func sourceTexture(_ device: MTLDevice, side: Int = ShippedShaderTests.size) throws -> MTLTexture {
             var pixels = [UInt8](repeating: 255, count: side * side * 4)
             for y in 0..<side {
                 for x in 0..<side {
@@ -111,7 +111,7 @@
             return texture
         }
 
-        private func pipeline(
+        static func pipeline(
             library: MTLLibrary, configuration: LiquidLensConfiguration, device: MTLDevice, blending: Bool = false
         ) throws -> MTLRenderPipelineState {
             let key = configuration.pipelineKey()
@@ -146,11 +146,11 @@
             return try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
         }
 
-        private func render(
+        static func render(
             library: MTLLibrary, configuration: LiquidLensConfiguration, device: MTLDevice, source: MTLTexture,
             side: Int = ShippedShaderTests.size
         ) throws -> (pixels: [UInt8], gpuMilliseconds: Double) {
-            let pipeline = try pipeline(library: library, configuration: configuration, device: device)
+            let pipeline = try Self.pipeline(library: library, configuration: configuration, device: device)
 
             let targetDescriptor = MTLTextureDescriptor.texture2DDescriptor(
                 pixelFormat: .bgra8Unorm, width: side, height: side, mipmapped: false)
@@ -192,10 +192,10 @@
         func `the shipped library draws the same pixels as the source compiled at run time`(name: String) throws {
             let configuration = try #require(Self.variants.first { $0.name == name }).configuration
             let device = try #require(MTLCreateSystemDefaultDevice())
-            let source = try sourceTexture(device)
-            let shipped = try render(
+            let source = try Self.sourceTexture(device)
+            let shipped = try Self.render(
                 library: shippedLibrary(device), configuration: configuration, device: device, source: source)
-            let runtime = try render(
+            let runtime = try Self.render(
                 library: sourceLibrary(device), configuration: configuration, device: device, source: source)
 
             var largest = 0

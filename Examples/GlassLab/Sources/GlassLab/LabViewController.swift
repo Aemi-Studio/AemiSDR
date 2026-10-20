@@ -1,10 +1,11 @@
 import AemiSDR
+import SwiftUI
 import UIKit
 import simd
 
 /// Draws one scene: a 1:1 pixel background and, depending on `mode`, native Liquid Glass or the AemiSDR lens in an identical shape.
 final class LabViewController: UIViewController {
-    private let arguments: LabArguments
+    let arguments: LabArguments
     private var built = false
 
     init(arguments: LabArguments) {
@@ -49,9 +50,18 @@ final class LabViewController: UIViewController {
             width: arguments.width, height: arguments.height)
 
         switch arguments.mode {
-        case "native": addNative(frame: frame)
-        case "aemi": addAemi(frame: frame, image: image, center: center)
+        case "native":
+            if arguments.shape == "triangle" { addNativeTriangle(frame: frame) } else { addNative(frame: frame) }
+        case "aemi":
+            // The lens has no arbitrary-shape input; a triangle leaves the plain background (reported as unsupported).
+            if arguments.shape != "triangle" { addAemi(frame: frame, image: image, center: center) }
         default: break
+        }
+
+        // The capture script waits for this line: a screenshot taken earlier shows the launch screen.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            print("READY")
+            fflush(stdout)
         }
     }
 
@@ -67,8 +77,8 @@ final class LabViewController: UIViewController {
         let glass = UIVisualEffectView(effect: effect)
         glass.frame = frame
         glass.cornerConfiguration =
-            arguments.shape == "rrect"
-            ? .uniformCorners(radius: .fixed(arguments.radius)) : .capsule()
+            arguments.shape == "rrect" || arguments.shape == "square"
+            ? .uniformCorners(radius: .fixed(cornerRadius)) : .capsule()
         view.addSubview(glass)
     }
 
@@ -93,5 +103,35 @@ final class LabViewController: UIViewController {
         lens.frame = view.bounds
         view.addSubview(lens)
         lens.setSourceImage(image)
+    }
+}
+
+private struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct TriangleGlass: View {
+    let clear: Bool
+    var body: some View {
+        Color.clear.glassEffect(clear ? .clear : .regular, in: Triangle())
+    }
+}
+
+extension LabViewController {
+    /// Native glass in a non-rectangular shape: only SwiftUI's `glassEffect(in:)` takes an arbitrary shape.
+    fileprivate func addNativeTriangle(frame: CGRect) {
+        let host = UIHostingController(rootView: TriangleGlass(clear: arguments.style == "clear"))
+        host.view.backgroundColor = .clear
+        host.view.frame = frame
+        addChild(host)
+        view.addSubview(host.view)
+        host.didMove(toParent: self)
     }
 }
