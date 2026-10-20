@@ -95,6 +95,10 @@ Text("Hello")
 
 ### System Material Blur
 
+On iOS, resolving a system preset requires the main actor. Presets approximate the system radius and saturation;
+modern materials include additional tonal mapping that this configuration cannot reproduce exactly.
+For explicit appearance, use `BackdropBlurConfiguration.systemStyle(.regular, userInterfaceStyle: .dark)`.
+
 ```swift
 // Use a system material preset
 BackdropBlurView(configuration: .ultraThinMaterial)
