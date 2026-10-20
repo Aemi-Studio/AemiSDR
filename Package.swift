@@ -60,7 +60,15 @@ private let package = Package(
         // Executable tool invoked by the shader plugin to run xcrun metal/metallib.
         // The plugin handles file discovery/scheduling; this tool does the compilation.
         .executableTarget(
-            name: "MetalCompilerTool"
+            name: "MetalCompilerTool",
+            dependencies: ["MetalCompilerCore"]
+        ),
+
+        // The tool's logic, as a library so it can be tested (a pipe-draining regression, the deployment floor,
+        // output confinement). macOS only; empty elsewhere.
+        .target(
+            name: "MetalCompilerCore",
+            swiftSettings: swiftSettings
         ),
 
         // Build tool plugin that discovers `.metal` sources and schedules compiler invocations.
@@ -70,6 +78,12 @@ private let package = Package(
             dependencies: [
                 .target(name: "MetalCompilerTool")
             ]
+        ),
+
+        .testTarget(
+            name: "MetalCompilerCoreTests",
+            dependencies: ["MetalCompilerCore"],
+            swiftSettings: swiftSettings
         ),
 
         // Tests
