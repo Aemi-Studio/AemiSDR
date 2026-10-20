@@ -22,3 +22,7 @@ The corner wedges stay fully covered (0017). The per-corner kernels must pass th
 ## What lands
 
 Four-radius kernels, mask-cache keys that carry four radii, and the rotation mapping with its probe in the diary.
+
+## Update (2026-10-20, ADR-0007)
+
+The shader math for four corners is known and oracle-checked: the largest of four reflected evaluations, each with its own radius; a negative radius selects the continuous curve. Adoption is roadmap 0019.
