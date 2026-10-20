@@ -89,9 +89,14 @@
         process.standardError = pipe
 
         try process.run()
+
+        // Drain the pipe BEFORE waiting. A pipe holds 64 KiB; a child that writes more blocks on a full pipe until
+        // someone reads, so `waitUntilExit()` first deadlocks the build on a Metal error cascade (probed: 65,536
+        // bytes of child output completes, 65,537 hangs; docs/diary/2026-10-20-01.md). Reading to end of file
+        // returns when the child closes its output, which is when it exits.
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
 
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
         let output = String(data: data, encoding: .utf8) ?? ""
 
         return (output, process.terminationStatus)

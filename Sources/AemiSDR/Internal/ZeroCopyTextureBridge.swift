@@ -250,12 +250,6 @@
             return nil
         }
 
-        private func markInFlight(_ slotID: Int, consumer: BridgeConsumerID) {
-            stateLock.lock()
-            defer { stateLock.unlock() }
-            unsafe inFlight[consumer, default: []].insert(slotID)
-        }
-
         /// Signals that the GPU has finished reading the given slot. Safe to
         /// call from any thread (`MTLCommandBuffer.addCompletedHandler` runs
         /// off the main thread).
