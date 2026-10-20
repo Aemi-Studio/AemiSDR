@@ -16,8 +16,9 @@ from deformation import load, sampling_map, compare
 
 CX, CY = 603, 1311
 SHAPES = {  # key: (kind, half width pt, half height pt, radius pt)
-    'square0': ('rrect', 100, 100, 0), 'capsule0': ('rrect', 150, 60, 60), 'circle0': ('rrect', 80, 80, 80),
-    'rrect32': ('rrect', 150, 100, 32), 'triangle0': ('tri', 110, 100, 0),
+    'square0': ('rrect', 100, 100, 0), 'capsule0': ('capsule', 150, 60, 60), 'circle0': ('capsule', 80, 80, 80),
+    'rrect8': ('rrect', 150, 100, 8), 'rrect16': ('rrect', 150, 100, 16),
+    'rrect32': ('rrect', 150, 100, 32), 'rrect60': ('rrect', 150, 100, 60), 'triangle0': ('tri', 110, 100, 0),
 }
 EXT = 1.52866495
 
@@ -55,19 +56,29 @@ def triangle_distance(X, Y, hx, hy):
     inside = ((side(A, B) >= 0) & (side(B, C) >= 0) & (side(C, A) >= 0)) | ((side(A, B) <= 0) & (side(B, C) <= 0) & (side(C, A) <= 0))
     return np.where(inside, -best, best)
 
-def shape_field(key):
-    kind, hx, hy, r = SHAPES[key]; hx *= 3; hy *= 3; r *= 3; pad = 40
+def shape_field(key, pad=40, circular_capsule=False):
+    kind, hx, hy, r = SHAPES[key]; hx *= 3; hy *= 3; r *= 3
     box = (CY - hy - pad, CY + hy + pad, CX - hx - pad, CX + hx + pad)
-    Y, X = np.mgrid[box[0]:box[1], box[2]:box[3]].astype(np.float64)
-    d = rrect_distance(X, Y, hx, hy, r) if kind == 'rrect' else triangle_distance(X, Y, hx, hy)
+    # Pixel centres: pixel i covers [i, i + 1), so its centre is at i + 0.5. Using the index instead puts opposite edges half a
+    # pixel off in opposite directions, which matters where the displacement changes by several pixels per pixel.
+    Y, X = np.mgrid[box[0]:box[1], box[2]:box[3]].astype(np.float64) + 0.5
+    if kind == 'capsule' and (key == 'circle0' or circular_capsule):
+        d = np.hypot(np.maximum(np.abs(X - CX) - (hx - r), 0), np.maximum(np.abs(Y - CY) - (hy - r), 0)) - r
+    elif kind in ('rrect', 'capsule'):
+        # Native capsules use the continuous field (not a circular capsule). This is the shader's depth coordinate,
+        # approximately a signed distance, not an exact Euclidean distance near continuous corners.
+        d = rrect_distance(X, Y, hx, hy, r)
+    else:
+        d = triangle_distance(X, Y, hx, hy)
     return box, d
 
 def main():
     directory, tag = sys.argv[1], sys.argv[2]
-    keys = sys.argv[3:] or list(SHAPES)
+    keys = sys.argv[3:] or ['square0', 'capsule0', 'circle0', 'rrect32', 'triangle0']
     probe = load(f'{directory}/none-checker.png')
-    print(f"{'shape':10s} {'deformation':>12s} {'mean EPE':>9s} {'<1px':>6s}   endpoint error (px) by depth below the edge")
-    print(f"{'':10s} {'similarity':>12s} {'(px)':>9s} {'':>6s}   " + "  ".join(f"{b:>7s}" for b in ['0-5', '5-15', '15-40', '40-80', '>80']))
+    print('Scores use valid, unclipped codes only, at least 1.5 px inside the native field. valid = share of this interior.')
+    print(f"{'shape':10s} {'deformation':>12s} {'mean EPE':>9s} {'<1px':>6s} {'valid':>6s}   endpoint error (px) by depth below the edge")
+    print(f"{'':10s} {'similarity':>12s} {'(px)':>9s} {'':>6s} {'':>6s}   " + "  ".join(f"{b:>7s}" for b in ['0-5', '5-15', '15-40', '40-80', '>80']))
     for key in keys:
         box, d = shape_field(key)
         inside, far = d < -1.5, d < -110
@@ -75,7 +86,7 @@ def main():
         our = sampling_map(load(f'{directory}/{tag}-{key}-phx.png'), load(f'{directory}/{tag}-{key}-phy.png'), box, inside, far)
         res, _, _ = compare(nat, our, box, inside, d, probe)
         cells = "  ".join(f"{res[b][0]:7.2f}" for b in ['0-5', '5-15', '15-40', '40-80', '>80'])
-        print(f"{key:10s} {res['deformation_similarity']:12.1f} {res['mean_endpoint_error']:9.2f} {100 * res['within_1px']:5.0f}%   {cells}")
+        print(f"{key:10s} {res['deformation_similarity']:12.1f} {res['mean_endpoint_error']:9.2f} {100 * res['within_1px']:5.0f}% {100 * res['valid_fraction']:5.0f}%   {cells}")
 
 if __name__ == '__main__':
     main()
