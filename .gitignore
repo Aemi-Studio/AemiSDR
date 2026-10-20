@@ -30,3 +30,4 @@ xcuserdata/
 # Profiling output from `swift test --enable-code-coverage` / `xctrace`
 *.profraw
 *.profdata
+.glass-ir/

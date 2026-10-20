@@ -20,3 +20,7 @@ Five proofs (falloff, signed distance and corner coverage, Snell, Schlick, Sellm
 - SDF gradient: unit length away from the medial axis; the smoothed seam stays within the band.
 - Superellipse masks use exponent 2, which draws circular arcs. Decide the target curve by measuring the system's corner, then prove the new curve's properties.
 - Float32 and half-precision error bounds against the real-number models (interval or Gappa-style analysis), where a bound is worth stating.
+
+## Update (2026-10-20, ADR-0007)
+
+The superellipse exponent question is answered by measurement: native glass uses a continuous corner (extent `1.528665 r`, fitted cubic), not an exponent. See roadmap 0019.
