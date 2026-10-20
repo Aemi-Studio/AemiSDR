@@ -127,9 +127,9 @@
             let height = Int((outer.height * scale).rounded())
             let key = "\(path.hashValue)-\(width)x\(height)-\(margin)"
             if let field, fieldKey == key { return field }
-            let values = SignedDistanceField.make(
+            let values = SignedDistanceField.exact(
                 path: path, width: width, height: height, scale: scale, origin: CGPoint(x: margin, y: margin))
-            field = renderer.makeFieldTexture(values, width: width, height: height)
+            field = renderer.makeFieldTexture(values)
             fieldKey = key
             return field
         }

@@ -9,6 +9,7 @@
 import CoreGraphics
 import Foundation
 import Testing
+import simd
 
 @testable import AemiSDR
 
@@ -174,21 +175,23 @@ struct ClearGlassGeometryTests {
     // MARK: Uniform layout
 
     @Test func `the uniform block has the layout the shader declares`() {
-        #expect(MemoryLayout<ClearGlassUniforms>.size == 96)
-        #expect(MemoryLayout<ClearGlassUniforms>.stride == 96)
+        #expect(MemoryLayout<ClearGlassUniforms>.size == 128)
+        #expect(MemoryLayout<ClearGlassUniforms>.stride == 128)
         #expect(MemoryLayout<ClearGlassUniforms>.offset(of: \.radii) == 32)
         #expect(MemoryLayout<ClearGlassUniforms>.offset(of: \.sdfRect) == 48)
-        #expect(MemoryLayout<ClearGlassUniforms>.offset(of: \.rimDepth) == 64)
-        #expect(MemoryLayout<ClearGlassUniforms>.offset(of: \.edge) == 80)
+        #expect(MemoryLayout<ClearGlassUniforms>.offset(of: \.rimEdge) == 64)
+        #expect(MemoryLayout<ClearGlassUniforms>.offset(of: \.outline) == 88)
+        #expect(MemoryLayout<ClearGlassUniforms>.offset(of: \.outlineDirection) == 96)
+        #expect(MemoryLayout<ClearGlassUniforms>.offset(of: \.lightGain) == 124)
     }
 
     @Test func `the configuration converts points to pixels`() {
-        let uniforms = ClearGlassConfiguration(rimDepth: 10, rimWidth: 4, outline: 0).uniforms(
+        let uniforms = ClearGlassConfiguration(rim: .gaussian(depth: 10, width: 4), outline: 0).uniforms(
             size: CGSize(width: 100, height: 50), scale: 3, sourceOrigin: .zero,
             sourceSize: CGSize(width: 300, height: 150))
         #expect(uniforms.viewSize == SIMD2(300, 150))
         #expect(uniforms.halfSize == SIMD2(150, 75))
-        #expect(uniforms.rimDepth == 30 && uniforms.rimWidth == 12)
+        #expect(uniforms.rimBody == 30 && uniforms.rimBodyWidth == 12 && uniforms.rimEdge == 0)
     }
 
     @Test func `the view reaches beyond the shape by the margin the ring needs`() {
@@ -199,5 +202,135 @@ struct ClearGlassGeometryTests {
         #expect(uniforms.viewSize == SIMD2(312, 162))
         #expect(uniforms.halfSize == SIMD2(150, 75), "the shape itself is unchanged")
         #expect(uniforms.outlineReach == 0.82 * 3)
+    }
+
+    // MARK: Exact path field
+
+    @Test func `a rectangle path has the exact box distance and axis gradients`() {
+        let path = CGPath(rect: CGRect(x: 20, y: 20, width: 60, height: 40), transform: nil)
+        let field = SignedDistanceField.exact(path: path, width: 100, height: 80, scale: 1)
+        var worst: Float = 0
+        for y in 0..<80 {
+            for x in 0..<100 {
+                let p = SIMD2(Float(x) + 0.5, Float(y) + 0.5)
+                let q = SIMD2(abs(p.x - 50) - 30, abs(p.y - 40) - 20)
+                let expected =
+                    (max(q.x, 0) * max(q.x, 0) + max(q.y, 0) * max(q.y, 0)).squareRoot() + min(max(q.x, q.y), 0)
+                if abs(expected) < 100 { worst = max(worst, abs(field.distance[y * 100 + x] - expected)) }
+            }
+        }
+        #expect(worst < 1e-3, "the largest difference from the exact box distance is \(worst) px")
+        // Just left of the left edge the outward direction is -x; just inside the top edge it is -y.
+        #expect(abs(field.gradient[40 * 100 + 15].x - -1) < 1e-4 && abs(field.gradient[40 * 100 + 15].y) < 1e-4)
+        #expect(abs(field.gradient[22 * 100 + 50].y - -1) < 1e-4)
+    }
+
+    @Test func `a circle path has the right distance to within its flattening`() {
+        let path = CGPath(ellipseIn: CGRect(x: 10, y: 10, width: 80, height: 80), transform: nil)
+        let field = SignedDistanceField.exact(path: path, width: 100, height: 100, scale: 1)
+        var worst: Float = 0
+        for y in 0..<100 {
+            for x in 0..<100 {
+                let p = SIMD2(Float(x) + 0.5, Float(y) + 0.5)
+                let expected = simd_length(p - SIMD2(50, 50)) - 40
+                worst = max(worst, abs(field.distance[y * 100 + x] - expected))
+            }
+        }
+        #expect(worst < 0.1, "the largest difference from the true circle is \(worst) px")
+    }
+
+    @Test func `a concave shape and a hole take their sign from the winding number`() {
+        // An L, and a rectangle with a reversed rectangle cut out of it.
+        let l = CGMutablePath()
+        l.addLines(between: [
+            CGPoint(x: 10, y: 10), CGPoint(x: 70, y: 10), CGPoint(x: 70, y: 40), CGPoint(x: 40, y: 40),
+            CGPoint(x: 40, y: 70), CGPoint(x: 10, y: 70),
+        ])
+        l.closeSubpath()
+        let fieldL = SignedDistanceField.exact(path: l, width: 80, height: 80, scale: 1)
+        #expect(fieldL.distance[20 * 80 + 20] < 0, "inside the L")
+        #expect(fieldL.distance[55 * 80 + 55] > 0, "in the notch of the L")
+        let holed = CGMutablePath()
+        holed.addRect(CGRect(x: 10, y: 10, width: 60, height: 60))
+        holed.addLines(between: [
+            CGPoint(x: 30, y: 30), CGPoint(x: 30, y: 50), CGPoint(x: 50, y: 50), CGPoint(x: 50, y: 30),
+        ])
+        holed.closeSubpath()
+        let fieldHole = SignedDistanceField.exact(path: holed, width: 80, height: 80, scale: 1)
+        #expect(fieldHole.distance[20 * 80 + 20] < 0, "in the ring")
+        #expect(fieldHole.distance[40 * 80 + 40] > 0, "in the hole")
+    }
+
+    @Test func `a nested shape wound the same way stays filled, as a nonzero fill does`() {
+        let nested = CGMutablePath()
+        nested.addRect(CGRect(x: 10, y: 10, width: 60, height: 60))
+        nested.addRect(CGRect(x: 30, y: 30, width: 20, height: 20))
+        let field = SignedDistanceField.exact(path: nested, width: 80, height: 80, scale: 1)
+        #expect(field.distance[40 * 80 + 40] < 0, "the inner rectangle has winding 2: filled under the nonzero rule")
+    }
+
+    @Test func `far from every edge the field is clamped to the reach with no gradient`() {
+        let path = CGPath(rect: CGRect(x: 0, y: 0, width: 10, height: 10), transform: nil)
+        let field = SignedDistanceField.exact(path: path, width: 400, height: 400, scale: 1)
+        #expect(field.distance[399 * 400 + 399] == SignedDistanceField.reach)
+        #expect(field.gradient[399 * 400 + 399] == .zero)
+    }
+
+    /// The banding: along a slanted straight edge the raster-based gradient steps, the exact one does not.
+    @Test func `a slanted edge has one gradient direction, where the raster field's gradient steps`() {
+        let path = CGMutablePath()
+        path.addLines(between: [CGPoint(x: 60, y: 10), CGPoint(x: 110, y: 110), CGPoint(x: 10, y: 110)])
+        path.closeSubpath()
+        let size = 120
+        let exact = SignedDistanceField.exact(path: path, width: size, height: size, scale: 1)
+        let raster = SignedDistanceField.make(path: path, width: size, height: size, scale: 1)
+        // The right edge runs from (60, 10) to (110, 110); its outward normal is (200, -100) / |.| = (0.894, -0.447).
+        let normal = SIMD2<Float>(100, -50) / (100 * 100 + 50 * 50 as Float).squareRoot()
+        var exactSpread: Float = 0
+        var rasterSpread: Float = 0
+        for y in 30..<90 {
+            // The pixels a few pixels inside that edge: x = 60 + (y - 10) / 2 - 4.
+            let x = Int((60 + Float(y - 10) / 2 - 4).rounded())
+            let a = exact.gradient[y * size + x]
+            exactSpread = max(exactSpread, simd_length(a - normal))
+            // A finite difference of the raster field, as the glass used to take it.
+            let gx = raster[y * size + x + 1] - raster[y * size + x - 1]
+            let gy = raster[(y + 1) * size + x] - raster[(y - 1) * size + x]
+            let g = SIMD2(gx, gy)
+            rasterSpread = max(rasterSpread, simd_length(g / max(simd_length(g), 1e-6) - normal))
+        }
+        #expect(exactSpread < 0.02, "the exact gradient strays from the edge normal by \(exactSpread)")
+        #expect(
+            rasterSpread > 3 * exactSpread,
+            "the raster gradient (\(rasterSpread)) must be visibly worse, or this test proves nothing")
+    }
+
+    /// The displacement read off native clear glass with a position-coded background (Glass Lab, Tools/deformation.py),
+    /// the same for a square, a capsule, a circle, a rounded rectangle and a triangle, in pixels at 3x.
+    private static let nativeProfile: [(depth: Double, pull: Double)] = [
+        (1.5, 134.0), (2.5, 127.0), (3.5, 119.0), (4.5, 111.0), (6, 100.0), (8, 89.0), (10, 79.5), (12, 71.5),
+        (15, 60.3),
+        (20, 45.4), (25, 33.4), (30, 23.9), (40, 10.2), (50, 2.4), (60, 0.0),
+    ]
+
+    @Test func `the native rim profile follows the measured displacement to within two pixels`() {
+        let rim = ClearGlassRim.nativeClear
+        var worst = 0.0
+        for (depth, measured) in Self.nativeProfile {
+            // The table is in pixels at 3x; the rim is in points.
+            let modelled = Double(rim.pull(atDepth: CGFloat(depth / 3))) * 3
+            worst = max(worst, abs(modelled - measured))
+        }
+        #expect(worst < 2.0, "the rim differs from the measured native profile by \(worst) px")
+    }
+
+    @Test func `a single Gaussian cannot follow the measured profile, which is why the rim has two terms`() {
+        // Best single Gaussian through the measured table (fitted offline): 109 px, width 22 px.
+        let gaussian = ClearGlassRim.gaussian(depth: 109.2 / 3, width: 22.3 / 3)
+        var worst = 0.0
+        for (depth, measured) in Self.nativeProfile {
+            worst = max(worst, abs(Double(gaussian.pull(atDepth: CGFloat(depth / 3))) * 3 - measured))
+        }
+        #expect(worst > 10, "if one Gaussian fitted, the second term would be dead weight: worst \(worst) px")
     }
 }

@@ -81,19 +81,26 @@
             return texture
         }
 
-        /// A half-precision distance texture. Distances are clamped to `SignedDistanceField.reach`, beyond which the rim
-        /// is gone, so half precision still resolves a fraction of a pixel near the edge.
-        func makeFieldTexture(_ field: [Float], width: Int, height: Int) -> MTLTexture? {
+        /// A half-precision texture of the field: distance in red, outward gradient in green and blue. Distances are
+        /// clamped to `SignedDistanceField.reach`, beyond which the rim is gone, so half precision still resolves a
+        /// fraction of a pixel near the edge, where it matters.
+        func makeFieldTexture(_ field: GlassDistanceField) -> MTLTexture? {
+            let (width, height) = (field.width, field.height)
             let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-                pixelFormat: .r16Float, width: width, height: height, mipmapped: false)
+                pixelFormat: .rgba16Float, width: width, height: height, mipmapped: false)
             descriptor.usage = .shaderRead
             descriptor.storageMode = .shared
             guard let texture = device.makeTexture(descriptor: descriptor) else { return nil }
             let reach = SignedDistanceField.reach
-            let halves = field.map { Self.halfBits(min(max($0, -reach), reach)) }
-            // The array holds exactly width * height half-precision values.
+            var halves = [UInt16](repeating: 0, count: width * height * 4)
+            for index in 0..<(width * height) {
+                halves[index * 4] = Self.halfBits(min(max(field.distance[index], -reach), reach))
+                halves[index * 4 + 1] = Self.halfBits(field.gradient[index].x)
+                halves[index * 4 + 2] = Self.halfBits(field.gradient[index].y)
+            }
+            // The array holds exactly width * height RGBA half-precision texels.
             unsafe texture.replace(
-                region: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0, withBytes: halves, bytesPerRow: width * 2)
+                region: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0, withBytes: halves, bytesPerRow: width * 8)
             return texture
         }
 

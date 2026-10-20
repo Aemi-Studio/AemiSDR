@@ -35,37 +35,127 @@ public struct ClearGlassBlur: Equatable, Sendable {
     public static let nativeClear = ClearGlassBlur(coreRadius: 0.243, haloRadius: 1.41, coreWeight: 0.21)
 }
 
+/// How far the backdrop is pulled inward near the edge, as a function of the depth below the edge, in points.
+///
+/// Measured on native clear glass the pull depends on depth alone, identically for every shape (a square, a capsule, a
+/// circle, a rounded rectangle and a triangle agree to 1 or 2 px), and is purely inward. It is the sum of a sharp
+/// exponential spike at the edge and a broad Gaussian body: `edgeDepth * exp(-d / edgeFalloff) + bodyDepth * exp(-(d / bodyWidth)^2)`.
+public struct ClearGlassRim: Equatable, Sendable {
+    public var edgeDepth: CGFloat
+    public var edgeFalloff: CGFloat
+    public var bodyDepth: CGFloat
+    public var bodyWidth: CGFloat
+
+    public init(edgeDepth: CGFloat, edgeFalloff: CGFloat, bodyDepth: CGFloat, bodyWidth: CGFloat) {
+        self.edgeDepth = edgeDepth
+        self.edgeFalloff = edgeFalloff
+        self.bodyDepth = bodyDepth
+        self.bodyWidth = bodyWidth
+    }
+
+    /// No pull: the glass shows what is directly behind it.
+    public static let none = ClearGlassRim(edgeDepth: 0, edgeFalloff: 1, bodyDepth: 0, bodyWidth: 1)
+
+    /// A single Gaussian pull, `depth` points at the edge falling off over `width` points.
+    public static func gaussian(depth: CGFloat, width: CGFloat) -> ClearGlassRim {
+        ClearGlassRim(edgeDepth: 0, edgeFalloff: 1, bodyDepth: depth, bodyWidth: width)
+    }
+
+    /// How far, in points, the backdrop is pulled inward at `depth` points below the edge. The shader evaluates the same sum.
+    public func pull(atDepth depth: CGFloat) -> CGFloat {
+        edgeDepth * exp(-depth / max(edgeFalloff, 0.001)) + bodyDepth * exp(-(depth * depth) / (bodyWidth * bodyWidth))
+    }
+
+    /// The pull measured on native clear glass: 29.1 pt spike decaying over 2.5 pt, plus a 21.4 pt body 9.6 pt wide.
+    public static let nativeClear = ClearGlassRim(
+        edgeDepth: 29.09, edgeFalloff: 2.522, bodyDepth: 21.37, bodyWidth: 9.63)
+}
+
+/// The light bouncing around the inside of the rim: a bright stroke along the edge that fades with depth.
+///
+/// Measured on native clear glass it is added where the edge faces up or down and is absent on the left and right edges,
+/// rises with the brightness of the backdrop, and has two parts: a sharp spike at the edge (about 0.37 of full scale over
+/// half a point, following |n.y|^1.4) and a soft tail (about 0.14 over 1.75 pt, concentrated on the horizontal edges,
+/// |n.y|^10). `n` is the outward normal of the edge.
+public struct ClearGlassRimLight: Equatable, Sendable {
+    /// Strength of the sharp part at the edge, 0...1 of full scale.
+    public var edgeStrength: CGFloat
+    /// Depth over which the sharp part fades, in points.
+    public var edgeFalloff: CGFloat
+    /// How the sharp part concentrates on horizontal edges: it scales as |n.y| to this power (0: the same all round).
+    public var edgePower: CGFloat
+    /// Strength of the soft tail at the edge, 0...1.
+    public var tailStrength: CGFloat
+    /// Depth over which the tail fades, in points.
+    public var tailFalloff: CGFloat
+    /// The same for the tail.
+    public var tailPower: CGFloat
+    /// How much a brighter backdrop raises the light: it is multiplied by `1 + gain * luma`.
+    public var backdropGain: CGFloat
+
+    public init(
+        edgeStrength: CGFloat, edgeFalloff: CGFloat, edgePower: CGFloat, tailStrength: CGFloat, tailFalloff: CGFloat,
+        tailPower: CGFloat, backdropGain: CGFloat
+    ) {
+        self.edgeStrength = edgeStrength
+        self.edgeFalloff = edgeFalloff
+        self.edgePower = edgePower
+        self.tailStrength = tailStrength
+        self.tailFalloff = tailFalloff
+        self.tailPower = tailPower
+        self.backdropGain = backdropGain
+    }
+
+    public static let none = ClearGlassRimLight(
+        edgeStrength: 0, edgeFalloff: 1, edgePower: 0, tailStrength: 0, tailFalloff: 1, tailPower: 0, backdropGain: 0)
+
+    /// The light measured on native clear glass.
+    public static let nativeClear = ClearGlassRimLight(
+        edgeStrength: 0.365, edgeFalloff: 0.503, edgePower: 1.39, tailStrength: 0.142, tailFalloff: 1.753,
+        tailPower: 10,
+        backdropGain: 1.43)
+
+    /// The light added at `depth` points below an edge facing straight up or down, over a backdrop of encoded luma `luma`.
+    public func contribution(atDepth depth: CGFloat, backdropLuma luma: CGFloat) -> CGFloat {
+        (edgeStrength * exp(-depth / max(edgeFalloff, 0.001)) + tailStrength * exp(-depth / max(tailFalloff, 0.001)))
+            * (1 + backdropGain * luma)
+    }
+}
+
 public struct ClearGlassConfiguration: Equatable, Sendable {
     public var shape: GlassShape
     /// The blur of what is behind the glass.
     public var blur: ClearGlassBlur
-    /// How far the backdrop is pulled inward at the very edge, in points.
-    public var rimDepth: CGFloat
-    /// Width of the Gaussian falloff of that pull away from the edge, in points.
-    public var rimWidth: CGFloat
+    /// How the backdrop is pulled inward near the edge.
+    public var rim: ClearGlassRim
     /// The additive lift over black, 0...1.
     public var lift: CGFloat
     /// How quickly the lift fades as the backdrop gets brighter, 0...1.
     public var liftFalloff: CGFloat
+    /// How the light bouncing around the rim looks.
+    public var rimLight: ClearGlassRimLight
     /// Strength of the dark ring just outside the shape, 0...1. Zero turns it off.
     public var outline: CGFloat
+    /// 0 darkens the ring equally all round; 1 only where the edge faces left or right, as native glass does.
+    public var outlineDirection: CGFloat
     /// How far outside the edge the ring reaches, in points.
     public var outlineReach: CGFloat
 
     public init(
         shape: GlassShape = .roundedRect(radii: GlassCornerRadii(32)), blur: ClearGlassBlur = .nativeClear,
-        rimDepth: CGFloat = 27.9,
-        rimWidth: CGFloat = 9.1, lift: CGFloat = 32.0 / 255, liftFalloff: CGFloat = 0.83, outline: CGFloat = 0.3785,
-        outlineReach: CGFloat = 0.82
+        rim: ClearGlassRim = .nativeClear,
+        lift: CGFloat = 32.0 / 255, liftFalloff: CGFloat = 0.83, rimLight: ClearGlassRimLight = .nativeClear,
+        outline: CGFloat = 0.3785, outlineReach: CGFloat = 0.82, outlineDirection: CGFloat = 1
     ) {
         self.shape = shape
         self.blur = blur
-        self.rimDepth = rimDepth
-        self.rimWidth = rimWidth
+        self.rim = rim
         self.lift = lift
         self.liftFalloff = liftFalloff
+        self.rimLight = rimLight
         self.outline = outline
         self.outlineReach = outlineReach
+        self.outlineDirection = outlineDirection
     }
 
     /// Native clear glass as fitted against iOS 27 (light appearance).
@@ -82,14 +172,22 @@ struct ClearGlassUniforms: Equatable {
     var halfSize: SIMD2<Float>
     var radii: SIMD4<Float>
     var sdfRect: SIMD4<Float>
-    var rimDepth: Float
-    var rimWidth: Float
+    var rimEdge: Float
+    var rimEdgeFalloff: Float
+    var rimBody: Float
+    var rimBodyWidth: Float
     var lift: Float
     var lumaFalloff: Float
-    var edge: Float
     var outline: Float
     var outlineReach: Float
-    var pad2: Float = 0
+    var outlineDirection: Float
+    var lightEdge: Float
+    var lightEdgeFalloff: Float
+    var lightEdgePower: Float
+    var lightTail: Float
+    var lightTailFalloff: Float
+    var lightTailPower: Float
+    var lightGain: Float
 }
 
 extension ClearGlassConfiguration {
@@ -108,8 +206,14 @@ extension ClearGlassConfiguration {
             halfSize: SIMD2(Float(size.width * scale / 2), Float(size.height * scale / 2)),
             radii: shape.shaderRadii(size: size, scale: scale),
             sdfRect: SIMD4(0, 0, Float(outer.width * scale), Float(outer.height * scale)),
-            rimDepth: Float(rimDepth * scale), rimWidth: Float(rimWidth * scale), lift: Float(lift),
-            lumaFalloff: Float(liftFalloff), edge: 1, outline: Float(outline), outlineReach: Float(outlineReach * scale)
+            rimEdge: Float(rim.edgeDepth * scale), rimEdgeFalloff: Float(rim.edgeFalloff * scale),
+            rimBody: Float(rim.bodyDepth * scale), rimBodyWidth: Float(rim.bodyWidth * scale), lift: Float(lift),
+            lumaFalloff: Float(liftFalloff), outline: Float(outline),
+            outlineReach: Float(outlineReach * scale), outlineDirection: Float(outlineDirection),
+            lightEdge: Float(rimLight.edgeStrength), lightEdgeFalloff: Float(rimLight.edgeFalloff * scale),
+            lightEdgePower: Float(rimLight.edgePower), lightTail: Float(rimLight.tailStrength),
+            lightTailFalloff: Float(rimLight.tailFalloff * scale), lightTailPower: Float(rimLight.tailPower),
+            lightGain: Float(rimLight.backdropGain)
         )
     }
 }
