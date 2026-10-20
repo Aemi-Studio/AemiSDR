@@ -55,7 +55,7 @@ public struct ClearGlassConfiguration: Equatable, Sendable {
     public init(
         shape: GlassShape = .roundedRect(radii: GlassCornerRadii(32)), blur: ClearGlassBlur = .nativeClear,
         rimDepth: CGFloat = 27.9,
-        rimWidth: CGFloat = 9.1, lift: CGFloat = 0.1216, liftFalloff: CGFloat = 0.57, outline: CGFloat = 0.3785,
+        rimWidth: CGFloat = 9.1, lift: CGFloat = 32.0 / 255, liftFalloff: CGFloat = 0.83, outline: CGFloat = 0.3785,
         outlineReach: CGFloat = 0.82
     ) {
         self.shape = shape

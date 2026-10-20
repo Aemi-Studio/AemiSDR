@@ -124,10 +124,14 @@ vertex VertexOut clearGlassVertex(uint vertexID [[vertex_id]], constant float2 &
 /// separable, so each is two passes; the first pass computes both horizontal blurs at once into two targets and the
 /// second computes both vertical blurs and mixes them. (A separable product of the mixed kernel would not do: its cross
 /// terms are wide in one direction and narrow in the other and streak along the axes.)
+///
+/// Each kernel arrives as paired taps: element 0 is the centre (weight in `.y`), every other element is a fetch at
+/// `.x` texels from the centre, weighted `.y`, taken on both sides. A fetch between two texels is the bilinear blend of
+/// both, so one fetch applies the weights of two neighbouring taps.
 struct BlurUniforms {
-    float2 step;            // one tap, in texture coordinates: (1/width, 0) or (0, 1/height)
-    int radiusA;            // taps on each side of the centre, kernel A
-    int radiusB;            // the same for kernel B
+    float2 step;            // one texel, in texture coordinates: (1/width, 0) or (0, 1/height)
+    int tapsA;              // paired taps after the centre, kernel A
+    int tapsB;              // the same for kernel B
     float mixA;             // weight of kernel A in the result; B takes the rest
     float pad;
 };
@@ -137,23 +141,26 @@ struct BlurPair {
     float4 b [[color(1)]];
 };
 
-/// First pass: both horizontal Gaussians of the source. `wa[0]` is the centre tap and `wa[i]` the tap at distance i,
-/// already normalised on the CPU so that the whole kernel sums to one; likewise `wb`.
+/// First pass: both horizontal Gaussians of the source.
 fragment BlurPair clearGlassBlurHorizontal(
     VertexOut in [[stage_in]], texture2d<float> source [[texture(0)]], constant float2 &viewSize [[buffer(0)]],
-    constant BlurUniforms &u [[buffer(1)]], constant float *wa [[buffer(2)]], constant float *wb [[buffer(3)]]
+    constant BlurUniforms &u [[buffer(1)]], constant float2 *ka [[buffer(2)]], constant float2 *kb [[buffer(3)]]
 ) {
     constexpr sampler smp(filter::linear, address::clamp_to_edge);
     float2 uv = in.pixel / viewSize;
     float4 centre = source.sample(smp, uv);
-    float4 sumA = centre * wa[0];
-    float4 sumB = centre * wb[0];
-    int reach = max(u.radiusA, u.radiusB);
+    float4 sumA = centre * ka[0].y;
+    float4 sumB = centre * kb[0].y;
+    int reach = max(u.tapsA, u.tapsB);
     for (int i = 1; i <= reach; i++) {
-        float2 offset = u.step * float(i);
-        float4 pair = source.sample(smp, uv + offset) + source.sample(smp, uv - offset);
-        if (i <= u.radiusA) sumA += pair * wa[i];
-        if (i <= u.radiusB) sumB += pair * wb[i];
+        if (i <= u.tapsA) {
+            float2 offset = u.step * ka[i].x;
+            sumA += (source.sample(smp, uv + offset) + source.sample(smp, uv - offset)) * ka[i].y;
+        }
+        if (i <= u.tapsB) {
+            float2 offset = u.step * kb[i].x;
+            sumB += (source.sample(smp, uv + offset) + source.sample(smp, uv - offset)) * kb[i].y;
+        }
     }
     BlurPair out;
     out.a = sumA;
@@ -164,18 +171,23 @@ fragment BlurPair clearGlassBlurHorizontal(
 /// Second pass: both vertical Gaussians of the two horizontal results, mixed.
 fragment float4 clearGlassBlurVertical(
     VertexOut in [[stage_in]], texture2d<float> horizontalA [[texture(0)]], texture2d<float> horizontalB [[texture(1)]],
-    constant float2 &viewSize [[buffer(0)]], constant BlurUniforms &u [[buffer(1)]], constant float *wa [[buffer(2)]],
-    constant float *wb [[buffer(3)]]
+    constant float2 &viewSize [[buffer(0)]], constant BlurUniforms &u [[buffer(1)]], constant float2 *ka [[buffer(2)]],
+    constant float2 *kb [[buffer(3)]]
 ) {
     constexpr sampler smp(filter::linear, address::clamp_to_edge);
     float2 uv = in.pixel / viewSize;
-    float4 sumA = horizontalA.sample(smp, uv) * wa[0];
-    float4 sumB = horizontalB.sample(smp, uv) * wb[0];
-    int reach = max(u.radiusA, u.radiusB);
+    float4 sumA = horizontalA.sample(smp, uv) * ka[0].y;
+    float4 sumB = horizontalB.sample(smp, uv) * kb[0].y;
+    int reach = max(u.tapsA, u.tapsB);
     for (int i = 1; i <= reach; i++) {
-        float2 offset = u.step * float(i);
-        if (i <= u.radiusA) sumA += (horizontalA.sample(smp, uv + offset) + horizontalA.sample(smp, uv - offset)) * wa[i];
-        if (i <= u.radiusB) sumB += (horizontalB.sample(smp, uv + offset) + horizontalB.sample(smp, uv - offset)) * wb[i];
+        if (i <= u.tapsA) {
+            float2 offset = u.step * ka[i].x;
+            sumA += (horizontalA.sample(smp, uv + offset) + horizontalA.sample(smp, uv - offset)) * ka[i].y;
+        }
+        if (i <= u.tapsB) {
+            float2 offset = u.step * kb[i].x;
+            sumB += (horizontalB.sample(smp, uv + offset) + horizontalB.sample(smp, uv - offset)) * kb[i].y;
+        }
     }
     return mix(sumB, sumA, u.mixA);
 }

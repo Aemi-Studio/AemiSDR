@@ -244,5 +244,68 @@
                 }
             }
         }
+
+        // MARK: Clear glass
+
+        /// GPU milliseconds for the whole clear-glass pipeline (two blur passes and the glass) over a 2048 x 2048 source,
+        /// for a rounded rectangle covering `coverage` of it. The two-Gaussian blur is compared with a single Gaussian,
+        /// rotating the order each round, with a control (the same configuration twice) to show the noise.
+        @Test func `clear glass: paired taps against one fetch per texel`() throws {
+            let renderer = try #require(ClearGlassRenderer())
+            let device = renderer.device
+            let side = 2048
+            let sourceDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .bgra8Unorm, width: side, height: side, mipmapped: false)
+            sourceDescriptor.usage = .shaderRead
+            let source = try #require(device.makeTexture(descriptor: sourceDescriptor))
+            var random = OracleRandom(state: 5)
+            var bytes = [UInt8](repeating: 0, count: side * side * 4)
+            for index in bytes.indices { bytes[index] = UInt8(random.unit() * 255) }
+            // Incompressible content, so the memory system is not flattered.
+            unsafe source.replace(
+                region: MTLRegionMake2D(0, 0, side, side), mipmapLevel: 0, withBytes: bytes, bytesPerRow: side * 4)
+            let configuration = ClearGlassConfiguration(shape: .roundedRect(radii: GlassCornerRadii(32)))
+            for (name, size) in [
+                ("typical 300 x 200 pt at 3x", CGSize(width: 300, height: 200)),
+                ("large 650 x 650 pt at 3x", CGSize(width: 650, height: 650)),
+            ] {
+                let targetDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+                    pixelFormat: .bgra8Unorm, width: Int(size.width * 3) + 8, height: Int(size.height * 3) + 8,
+                    mipmapped: false)
+                targetDescriptor.usage = .renderTarget
+                targetDescriptor.storageMode = .private
+                let target = try #require(device.makeTexture(descriptor: targetDescriptor))
+                let uniforms = configuration.uniforms(
+                    size: size, scale: 3, sourceOrigin: CGPoint(x: 100, y: 100),
+                    sourceSize: CGSize(width: side, height: side))
+                // paired, plain, and a control that is paired again: the control's spread is the noise.
+                let modes: [(String, Bool)] = [("paired", true), ("plain", false), ("control", true)]
+                var samples = Array(repeating: [Double](), count: modes.count)
+                for round in 0..<40 {
+                    for step in 0..<modes.count {
+                        let index = (step + round) % modes.count
+                        renderer.usesPairedTaps = modes[index].1
+                        let command = try #require(renderer.makeCommandBuffer())
+                        for _ in 0..<4 {
+                            _ = renderer.encode(
+                                into: command, source: source, uniforms: uniforms,
+                                blur: configuration.blurPlan(scale: 3), field: nil,
+                                target: target)
+                        }
+                        command.commit()
+                        command.waitUntilCompleted()
+                        if round >= 8 { samples[index].append((command.gpuEndTime - command.gpuStartTime) * 1000 / 4) }
+                    }
+                }
+                renderer.usesPairedTaps = true
+                func median(_ values: [Double]) -> Double { values.sorted()[values.count / 2] }
+                let paired = median(samples[0])
+                let plain = median(zip(samples[1], samples[0]).map { $0 / $1 })
+                let control = median(zip(samples[2], samples[0]).map { $0 / $1 })
+                print(
+                    "CLEAR \(name): paired \(String(format: "%.3f", paired)) ms; plain x\(String(format: "%.3f", plain)) of paired; control x\(String(format: "%.3f", control))"
+                )
+            }
+        }
     }
 #endif

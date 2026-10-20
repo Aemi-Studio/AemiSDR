@@ -30,4 +30,29 @@ struct GaussianKernel: Equatable {
         self.radius = radius
         weights = raw.map { Float($0) }
     }
+
+    /// The same kernel as fewer texture fetches. Two neighbouring taps `i` and `i + 1` with weights `a` and `b` are the
+    /// same as one fetch of a bilinear sample at `(i * a + (i + 1) * b) / (a + b)` with weight `a + b`: the filtering
+    /// hardware does the interpolation. Entry 0 is the centre tap (offset 0); the rest are the paired taps, one side of the
+    /// kernel (the other side is the mirror image). The zeroth moment (the sum) and the first moment are preserved exactly.
+    var pairedTaps: [SIMD2<Float>] {
+        var taps = [SIMD2<Float>(0, weights[0])]
+        var index = 1
+        while index <= radius {
+            if index + 1 <= radius {
+                let (a, b) = (weights[index], weights[index + 1])
+                taps.append(SIMD2((Float(index) * a + Float(index + 1) * b) / (a + b), a + b))
+                index += 2
+            } else {
+                taps.append(SIMD2(Float(index), weights[index]))
+                index += 1
+            }
+        }
+        return taps
+    }
+
+    /// One fetch per texel, the same layout as `pairedTaps`: the baseline the paired form is measured against.
+    var plainTaps: [SIMD2<Float>] {
+        [SIMD2<Float>(0, weights[0])] + (1...radius).map { SIMD2(Float($0), weights[$0]) }
+    }
 }
