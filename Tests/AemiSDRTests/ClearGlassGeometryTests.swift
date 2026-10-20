@@ -41,16 +41,23 @@ struct ClearGlassGeometryTests {
 
     // MARK: Distance transform
 
+    /// The exhaustive answer. Beyond the raster there is nothing, which counts as outside, so the search runs over the
+    /// raster with one ring of outside pixels around it.
     private func bruteForce(_ coverage: [UInt8], width: Int, height: Int) -> [Float] {
+        let (paddedWidth, paddedHeight) = (width + 2, height + 2)
+        var padded = [UInt8](repeating: 0, count: paddedWidth * paddedHeight)
+        for y in 0..<height {
+            for x in 0..<width { padded[(y + 1) * paddedWidth + x + 1] = coverage[y * width + x] }
+        }
         var field = [Float](repeating: 0, count: width * height)
         for y in 0..<height {
             for x in 0..<width {
                 let inside = coverage[y * width + x] >= 128
                 var nearest = Float.greatestFiniteMagnitude
-                for oy in 0..<height {
-                    for ox in 0..<width where (coverage[oy * width + ox] >= 128) != inside {
-                        let dx = Float(x - ox)
-                        let dy = Float(y - oy)
+                for oy in 0..<paddedHeight {
+                    for ox in 0..<paddedWidth where (padded[oy * paddedWidth + ox] >= 128) != inside {
+                        let dx = Float(x + 1 - ox)
+                        let dy = Float(y + 1 - oy)
                         nearest = min(nearest, (dx * dx + dy * dy).squareRoot())
                     }
                 }
@@ -77,6 +84,20 @@ struct ClearGlassGeometryTests {
         var worst: Float = 0
         for index in fast.indices { worst = max(worst, abs(fast[index] - slow[index])) }
         #expect(worst < 1e-3, "seed \(seed): the largest difference from the exhaustive distance is \(worst)")
+    }
+
+    @Test func `a shape that fills the whole raster still has an edge at the raster's border`() {
+        // Everything inside: the nearest outside is just beyond the border, so the border pixels are 0.5 from the edge.
+        let (width, height) = (10, 10)
+        let field = SignedDistanceField.make(
+            coverage: [UInt8](repeating: 255, count: width * height), width: width, height: height)
+        #expect(
+            abs(field[5 * width + 0] - -0.5) < 1e-4,
+            "a border pixel is half a pixel inside the edge, got \(field[5 * width])")
+        #expect(
+            abs(field[5 * width + 5] - -4.5) < 1e-4,
+            "the centre is five pixels from the nearest border: the right edge of column 9 is 5 away from column 5")
+        #expect(abs(field[0] - -0.5) < 1e-4)
     }
 
     @Test func `a rounded rectangle path has the right distance at its centre and outside`() {
@@ -120,6 +141,9 @@ struct ClearGlassGeometryTests {
         #expect(radii.y == 0)
         #expect(radii.z == -10)
         #expect(radii.w == 0, "a negative radius is a zero radius")
+        #expect(
+            radii.y.sign == .plus && radii.w.sign == .plus,
+            "a zero radius is a positive zero, never the bit pattern of -0.0")
     }
 
     @Test func `a capsule and a circle round their ends fully`() {
@@ -140,11 +164,21 @@ struct ClearGlassGeometryTests {
     }
 
     @Test func `the configuration converts points to pixels`() {
-        let uniforms = ClearGlassConfiguration(rimDepth: 10, rimWidth: 4).uniforms(
+        let uniforms = ClearGlassConfiguration(rimDepth: 10, rimWidth: 4, outline: 0).uniforms(
             size: CGSize(width: 100, height: 50), scale: 3, sourceOrigin: .zero,
             sourceSize: CGSize(width: 300, height: 150))
         #expect(uniforms.viewSize == SIMD2(300, 150))
         #expect(uniforms.halfSize == SIMD2(150, 75))
         #expect(uniforms.rimDepth == 30 && uniforms.rimWidth == 12)
+    }
+
+    @Test func `the view reaches beyond the shape by the margin the ring needs`() {
+        let uniforms = ClearGlassConfiguration(outline: 0.3785, outlineReach: 0.82).uniforms(
+            size: CGSize(width: 100, height: 50), scale: 3, sourceOrigin: .zero,
+            sourceSize: CGSize(width: 300, height: 150))
+        // A margin of 2 pt on each side of a 100 x 50 pt shape, at 3x.
+        #expect(uniforms.viewSize == SIMD2(312, 162))
+        #expect(uniforms.halfSize == SIMD2(150, 75), "the shape itself is unchanged")
+        #expect(uniforms.outlineReach == 0.82 * 3)
     }
 }

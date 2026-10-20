@@ -19,27 +19,35 @@ enum SignedDistanceField {
     /// per pixel, row by row; 128 and above is inside. The half-pixel offset places the edge between pixel centres.
     static func make(coverage: [UInt8], width: Int, height: Int) -> [Float] {
         precondition(coverage.count == width * height, "coverage must hold width * height values")
-        let infinity: Float = 1.0e20
-        var toInside = [Float](repeating: infinity, count: width * height)
-        var toOutside = [Float](repeating: infinity, count: width * height)
-        for index in coverage.indices {
-            if coverage[index] >= 128 { toInside[index] = 0 } else { toOutside[index] = 0 }
+        // Beyond the raster there is nothing, which is outside. One ring of outside pixels is enough: any farther
+        // outside pixel is farther than the ring. Without it a shape that fills the raster has no edge at the border.
+        let (paddedWidth, paddedHeight) = (width + 2, height + 2)
+        var padded = [UInt8](repeating: 0, count: paddedWidth * paddedHeight)
+        for y in 0..<height {
+            for x in 0..<width { padded[(y + 1) * paddedWidth + x + 1] = coverage[y * width + x] }
         }
-        transform(&toInside, width: width, height: height)
-        transform(&toOutside, width: width, height: height)
+        let infinity: Float = 1.0e20
+        var toInside = [Float](repeating: infinity, count: padded.count)
+        var toOutside = [Float](repeating: infinity, count: padded.count)
+        for index in padded.indices {
+            if padded[index] >= 128 { toInside[index] = 0 } else { toOutside[index] = 0 }
+        }
+        transform(&toInside, width: paddedWidth, height: paddedHeight)
+        transform(&toOutside, width: paddedWidth, height: paddedHeight)
         var field = [Float](repeating: 0, count: width * height)
-        for index in field.indices {
-            if coverage[index] >= 128 {
-                field[index] = -(toOutside[index].squareRoot() - 0.5)
-            } else {
-                field[index] = toInside[index].squareRoot() - 0.5
+        for y in 0..<height {
+            for x in 0..<width {
+                let index = (y + 1) * paddedWidth + x + 1
+                field[y * width + x] =
+                    padded[index] >= 128 ? -(toOutside[index].squareRoot() - 0.5) : toInside[index].squareRoot() - 0.5
             }
         }
         return field
     }
 
-    /// Rasterise `path` (in points, origin top left) at `scale` pixels per point into a `width` by `height` field.
-    static func make(path: CGPath, width: Int, height: Int, scale: CGFloat) -> [Float] {
+    /// Rasterise `path` (in points, origin top left) at `scale` pixels per point into a `width` by `height` field,
+    /// with the path's origin placed `origin` points in from the raster's top-left corner.
+    static func make(path: CGPath, width: Int, height: Int, scale: CGFloat, origin: CGPoint = .zero) -> [Float] {
         var coverage = [UInt8](repeating: 0, count: width * height)
         coverage.withUnsafeMutableBytes { buffer in
             guard
@@ -51,6 +59,7 @@ enum SignedDistanceField {
             // Core Graphics has y up; flip so row 0 is the top, then draw the path in points.
             context.translateBy(x: 0, y: CGFloat(height))
             context.scaleBy(x: scale, y: -scale)
+            context.translateBy(x: origin.x, y: origin.y)
             context.setFillColor(gray: 1, alpha: 1)
             context.addPath(path)
             context.fillPath()

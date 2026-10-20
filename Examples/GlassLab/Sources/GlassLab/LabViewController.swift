@@ -52,6 +52,7 @@ final class LabViewController: UIViewController {
         switch arguments.mode {
         case "native":
             if arguments.shape == "triangle" { addNativeTriangle(frame: frame) } else { addNative(frame: frame) }
+        case "clear": addClear(frame: frame, image: image)
         case "aemi":
             // The lens has no arbitrary-shape input; a triangle leaves the plain background (reported as unsupported).
             if arguments.shape != "triangle" { addAemi(frame: frame, image: image, center: center) }
@@ -133,5 +134,40 @@ extension LabViewController {
         addChild(host)
         view.addSubview(host.view)
         host.didMove(toParent: self)
+    }
+}
+
+extension LabViewController {
+    /// The package's clear glass, in the same shape as the native glass it is compared with.
+    fileprivate func addClear(frame: CGRect, image: CGImage) {
+        let shape: GlassShape
+        switch arguments.shape {
+        case "capsule": shape = .capsule
+        case "circle": shape = .circle
+        case "square": shape = .roundedRect(radii: .zero)
+        case "triangle":
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: frame.width / 2, y: 0))
+            path.addLine(to: CGPoint(x: frame.width, y: frame.height))
+            path.addLine(to: CGPoint(x: 0, y: frame.height))
+            path.closeSubpath()
+            shape = .path(path)
+        default: shape = .roundedRect(radii: GlassCornerRadii(arguments.radius), curve: .continuous)
+        }
+        var configuration = ClearGlassConfiguration.nativeClear(shape: shape)
+        let p = arguments.parameters
+        if let value = p["blur"] { configuration.blur = .gaussian(value) }
+        if let value = p["blurCore"] { configuration.blur.coreRadius = value }
+        if let value = p["blurHalo"] { configuration.blur.haloRadius = value }
+        if let value = p["blurMix"] { configuration.blur.coreWeight = value }
+        if let value = p["outline"] { configuration.outline = value }
+        if let value = p["rimDepth"] { configuration.rimDepth = value }
+        if let value = p["rimWidth"] { configuration.rimWidth = value }
+        if let value = p["lift"] { configuration.lift = value }
+        if let value = p["liftFalloff"] { configuration.liftFalloff = value }
+        let glass = ClearGlassUIView(configuration: configuration)
+        glass.frame = frame
+        view.addSubview(glass)
+        glass.setSourceImage(image, origin: frame.origin)
     }
 }
