@@ -42,8 +42,73 @@ enum DocumentationLayout {
             lines.count { $0.hasPrefix("# ") } > 1 || lines.count { $0.hasPrefix("status:") } > 1
         }
 
+        /// Whether the front matter declares `status: done`.
+        var isDone: Bool { lines.contains { $0.trimmingCharacters(in: .whitespaces) == "status: done" } }
+
+        /// The test names cited on a `Regression:` line, each in backticks: the tests that fail without the fix.
+        var regressionTests: [String] {
+            lines.filter { $0.hasPrefix("Regression:") }.flatMap { line in
+                line.split(separator: "`", omittingEmptySubsequences: false).enumerated()
+                    .filter { $0.offset % 2 == 1 }.map { String($0.element) }
+            }
+        }
+
         private var lines: [Substring] {
             text.split(separator: "\n", omittingEmptySubsequences: false)
+        }
+    }
+
+    // MARK: - Regression evidence
+
+    /// The names of the Swift Testing tests under `Tests/`, excluding this documentation checker itself.
+    ///
+    /// A name counts only when `@Test` is on the same line or the line before its `func`, so a helper function cannot stand in for a
+    /// test. Both spellings are read: a sentence in backticks, or a plain identifier.
+    static func testNames() throws -> Set<String> {
+        let testsDirectory = repositoryRoot.appending(path: "Tests")
+        guard
+            let enumerator = FileManager.default.enumerator(
+                at: testsDirectory, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
+        else { return [] }
+        var names: Set<String> = []
+        while let url = enumerator.nextObject() as? URL {
+            guard url.pathExtension == "swift", url.lastPathComponent != "DocumentationLayout.swift" else { continue }
+            names.formUnion(testNames(in: try String(contentsOf: url, encoding: .utf8)))
+        }
+        return names
+    }
+
+    /// The names of the `@Test` functions declared in one Swift source text.
+    static func testNames(in source: String) -> Set<String> {
+        var names: Set<String> = []
+        var awaitingFunction = false
+        for line in source.split(separator: "\n", omittingEmptySubsequences: false) {
+            if line.contains("@Test") { awaitingFunction = true }
+            guard awaitingFunction, let range = line.range(of: "func ") else { continue }
+            awaitingFunction = false
+            let rest = line[range.upperBound...]
+            if rest.hasPrefix("`") {
+                let body = rest.dropFirst()
+                if let end = body.firstIndex(of: "`") { names.insert(String(body[..<end])) }
+            } else {
+                let identifier = rest.prefix { $0.isLetter || $0.isNumber || $0 == "_" }
+                if !identifier.isEmpty { names.insert(String(identifier)) }
+            }
+        }
+        return names
+    }
+
+    /// The done records that do not name at least one regression test that exists, each with what is wrong.
+    static func unprovenDoneRecords(_ records: [Record], knownTests: Set<String>) -> [(record: Record, problem: String)]
+    {
+        records.filter(\.isDone).compactMap { record in
+            let cited = record.regressionTests
+            guard !cited.isEmpty else { return (record, "marked done with no regression tests cited") }
+            let missing = cited.filter { !knownTests.contains($0) }
+            guard missing.isEmpty else {
+                return (record, "cites tests that do not exist: \(missing.map { "`\($0)`" }.joined(separator: ", "))")
+            }
+            return nil
         }
     }
 
