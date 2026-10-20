@@ -17,6 +17,9 @@ struct ContentView: View {
                 Tab("Liquid", systemImage: "drop.circle") {
                     LiquidLensDemoView()
                 }
+                Tab("Probes", systemImage: "stethoscope") {
+                    RuntimeProbeDemo()
+                }
             }
         #else
             VStack(spacing: 16) {

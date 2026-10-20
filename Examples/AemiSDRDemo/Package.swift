@@ -9,7 +9,8 @@ let package = Package(
         .macOS(.v15),
     ],
     dependencies: [
-        .package(url: "https://github.com/Aemi-Studio/AemiSDR.git", branch: "main"),
+        // The demo exercises this checkout, not an unrelated published revision.
+        .package(path: "../.."),
     ],
     targets: [
         .executableTarget(
