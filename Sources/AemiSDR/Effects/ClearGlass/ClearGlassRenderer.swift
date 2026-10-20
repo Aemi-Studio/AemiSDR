@@ -119,10 +119,10 @@
             return texture
         }
 
-        private func pipeline(vertex: String, fragment: String, format: MTLPixelFormat, fieldTexture: Bool = false)
-            -> MTLRenderPipelineState?
-        {
-            let key = "\(fragment)-\(format.rawValue)-\(fieldTexture)"
+        private func pipeline(
+            vertex: String, fragment: String, formats: [MTLPixelFormat], fieldTexture: Bool = false
+        ) -> MTLRenderPipelineState? {
+            let key = "\(fragment)-\(formats.map { String($0.rawValue) }.joined(separator: ","))-\(fieldTexture)"
             if let cached = pipelines[key] { return cached }
             let constants = MTLFunctionConstantValues()
             var useTexture = fieldTexture
@@ -131,7 +131,7 @@
             let descriptor = MTLRenderPipelineDescriptor()
             descriptor.vertexFunction = library.makeFunction(name: vertex)
             descriptor.fragmentFunction = try? library.makeFunction(name: fragment, constantValues: constants)
-            descriptor.colorAttachments[0].pixelFormat = format
+            for (index, format) in formats.enumerated() { descriptor.colorAttachments[index].pixelFormat = format }
             guard descriptor.fragmentFunction != nil,
                 let state = try? device.makeRenderPipelineState(descriptor: descriptor)
             else {
@@ -144,18 +144,25 @@
 
         // MARK: Drawing
 
-        /// Encodes all three passes into `commandBuffer`. `blurSigma` is in pixels of the source.
+        /// Encodes the blur (two passes) and the glass into `commandBuffer`. The blur plan is in pixels of the source.
         func encode(
-            into commandBuffer: MTLCommandBuffer, source: MTLTexture, uniforms: ClearGlassUniforms, blurSigma: Float,
+            into commandBuffer: MTLCommandBuffer, source: MTLTexture, uniforms: ClearGlassUniforms, blur: BlurPlan,
             field: MTLTexture?, target: MTLTexture
         ) -> Bool {
-            let kernel = GaussianKernel(sigma: blurSigma)
+            let kernelA = GaussianKernel(sigma: blur.coreSigma)
+            let kernelB = GaussianKernel(sigma: blur.haloSigma)
+            let reach = max(kernelA.radius, kernelB.radius)
             guard
-                let blurState = pipeline(vertex: "clearGlassVertex", fragment: "clearGlassBlur", format: .rgba16Float),
+                let horizontalState = pipeline(
+                    vertex: "clearGlassVertex", fragment: "clearGlassBlurHorizontal",
+                    formats: [.rgba16Float, .rgba16Float]),
+                let verticalState = pipeline(
+                    vertex: "clearGlassVertex", fragment: "clearGlassBlurVertical", formats: [.rgba16Float]),
                 let glassState = pipeline(
-                    vertex: "clearGlassVertex", fragment: "clearGlassFragment", format: target.pixelFormat,
+                    vertex: "clearGlassVertex", fragment: "clearGlassFragment", formats: [target.pixelFormat],
                     fieldTexture: field != nil),
-                let horizontal = scratchTexture("h", width: source.width, height: source.height),
+                let horizontalA = scratchTexture("ha", width: source.width, height: source.height),
+                let horizontalB = scratchTexture("hb", width: source.width, height: source.height),
                 let blurred = scratchTexture("v", width: source.width, height: source.height)
             else { return false }
 
@@ -169,34 +176,55 @@
                 return MTLScissorRect(
                     x: Int(clipped.minX), y: Int(clipped.minY), width: Int(clipped.width), height: Int(clipped.height))
             }
-            guard let wide = scissor(view.insetBy(dx: -CGFloat(kernel.radius + 1), dy: -CGFloat(kernel.radius + 1))),
+            guard let wide = scissor(view.insetBy(dx: -CGFloat(reach + 1), dy: -CGFloat(reach + 1))),
                 let exact = scissor(view.insetBy(dx: -1, dy: -1))
             else { return false }
 
             var sourceSize = SIMD2<Float>(Float(source.width), Float(source.height))
-            var weights = kernel.weights
-            func blur(_ input: MTLTexture, _ output: MTLTexture, step: SIMD2<Float>, region: MTLScissorRect) {
-                let pass = MTLRenderPassDescriptor()
-                pass.colorAttachments[0].texture = output
-                pass.colorAttachments[0].loadAction = .clear
-                pass.colorAttachments[0].storeAction = .store
-                guard let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: pass) else { return }
-                encoder.setRenderPipelineState(blurState)
-                encoder.setScissorRect(region)
-                encoder.setFragmentTexture(input, index: 0)
-                var parameters = BlurParameters(step: step, radius: Int32(kernel.radius))
+            var weightsA = kernelA.weights
+            var weightsB = kernelB.weights
+            func bindBlur(_ encoder: MTLRenderCommandEncoder, step: SIMD2<Float>) {
+                var parameters = BlurParameters(
+                    step: step, radiusA: Int32(kernelA.radius), radiusB: Int32(kernelB.radius), mixA: blur.coreWeight,
+                    pad: 0)
                 // Each value is copied into the command stream during the call.
                 unsafe encoder.setVertexBytes(&sourceSize, length: MemoryLayout<SIMD2<Float>>.size, index: 0)
                 unsafe encoder.setFragmentBytes(&sourceSize, length: MemoryLayout<SIMD2<Float>>.size, index: 0)
                 unsafe encoder.setFragmentBytes(&parameters, length: MemoryLayout<BlurParameters>.stride, index: 1)
-                unsafe weights.withUnsafeBytes {
+                unsafe weightsA.withUnsafeBytes {
                     if let base = $0.baseAddress { encoder.setFragmentBytes(base, length: $0.count, index: 2) }
                 }
-                encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
-                encoder.endEncoding()
+                unsafe weightsB.withUnsafeBytes {
+                    if let base = $0.baseAddress { encoder.setFragmentBytes(base, length: $0.count, index: 3) }
+                }
             }
-            blur(source, horizontal, step: SIMD2(1 / sourceSize.x, 0), region: wide)
-            blur(horizontal, blurred, step: SIMD2(0, 1 / sourceSize.y), region: exact)
+
+            let first = MTLRenderPassDescriptor()
+            for (index, texture) in [horizontalA, horizontalB].enumerated() {
+                first.colorAttachments[index].texture = texture
+                first.colorAttachments[index].loadAction = .clear
+                first.colorAttachments[index].storeAction = .store
+            }
+            guard let horizontal = commandBuffer.makeRenderCommandEncoder(descriptor: first) else { return false }
+            horizontal.setRenderPipelineState(horizontalState)
+            horizontal.setScissorRect(wide)
+            horizontal.setFragmentTexture(source, index: 0)
+            bindBlur(horizontal, step: SIMD2(1 / sourceSize.x, 0))
+            horizontal.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+            horizontal.endEncoding()
+
+            let second = MTLRenderPassDescriptor()
+            second.colorAttachments[0].texture = blurred
+            second.colorAttachments[0].loadAction = .clear
+            second.colorAttachments[0].storeAction = .store
+            guard let vertical = commandBuffer.makeRenderCommandEncoder(descriptor: second) else { return false }
+            vertical.setRenderPipelineState(verticalState)
+            vertical.setScissorRect(exact)
+            vertical.setFragmentTexture(horizontalA, index: 0)
+            vertical.setFragmentTexture(horizontalB, index: 1)
+            bindBlur(vertical, step: SIMD2(0, 1 / sourceSize.y))
+            vertical.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+            vertical.endEncoding()
 
             let pass = MTLRenderPassDescriptor()
             pass.colorAttachments[0].texture = target
@@ -208,6 +236,7 @@
             var viewSize = uniforms.viewSize
             var mutable = uniforms
             encoder.setFragmentTexture(blurred, index: 0)
+            encoder.setFragmentTexture(source, index: 1)
             if let field { encoder.setFragmentTexture(field, index: 2) }
             // Each value is copied into the command stream during the call.
             unsafe encoder.setVertexBytes(&viewSize, length: MemoryLayout<SIMD2<Float>>.size, index: 0)
@@ -219,12 +248,10 @@
 
         /// Renders into `target` and waits. For tests and for one-off captures; the view presents instead.
         func renderAndWait(
-            source: MTLTexture, uniforms: ClearGlassUniforms, blurSigma: Float, field: MTLTexture?, target: MTLTexture
+            source: MTLTexture, uniforms: ClearGlassUniforms, blur: BlurPlan, field: MTLTexture?, target: MTLTexture
         ) -> Bool {
             guard let buffer = queue.makeCommandBuffer(),
-                encode(
-                    into: buffer, source: source, uniforms: uniforms, blurSigma: blurSigma, field: field, target: target
-                )
+                encode(into: buffer, source: source, uniforms: uniforms, blur: blur, field: field, target: target)
             else { return false }
             buffer.commit()
             buffer.waitUntilCompleted()
@@ -234,8 +261,19 @@
         func makeCommandBuffer() -> MTLCommandBuffer? { queue.makeCommandBuffer() }
     }
 
+    /// The blur resolved to pixels of the source: two Gaussians and how much of the result is the first.
+    struct BlurPlan: Equatable {
+        var coreSigma: Float
+        var haloSigma: Float
+        var coreWeight: Float
+    }
+
+    /// The layout of the shader's `BlurUniforms`.
     private struct BlurParameters {
         var step: SIMD2<Float>
-        var radius: Int32
+        var radiusA: Int32
+        var radiusB: Int32
+        var mixA: Float
+        var pad: Float
     }
 #endif

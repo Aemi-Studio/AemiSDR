@@ -54,7 +54,8 @@ public enum GlassShape: Equatable, @unchecked Sendable {
         let half = min(size.width, size.height) / 2 * scale
         func pixels(_ points: CGFloat, _ curve: GlassCornerCurve) -> Float {
             let value = Float(min(max(points * scale, 0), half))
-            return curve == .continuous ? -value : value
+            // A sharp corner is a plain zero: a negative zero is a different bit pattern the shader would have to special-case.
+            return curve == .continuous && value > 0 ? -value : value
         }
         switch self {
         case .roundedRect(let radii, let curve):
