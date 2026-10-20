@@ -81,6 +81,7 @@ macOS `swift test` for iOS-only code, a simulator result claimed for a device.
 - Red and green land in the same commit. Never assert on nothing; never share mutable state between tests.
 - Coverage is measured by behaviour, never by percentage.
 - **Every fix is regression-tested, and the test is shown to fail without it** (revert the fix or mutate it, watch the red, restore). A roadmap record may be `status: done` only if a `Regression:` line cites the tests, in backticks, that guard it; `RegressionEvidenceTests` rejects a done record that cites none or cites one that does not exist.
+- **Mathematical claims are machine-checked** (ADR-0006): a proof is an SMT file with negative controls, pinned by digest to the shader or Swift function it models, so editing that function fails until the model is re-checked. `Verification/verify.sh` runs them; a missing solver fails.
 - New behaviour is built red first. A probe or experiment is not product code and is kept apart from it; whatever a probe produces that ships gets tests.
 
 ## 2. Performance doctrine
