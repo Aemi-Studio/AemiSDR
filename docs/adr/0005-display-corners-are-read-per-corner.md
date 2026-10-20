@@ -27,6 +27,6 @@ rather than the estimate when the key was gone.
 
 - `VariableBlurUIView` and `AlphaMaskUIView` still take one `cornerRadius`: the largest corner, which over-rounds the Duo's
   hinge side. Per-corner masks need the shaders to take four radii (roadmap 0016).
-- Depends on Abysm by a local path until it is published (Abysm roadmap 0004).
+- Depends on a pinned revision of [g-cqd/Abysm](https://github.com/g-cqd/Abysm), published separately under MIT.
 - `UIScreen._exclusionArea` (the camera cutout rect), `UIWindow._safeAreaCornerInsets` and the new public hinge / reserved-region
   API (iOS 27.1) are related display-shape data; none is used yet.

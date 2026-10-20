@@ -27,9 +27,11 @@ private let package = Package(
             url: "https://github.com/Aemi-Studio/aemi.git",
             revision: "70762bbd2cf97ca8aa37c1608db7b3744db21f53"
         ),
-        // Typed, verified private-API access (docs/adr/0002). TEMPORARY local path: Abysm has no remote yet
-        // (its roadmap 0004). Pin it by revision once pushed; this branch is not mergeable before then.
-        .package(path: "../Abysm"),
+        // Typed, verified private-API access (docs/adr/0002), published independently of InternedStrings.
+        .package(
+            url: "https://github.com/g-cqd/Abysm.git",
+            revision: "e40103871ba2249732d260aeda2c30d1751f2d62"
+        ),
     ],
     targets: [
         // Main library target
