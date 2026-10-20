@@ -36,4 +36,4 @@ Drain-then-wait (or `readabilityHandler`), min versions from the floor, a dedica
 - One metallib per destination: declined. Six libraries are about 20 KB each and SwiftPM plugin outputs cannot be selected per platform.
 - Performance: not claimed. A GPU-time comparison of the two floors could not be made to resolve (see diary 2026-10-20-10).
 
-Regression: `MetalCompilerCoreTests`, `ShippedShaderTests`
+Regression: `output at and beyond the 64 KiB pipe buffer is drained, never deadlocked`, `the tool's default floor is the floor declared in Package dot swift`, `the build plugin does not override the tested floor`, `an output outside the allowed root is rejected`, `the shipped library draws the same pixels as the source compiled at run time`
