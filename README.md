@@ -213,7 +213,12 @@ A full demo app is included in `Examples/AemiSDRDemo/` with tabbed views showcas
 - **Glass**: Backdrop blur presets and custom blurs
 - **Liquid**: Liquid background surface controls
 
-For Xcode development with both the package and demo app in one window, open `AemiSDR.xcworkspace` at the repository root.
+Open `AemiSDR.xcworkspace` at the repository root. The demo uses the **local package checkout**, so edits are visible
+without publishing or changing a remote dependency.
+
+The **Probes** tab displays the live four-corner radii and the light/dark scalar recipes for each blur style.
+The workspace also includes the developer-only **CAPrivateAPIProbe** scheme: run it and tap **Run Full Scan** to inspect
+runtime classes and selector availability. It is a diagnostic app, not part of the shipped library.
 
 
 ## Development
