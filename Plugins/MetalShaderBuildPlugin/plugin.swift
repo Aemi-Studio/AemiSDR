@@ -84,8 +84,8 @@ extension MetalShaderBuildPlugin {
                 "--ios-output", iosOutputURL.path(percentEncoded: false),
                 "--macos-output", macosOutputURL.path(percentEncoded: false),
                 "--ios-simulator-output", iosSimulatorOutputURL.path(percentEncoded: false),
-                "--ios-min-version", "14.0",
-                "--macos-min-version", "11.0",
+                // No version arguments: the tool's default is the package's deployment floor, and it is tested
+                // against Package.swift (MetalCompilerCoreTests).
                 // Defense in depth — tool rejects outputs that don't live
                 // under this root, in case the SwiftPM plugin sandbox is
                 // ever loosened in a future invocation context.
