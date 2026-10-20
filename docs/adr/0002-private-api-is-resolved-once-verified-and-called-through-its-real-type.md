@@ -58,7 +58,8 @@ decoded during resolution only (ADR-0003).
 the owner's direction was that InternedStrings keeps providing the easy way to hold names and that loading private
 classes and methods ergonomically is a new package relying on it. That package is **Abysm**
 (`../Abysm`, its ADR-0001 and ADR-0002), which implements steps 1-5 above with the signature as the contract. The
-**entries** are AemiSDR's and stay here. AemiSDR depends on Abysm by a local path until Abysm is published.
+**entries** are AemiSDR's and stay here. Abysm is published at [g-cqd/Abysm](https://github.com/g-cqd/Abysm);
+AemiSDR pins a reviewed Git revision rather than a local path.
 
 ## Consequences
 
