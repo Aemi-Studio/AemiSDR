@@ -1,5 +1,5 @@
 ---
-status: pending
+status: in-progress
 blocked-by: 
 date: 2026-10-20
 ---
@@ -25,3 +25,9 @@ date: 2026-10-20
 
 Drain-then-wait (or `readabilityHandler`), min versions from the floor, a dedicated error case, and per
 -destination resources if the build system allows it.
+
+## Done (2026-10-20)
+
+The hang: drain-then-wait, red 65,537 bytes hung, green to 5 MB (diary 2026-10-20-02). Owed: the min-version flags against the
+floor (probe: compare the metallib and a lens-pass GPU time at 18.0 / 15.0), the `missingArgument` misuse for an output outside
+the root, and one metallib per destination.

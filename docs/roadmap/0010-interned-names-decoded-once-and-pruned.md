@@ -18,3 +18,8 @@ against 0.9 ns and none for a decoded `static let`.
   decode cannot come back.
 - In Aemi, its own ADR: decode-once `@Interned`, deterministic keys, `#InternedSelector` and
   `#InternedClass`.
+
+## Progress (2026-10-20)
+
+The five unread names are removed (`lightenGrayFlag`, `darkenCompFlag`, `backdropAllowsInPlaceKey`, `backdropRectKey`,
+`backdropUpdateRateKey`). Still per-read: the other names; registry and Abysm (`docs` of Abysm, roadmap 0001) come first.

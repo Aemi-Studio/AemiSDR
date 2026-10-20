@@ -27,3 +27,12 @@ builds, lays out and displays an `NSVisualEffectView` on every access.
 A typed call through the registry (roadmap 0001), a `UIBlurEffect.Style` → settings-constant table built
 from the probe, a public-API fallback for styles with no constant, presets cached per appearance.
 Release note: presets change visibly, because they were all identical.
+
+## Revised design (2026-10-20, from the probes in diary 2026-10-20-02)
+
+Calling `settingsForStyle:` correctly would fix only the classic styles. Measured on iOS 27.2: `UIBlurEffect.effectSettings`
+returns `_UIBackdropViewSettingsNone` (radius 0) for regular, prominent and every system material, while the live
+`UIVisualEffectView(effect:)` filters give real, distinct values (thick 45 / 1.5, ultraThin 22.5 / 1.1). So: measure the live
+effect view for radius and saturation (all styles), read tint from `effectSettings` for the classic ones, never call
+`settingsForStyle:`. It needs the main actor (`@MainActor` presets, a source-breaking change: decide with the owner), and
+a cache per (style, appearance). The scalar bug is not "wrong ABI" alone: today every modern preset is UltraLight (20 / 1.8).
