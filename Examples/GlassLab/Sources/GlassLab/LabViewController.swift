@@ -161,8 +161,10 @@ extension LabViewController {
         if let value = p["blurHalo"] { configuration.blur.haloRadius = value }
         if let value = p["blurMix"] { configuration.blur.coreWeight = value }
         if let value = p["outline"] { configuration.outline = value }
-        if let value = p["rimDepth"] { configuration.rimDepth = value }
-        if let value = p["rimWidth"] { configuration.rimWidth = value }
+        if let value = p["rimEdge"] { configuration.rim.edgeDepth = value }
+        if let value = p["rimEdgeFalloff"] { configuration.rim.edgeFalloff = value }
+        if let value = p["rimBody"] { configuration.rim.bodyDepth = value }
+        if let value = p["rimBodyWidth"] { configuration.rim.bodyWidth = value }
         if let value = p["lift"] { configuration.lift = value }
         if let value = p["liftFalloff"] { configuration.liftFalloff = value }
         let glass = ClearGlassUIView(configuration: configuration)

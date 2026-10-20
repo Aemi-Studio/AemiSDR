@@ -158,7 +158,7 @@
         /// Renders the glass over a BGRA source and returns the BGRA result, `view` pixels in size.
         private func render(
             source: [UInt8], sourceSize: (Int, Int), view: (Int, Int), configuration: ClearGlassConfiguration,
-            field: [Float]? = nil
+            field: GlassDistanceField? = nil
         ) throws -> [UInt8] {
             let renderer = try #require(ClearGlassRenderer())
             let device = renderer.device
@@ -184,7 +184,7 @@
                 sourceOrigin: CGPoint(x: -margin, y: -margin),
                 sourceSize: CGSize(width: sourceSize.0, height: sourceSize.1))
             let fieldTexture = try field.map {
-                try #require(renderer.makeFieldTexture($0, width: outer.0, height: outer.1))
+                try #require(renderer.makeFieldTexture($0))
             }
             try #require(
                 renderer.renderAndWait(
@@ -205,9 +205,9 @@
         /// A glass that only blurs: no rim, no lift.
         private var blurOnly: ClearGlassConfiguration {
             ClearGlassConfiguration(
-                shape: .roundedRect(radii: .zero), blur: .gaussian(2), rimDepth: 0, rimWidth: 1, lift: 0,
+                shape: .roundedRect(radii: .zero), blur: .gaussian(2), rim: .none, lift: 0,
                 liftFalloff: 0,
-                outline: 0)
+                rimLight: .none, outline: 0)
         }
 
         @Test func `blurring an impulse gives the exact Gaussian, and keeps its energy`() throws {
@@ -269,7 +269,7 @@
                 source[index * 4 + 2] = input[0]
             }
             let configuration = ClearGlassConfiguration(
-                shape: .roundedRect(radii: .zero), blur: .gaussian(0.5), rimDepth: 0, rimWidth: 1, lift: 32.0 / 255,
+                shape: .roundedRect(radii: .zero), blur: .gaussian(0.5), rim: .none, lift: 32.0 / 255,
                 liftFalloff: 0.83)
             let pixels = try render(
                 source: source, sourceSize: (side, side), view: (side, side), configuration: configuration)
@@ -297,11 +297,10 @@
             let rect = CGRect(x: 0, y: 0, width: width, height: height)
             let analytic = ClearGlassConfiguration(
                 shape: .roundedRect(radii: GlassCornerRadii(radius), curve: .circular), blur: .gaussian(1.5),
-                rimDepth: 24,
-                rimWidth: 9, lift: 0.1, liftFalloff: 0.7, outline: 0)
+                rim: .gaussian(depth: 24, width: 9), lift: 0.1, liftFalloff: 0.7, rimLight: .none, outline: 0)
             var viaPath = analytic
             viaPath.shape = .path(CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil))
-            let field = SignedDistanceField.make(
+            let field = SignedDistanceField.exact(
                 path: CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil),
                 width: width, height: height, scale: 1)
             let expected = try render(
@@ -317,9 +316,9 @@
                 if difference > 12 { far += 1 }
             }
             let count = expected.count / 4 * 3
-            #expect(Double(total) / Double(count) < 2.5, "mean difference \(Double(total) / Double(count))/255")
+            #expect(Double(total) / Double(count) < 1.2, "mean difference \(Double(total) / Double(count))/255")
             #expect(
-                Double(far) / Double(count) < 0.04,
+                Double(far) / Double(count) < 0.02,
                 "\(100 * Double(far) / Double(count))% of values differ by more than 12/255")
             #expect(expected.contains { $0 != 0 })
         }
@@ -336,9 +335,9 @@
                 }
             }
             let configuration = ClearGlassConfiguration(
-                shape: .roundedRect(radii: .zero), blur: .gaussian(0.5), rimDepth: 30, rimWidth: 10, lift: 0,
+                shape: .roundedRect(radii: .zero), blur: .gaussian(0.5), rim: .gaussian(depth: 30, width: 10), lift: 0,
                 liftFalloff: 0,
-                outline: 0)
+                rimLight: .none, outline: 0)
             let pixels = try render(
                 source: source, sourceSize: (width, height), view: (width, height), configuration: configuration)
             func blue(_ x: Int, from data: [UInt8]) -> Int { Int(data[(height / 2 * width + x) * 4]) }
@@ -361,9 +360,9 @@
             let side = 40
             let source = [UInt8](repeating: level, count: side * side * 4)
             let configuration = ClearGlassConfiguration(
-                shape: .roundedRect(radii: .zero), blur: .gaussian(0.5), rimDepth: 0, rimWidth: 1, lift: 0,
+                shape: .roundedRect(radii: .zero), blur: .gaussian(0.5), rim: .none, lift: 0,
                 liftFalloff: 0,
-                outline: 0.3785,
+                rimLight: .none, outline: 0.3785,
                 outlineReach: 2.47)
             let margin = Int(configuration.margin)
             let pixels = try render(
@@ -396,7 +395,7 @@
             let margin = Int(configuration.margin)
             let width = side + 2 * margin
             #expect(pixels[((margin + side / 2) * width + margin - 1) * 4] == 0)
-            #expect(ClearGlassConfiguration(outline: 0).margin == 0)
+            #expect(ClearGlassConfiguration(rimLight: .none, outline: 0).margin == 0)
             #expect(ClearGlassConfiguration(outline: 0.3785, outlineReach: 0.82).margin == 2)
         }
 
@@ -436,6 +435,113 @@
             #expect(
                 worstCross > 2, "the two models must be distinguishable here or this test proves nothing: \(worstCross)"
             )
+        }
+
+        @Test func `the shader pulls by the same amount as the rim function`() throws {
+            let (width, height) = (400, 60)
+            // Blue rises one level per 1.5 px, so the value read at the left edge says how far the glass looks.
+            var source = [UInt8](repeating: 255, count: width * height * 4)
+            for y in 0..<height {
+                for x in 0..<width {
+                    source[(y * width + x) * 4] = UInt8(min(255, Int(Double(x) / 1.5)))
+                    source[(y * width + x) * 4 + 1] = 0
+                    source[(y * width + x) * 4 + 2] = 0
+                }
+            }
+            let rim = ClearGlassRim(edgeDepth: 40, edgeFalloff: 3, bodyDepth: 30, bodyWidth: 12)
+            let configuration = ClearGlassConfiguration(
+                shape: .roundedRect(radii: .zero), blur: .gaussian(0.4), rim: rim, lift: 0, liftFalloff: 0,
+                rimLight: .none, outline: 0)
+            let pixels = try render(
+                source: source, sourceSize: (width, height), view: (width, height), configuration: configuration)
+            var worst = 0.0
+            for depth in [3, 6, 10, 16, 24, 36] {
+                // Pixel centre `depth - 0.5` from the edge; the glass looks `pull` pixels further in.
+                let x = depth - 1
+                let looked = Double(pixels[(height / 2 * width + x) * 4]) * 1.5
+                let expected = Double(x) + 0.5 + Double(rim.pull(atDepth: CGFloat(depth) - 0.5))
+                worst = max(worst, abs(looked - expected))
+            }
+            #expect(worst < 3.5, "the shader's pull differs from the rim function by \(worst) px")
+        }
+
+        /// The ring follows n.x^2: darkest on the vertical edges, half at 45 degrees, absent on the horizontal edges.
+        @Test(arguments: [0.0, 30.0, 45.0, 60.0, 90.0])
+        func `the ring outside the edge follows the square of the edge's horizontal part`(degrees: Double) throws {
+            let side = 100
+            let source = [UInt8](repeating: 128, count: side * side * 4)
+            let configuration = ClearGlassConfiguration(
+                shape: .circle, blur: .gaussian(0.5), rim: .none, lift: 0, liftFalloff: 0, rimLight: .none,
+                outline: 0.3785,
+                outlineReach: 2.47)
+            let margin = Int(configuration.margin)
+            let pixels = try render(
+                source: source, sourceSize: (side, side), view: (side, side), configuration: configuration)
+            let width = side + 2 * margin
+            let centre = Double(margin + side / 2)
+            let angle = degrees * .pi / 180
+            // The pixel nearest 1.5 px outside the circle in that direction, and its exact distance and direction.
+            let target = (x: centre + 51.5 * cos(angle), y: centre + 51.5 * sin(angle))
+            let (px, py) = (Int(target.x.rounded(.down)), Int(target.y.rounded(.down)))
+            let (dx, dy) = (Double(px) + 0.5 - centre, Double(py) + 0.5 - centre)
+            let distance = (dx * dx + dy * dy).squareRoot() - 50
+            let nx = dx / (dx * dx + dy * dy).squareRoot()
+            let offset = (py * width + px) * 4
+            let alpha = Double(pixels[offset + 3]) / 255
+            let seen = Double(pixels[offset]) + (1 - alpha) * 128
+            let darkening = 0.3785 * nx * nx * max(0, 1 - distance / 2.47) * 255
+            #expect(
+                abs((128 - seen) - darkening) < 5,
+                "at \(degrees) degrees the ring darkens by \(128 - seen), expected \(darkening)")
+        }
+
+        /// The inner light follows n.y^2 and rises with the brightness behind it.
+        @Test
+        func
+            `the rim light is brightest on horizontal edges, absent on vertical ones, and stronger over bright backdrops`()
+            throws
+        {
+            let side = 60
+            let light = ClearGlassRimLight(
+                edgeStrength: 0.5, edgeFalloff: 2, edgePower: 2, tailStrength: 0.06, tailFalloff: 6, tailPower: 2,
+                backdropGain: 1.4)
+            func render(level: UInt8) throws -> [UInt8] {
+                try self.render(
+                    source: [UInt8](repeating: level, count: side * side * 4), sourceSize: (side, side),
+                    view: (side, side),
+                    configuration: ClearGlassConfiguration(
+                        shape: .roundedRect(radii: .zero), blur: .gaussian(0.4), rim: .none, lift: 0, liftFalloff: 0,
+                        rimLight: light, outline: 0))
+            }
+            let black = try render(level: 0)
+            let gray = try render(level: 128)
+            func value(_ pixels: [UInt8], x: Int, y: Int) -> Double { Double(pixels[(y * side + x) * 4]) }
+            // Top edge, middle column: row r is r + 0.5 px deep.
+            for row in [1, 3] {
+                let depth = CGFloat(row) + 0.5
+                let expectedBlack = Double(light.contribution(atDepth: depth, backdropLuma: 0)) * 255
+                #expect(
+                    abs(value(black, x: side / 2, y: row) - expectedBlack) < 3,
+                    "black, depth \(depth): \(value(black, x: side / 2, y: row)) against \(expectedBlack)")
+                let expectedGray = 128 + Double(light.contribution(atDepth: depth, backdropLuma: 128.0 / 255)) * 255
+                #expect(
+                    abs(value(gray, x: side / 2, y: row) - expectedGray) < 4,
+                    "grey, depth \(depth): \(value(gray, x: side / 2, y: row)) against \(expectedGray)")
+            }
+            // The bottom edge is the same, and the vertical edges get none.
+            #expect(
+                abs(value(black, x: side / 2, y: side - 2) - value(black, x: side / 2, y: 1)) < 2,
+                "top and bottom match")
+            #expect(
+                value(black, x: 1, y: side / 2) < 1.5, "the left edge gets no light: \(value(black, x: 1, y: side / 2))"
+            )
+            #expect(value(black, x: side - 2, y: side / 2) < 1.5, "the right edge gets no light")
+            // Over grey the same depth is brighter by the backdrop gain.
+            let extraBlack = value(black, x: side / 2, y: 1)
+            let extraGray = value(gray, x: side / 2, y: 1) - 128
+            #expect(
+                extraGray > 1.4 * extraBlack,
+                "a brighter backdrop must raise the light: \(extraGray) against \(extraBlack)")
         }
     }
 #endif
