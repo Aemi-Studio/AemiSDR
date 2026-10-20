@@ -542,19 +542,22 @@ fragment half4 liquidLensFragment(
         float2 invSize = 1.0f / uniforms.textureSize;
         half3 accum = half3(0.0h);
         half3 wsum = half3(0.0h);
+        half alphaMid = 0.0h;
         for (int i = 0; i < 5; ++i) {
             float2 d = mix(dispMid, disp[i], clampedChromatic) * displacementScale * signFactor;
             half4 s = sourceTexture.sample(texSampler, (position + d) * invSize);
             half3 w = half3(kSpectralRGB[i][0], kSpectralRGB[i][1], kSpectralRGB[i][2]);
             accum += w * s.rgb;
             wsum  += w;
+            // Wavelength 2 is the middle one: mix(dispMid, dispMid, t) is exactly dispMid, so this sample sits at the
+            // coordinate the output alpha needs. Reusing it saves a sixth texture sample per fragment.
+            if (i == 2) alphaMid = s.a;
         }
         // Normalize by per-channel weight sum. The fixed `kSpectralRGB` matrix
         // is designed so each channel's column sums to ~1 across the 5 visible
         // wavelengths, but a runtime division guards against any drift.
         half3 rgb = accum / max(wsum, half3(1e-3h));
-        half a = sourceTexture.sample(texSampler, (position + dispMid * displacementScale * signFactor) * invSize).a;
-        return half4(rgb * fresnelT, a);
+        return half4(rgb * fresnelT, alphaMid);
     }
 
     // RGB-discrete chromatic specialization.

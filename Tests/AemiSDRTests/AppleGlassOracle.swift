@@ -96,12 +96,21 @@
 
         /// The same vertex stage drives both fragment functions, so only the fragment code differs.
         static func pipeline(
-            device: MTLDevice, vertexLibrary: MTLLibrary, fragmentLibrary: MTLLibrary, fragment: String
+            device: MTLDevice, vertexLibrary: MTLLibrary, fragmentLibrary: MTLLibrary, fragment: String,
+            vertex: String = "sdf_filter_vert_lpf", pixelFormat: MTLPixelFormat = .rgba32Float, blending: Bool = false
         ) throws -> MTLRenderPipelineState {
             let descriptor = MTLRenderPipelineDescriptor()
-            descriptor.vertexFunction = vertexLibrary.makeFunction(name: "sdf_filter_vert_lpf")
+            descriptor.vertexFunction = vertexLibrary.makeFunction(name: vertex)
             descriptor.fragmentFunction = fragmentLibrary.makeFunction(name: fragment)
-            descriptor.colorAttachments[0].pixelFormat = .rgba32Float
+            descriptor.colorAttachments[0].pixelFormat = pixelFormat
+            if blending {
+                // Blending forces every overlapping fragment to be shaded; an opaque overdraw would be skipped.
+                descriptor.colorAttachments[0].isBlendingEnabled = true
+                descriptor.colorAttachments[0].sourceRGBBlendFactor = .one
+                descriptor.colorAttachments[0].destinationRGBBlendFactor = .one
+                descriptor.colorAttachments[0].sourceAlphaBlendFactor = .one
+                descriptor.colorAttachments[0].destinationAlphaBlendFactor = .one
+            }
             let layout = MTLVertexDescriptor()
             layout.attributes[0].format = .float4
             layout.attributes[0].offset = 0
@@ -195,6 +204,25 @@
             return u
         }
 
+        /// Everything a draw needs besides the pipeline: the quad, the matrices, the texture and the uniform blocks.
+        func bind(_ encoder: MTLRenderCommandEncoder, uniforms: [Float], source: MTLTexture, edr: Float) {
+            let vertices = [Self.vertex(-1, -1), Self.vertex(1, -1), Self.vertex(-1, 1), Self.vertex(1, 1)]
+            var mvp = matrix_identity_float4x4
+            var texmat = SIMD4<Float>(1, 0, 0, 1)
+            var edrScale = edr
+            // Every pointer is copied by Metal during the call; each source outlives it.
+            unsafe vertices.withUnsafeBytes {
+                if let base = $0.baseAddress { encoder.setVertexBytes(base, length: $0.count, index: 8) }
+            }
+            unsafe encoder.setVertexBytes(&mvp, length: MemoryLayout<simd_float4x4>.size, index: 2)
+            unsafe encoder.setVertexBytes(&texmat, length: MemoryLayout<SIMD4<Float>>.size, index: 3)
+            encoder.setFragmentTexture(source, index: 3)
+            unsafe uniforms.withUnsafeBytes {
+                if let base = $0.baseAddress { encoder.setFragmentBytes(base, length: 128, index: 1) }
+            }
+            unsafe encoder.setFragmentBytes(&edrScale, length: 4, index: 6)
+        }
+
         func render(_ pipeline: MTLRenderPipelineState, uniforms: [Float], source: MTLTexture, edr: Float) throws
             -> [Float]
         {
@@ -212,21 +240,7 @@
             pass.colorAttachments[0].storeAction = .store
             guard let encoder = command.makeRenderCommandEncoder(descriptor: pass) else { throw OracleError.noDevice }
             encoder.setRenderPipelineState(pipeline)
-            let vertices = [Self.vertex(-1, -1), Self.vertex(1, -1), Self.vertex(-1, 1), Self.vertex(1, 1)]
-            var mvp = matrix_identity_float4x4
-            var texmat = SIMD4<Float>(1, 0, 0, 1)
-            var edrScale = edr
-            // Every pointer is copied by Metal during the call; each source outlives it.
-            unsafe vertices.withUnsafeBytes {
-                if let base = $0.baseAddress { encoder.setVertexBytes(base, length: $0.count, index: 8) }
-            }
-            unsafe encoder.setVertexBytes(&mvp, length: MemoryLayout<simd_float4x4>.size, index: 2)
-            unsafe encoder.setVertexBytes(&texmat, length: MemoryLayout<SIMD4<Float>>.size, index: 3)
-            encoder.setFragmentTexture(source, index: 3)
-            unsafe uniforms.withUnsafeBytes {
-                if let base = $0.baseAddress { encoder.setFragmentBytes(base, length: 128, index: 1) }
-            }
-            unsafe encoder.setFragmentBytes(&edrScale, length: 4, index: 6)
+            bind(encoder, uniforms: uniforms, source: source, edr: edr)
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
             encoder.endEncoding()
             command.commit()
