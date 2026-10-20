@@ -33,6 +33,25 @@ struct ClearGlassGeometryTests {
         }
     }
 
+    @Test(arguments: [Float(0.3), 1, 2.8, 4.2, 11])
+    func `paired taps keep the kernel's sum and first moment and need about half the fetches`(sigma: Float) {
+        let kernel = GaussianKernel(sigma: sigma)
+        let taps = kernel.pairedTaps
+        // Sum over one side plus the mirror, plus the centre: the zeroth moment is one.
+        let sum = taps[0].y + 2 * taps.dropFirst().reduce(0) { $0 + $1.y }
+        #expect(abs(sum - 1) < 1e-5, "sigma \(sigma): the paired kernel sums to \(sum)")
+        // The first moment on one side: sum of offset * weight, identical to the unpaired kernel.
+        let paired = taps.dropFirst().reduce(0) { $0 + $1.x * $1.y }
+        let direct = (1...kernel.radius).reduce(Float(0)) { $0 + Float($1) * kernel.weights[$1] }
+        #expect(abs(paired - direct) < 1e-5, "sigma \(sigma): first moment \(paired) against \(direct)")
+        #expect(
+            taps.count - 1 == (kernel.radius + 1) / 2,
+            "sigma \(sigma): \(taps.count - 1) fetches for radius \(kernel.radius)")
+        #expect(
+            taps.dropFirst().allSatisfy { $0.x >= 1 && $0.x <= Float(kernel.radius) },
+            "every fetch lies within the kernel")
+    }
+
     @Test func `the kernel reaches three sigma and no further than the cap`() {
         #expect(GaussianKernel(sigma: 2.8).radius == 9)
         #expect(GaussianKernel(sigma: 500).radius == GaussianKernel.maximumRadius)
