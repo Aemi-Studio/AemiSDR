@@ -66,8 +66,8 @@ package enum _InternedKeys {
         @Interned static var colorKey = "color"
 
         // Backdrop Settings
-        @Interned static var backdropViewSettingsClass = "_UIBackdropViewSettings"
-        @Interned static var settingsCreationSelector = "settingsForStyle:"
+        @Interned static var effectSettingsGetter = "effectSettings"
+        @Interned static var resolveEffectSelector = "effectForUserInterfaceStyle:"
         @Interned static var grayTintEnabledKey = "usesGrayscaleTintView"
         @Interned static var tintEnabledKey = "usesColorTintView"
         @Interned static var burnTintEnabledKey = "usesColorBurnTintView"
