@@ -17,7 +17,7 @@
             for style: UIBlurEffect.Style,
             appearance: UIUserInterfaceStyle
         ) -> BackdropBlurConfiguration {
-            guard PrivateAPI.isEnabled else { return .clear }
+            guard RuntimeAccess.isEnabled else { return .clear }
             let appearance: UIUserInterfaceStyle = appearance == .unspecified ? .light : appearance
             let key = Key(style: style.rawValue, appearance: appearance.rawValue)
             if let cached = cache[key] { return cached }
@@ -44,7 +44,7 @@
             let unresolved = UIBlurEffect(style: style)
             // An unattached view does not necessarily resolve adaptive styles from its override traits.
             // Resolve the effect explicitly before asking the live view for its filter recipe.
-            let resolved: UIBlurEffect? = try? PrivateObject(unresolved).call(
+            let resolved: UIBlurEffect? = try? RuntimeObject(unresolved).call(
                 _InternedKeys.resolveEffectSelector, Int(appearance.rawValue))
             guard let effect = resolved else { return nil }
             let view = UIVisualEffectView(effect: effect)
@@ -81,11 +81,11 @@
         }
 
         private static func object<Value: NSObject>(_ base: AnyObject, _ getter: String) -> Value? {
-            try? PrivateObject(base).read(getter, as: Value?.self)
+            try? RuntimeObject(base).read(getter, as: Value?.self)
         }
 
         private static func readClassicSettings(_ settings: NSObject, into config: inout BackdropBlurConfiguration) {
-            let object = PrivateObject(settings)
+            let object = RuntimeObject(settings)
             let fields: [(WritableKeyPath<BackdropBlurConfiguration, CGFloat>, String)] = [
                 (\.scale, _InternedKeys.scaleFactorKey),
                 (\.grayscaleTintLevel, _InternedKeys.grayLevelKey),

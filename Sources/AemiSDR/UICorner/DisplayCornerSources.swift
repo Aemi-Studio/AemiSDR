@@ -44,12 +44,12 @@ extension DisplayCornerSources {
     /// one of another type, gives `nil` — where `value(forKey:)` raises `NSUnknownKeyException`, which no Swift code
     /// can catch and which the iOS 27.0 and 18.6 simulators were probed to throw (diary 2026-10-20-01).
     static func scalar(of object: AnyObject, getter: String) -> CGFloat? {
-        (try? PrivateObject(object).read(getter, as: Double.self)).map { CGFloat($0) }
+        (try? RuntimeObject(object).read(getter, as: Double.self)).map { CGFloat($0) }
     }
 
     /// An object-valued property, `nil` when missing or nil.
     static func object(of object: AnyObject, getter: String) -> NSObject? {
-        (try? PrivateObject(object).read(getter, as: NSObject?.self)) ?? nil
+        (try? RuntimeObject(object).read(getter, as: NSObject?.self)) ?? nil
     }
 
     /// The four corners of a `BSCornerRadiusConfiguration`, or `nil` unless all four can be read.
