@@ -96,9 +96,9 @@ struct ClearGlassUniforms {
     float lift;             // additive lift over black, 0...1
     float lumaFalloff;      // how fast the lift fades with the luminance of the backdrop
     float edge;             // antialiasing half-width of the outline, in pixels
-    float pad0;             // explicit padding: a float3 here would be 16-byte aligned and move the stride
-    float pad1;
-    float pad2;
+    float outline;          // strength of the dark ring just outside the shape, 0...1 (0 turns it off)
+    float outlineReach;     // how far outside the edge the ring reaches, in pixels
+    float pad2;             // explicit padding: a float3 here would be 16-byte aligned and move the stride
 };
 
 constant bool kShapeFromTexture [[function_constant(0)]];
@@ -118,27 +118,66 @@ vertex VertexOut clearGlassVertex(uint vertexID [[vertex_id]], constant float2 &
     return out;
 }
 
-// MARK: - Gaussian blur
+// MARK: - Blur
 
+/// The blur is the sum of two isotropic Gaussians: a tight core and a wide halo, mixed by `mixA`. Each Gaussian is
+/// separable, so each is two passes; the first pass computes both horizontal blurs at once into two targets and the
+/// second computes both vertical blurs and mixes them. (A separable product of the mixed kernel would not do: its cross
+/// terms are wide in one direction and narrow in the other and streak along the axes.)
 struct BlurUniforms {
     float2 step;            // one tap, in texture coordinates: (1/width, 0) or (0, 1/height)
-    int radius;             // taps on each side of the centre
+    int radiusA;            // taps on each side of the centre, kernel A
+    int radiusB;            // the same for kernel B
+    float mixA;             // weight of kernel A in the result; B takes the rest
+    float pad;
 };
 
-/// One separable Gaussian pass. `weights[0]` is the centre tap and `weights[i]` the tap at distance i, already
-/// normalised on the CPU so that the whole kernel sums to one.
-fragment float4 clearGlassBlur(
-    VertexOut in [[stage_in]], texture2d<float> source [[texture(0)]],
-    constant BlurUniforms &u [[buffer(1)]], constant float *weights [[buffer(2)]], constant float2 &viewSize [[buffer(0)]]
+struct BlurPair {
+    float4 a [[color(0)]];
+    float4 b [[color(1)]];
+};
+
+/// First pass: both horizontal Gaussians of the source. `wa[0]` is the centre tap and `wa[i]` the tap at distance i,
+/// already normalised on the CPU so that the whole kernel sums to one; likewise `wb`.
+fragment BlurPair clearGlassBlurHorizontal(
+    VertexOut in [[stage_in]], texture2d<float> source [[texture(0)]], constant float2 &viewSize [[buffer(0)]],
+    constant BlurUniforms &u [[buffer(1)]], constant float *wa [[buffer(2)]], constant float *wb [[buffer(3)]]
 ) {
     constexpr sampler smp(filter::linear, address::clamp_to_edge);
     float2 uv = in.pixel / viewSize;
-    float4 sum = source.sample(smp, uv) * weights[0];
-    for (int i = 1; i <= u.radius; i++) {
+    float4 centre = source.sample(smp, uv);
+    float4 sumA = centre * wa[0];
+    float4 sumB = centre * wb[0];
+    int reach = max(u.radiusA, u.radiusB);
+    for (int i = 1; i <= reach; i++) {
         float2 offset = u.step * float(i);
-        sum += (source.sample(smp, uv + offset) + source.sample(smp, uv - offset)) * weights[i];
+        float4 pair = source.sample(smp, uv + offset) + source.sample(smp, uv - offset);
+        if (i <= u.radiusA) sumA += pair * wa[i];
+        if (i <= u.radiusB) sumB += pair * wb[i];
     }
-    return sum;
+    BlurPair out;
+    out.a = sumA;
+    out.b = sumB;
+    return out;
+}
+
+/// Second pass: both vertical Gaussians of the two horizontal results, mixed.
+fragment float4 clearGlassBlurVertical(
+    VertexOut in [[stage_in]], texture2d<float> horizontalA [[texture(0)]], texture2d<float> horizontalB [[texture(1)]],
+    constant float2 &viewSize [[buffer(0)]], constant BlurUniforms &u [[buffer(1)]], constant float *wa [[buffer(2)]],
+    constant float *wb [[buffer(3)]]
+) {
+    constexpr sampler smp(filter::linear, address::clamp_to_edge);
+    float2 uv = in.pixel / viewSize;
+    float4 sumA = horizontalA.sample(smp, uv) * wa[0];
+    float4 sumB = horizontalB.sample(smp, uv) * wb[0];
+    int reach = max(u.radiusA, u.radiusB);
+    for (int i = 1; i <= reach; i++) {
+        float2 offset = u.step * float(i);
+        if (i <= u.radiusA) sumA += (horizontalA.sample(smp, uv + offset) + horizontalA.sample(smp, uv - offset)) * wa[i];
+        if (i <= u.radiusB) sumB += (horizontalB.sample(smp, uv + offset) + horizontalB.sample(smp, uv - offset)) * wb[i];
+    }
+    return mix(sumB, sumA, u.mixA);
 }
 
 // MARK: - Glass
@@ -170,21 +209,35 @@ inline float3 clearTone(float3 rgb, float lift, float falloff) {
 }
 
 fragment float4 clearGlassFragment(
-    VertexOut in [[stage_in]], texture2d<float> blurred [[texture(0)]], texture2d<float> field [[texture(2)]],
-    constant ClearGlassUniforms &u [[buffer(1)]]
+    VertexOut in [[stage_in]], texture2d<float> blurred [[texture(0)]], texture2d<float> original [[texture(1)]],
+    texture2d<float> field [[texture(2)]], constant ClearGlassUniforms &u [[buffer(1)]]
 ) {
     constexpr sampler smp(filter::linear, address::clamp_to_edge);
     float3 shape = shapeAt(in.pixel, u, field);
     float d = shape.x;
     // Outline coverage: one pixel of antialiasing centred on the edge.
     float coverage = saturate(0.5f - d / max(u.edge, 1.0e-3f));
-    if (coverage <= 0.0f) return float4(0.0f);
+    // The ring outside the edge: native glass darkens what is just beyond it by a constant that falls off linearly.
+    bool ring = u.outline > 0.0f && d > 0.0f && d < u.outlineReach + 1.0f;
+    if (coverage <= 0.0f && !ring) return float4(0.0f);
 
-    float depth = max(-d, 0.0f);
-    float pull = u.rimDepth * exp(-(depth * depth) / (u.rimWidth * u.rimWidth));
-    // Inward is against the outward gradient: the glass shows what lies further inside.
-    float2 position = in.pixel + u.sourceOrigin - shape.yz * pull;
-    float3 rgb = blurred.sample(smp, position / u.sourceSize).rgb;
-    rgb = clearTone(rgb, u.lift, u.lumaFalloff);
-    return float4(rgb * coverage, coverage);
+    float2 sourcePixel = in.pixel + u.sourceOrigin;
+    float3 rgb = float3(0.0f);
+    if (coverage > 0.0f) {
+        float depth = max(-d, 0.0f);
+        float pull = u.rimDepth * exp(-(depth * depth) / (u.rimWidth * u.rimWidth));
+        // Inward is against the outward gradient: the glass shows what lies further inside.
+        float2 position = sourcePixel - shape.yz * pull;
+        rgb = clearTone(blurred.sample(smp, position / u.sourceSize).rgb, u.lift, u.lumaFalloff);
+    }
+    float alpha = coverage;
+    if (ring) {
+        float3 behind = original.sample(smp, sourcePixel / u.sourceSize).rgb;
+        float darkening = u.outline * saturate(1.0f - d / max(u.outlineReach, 1.0e-3f));
+        float3 darkened = saturate(behind - darkening);
+        rgb = (coverage > 0.0f) ? mix(darkened, rgb, coverage) : darkened;
+        // Opaque where the ring is, fading over the last pixel; the colour there already equals the backdrop.
+        alpha = max(coverage, saturate(u.outlineReach + 1.0f - d));
+    }
+    return float4(rgb * alpha, alpha);
 }
