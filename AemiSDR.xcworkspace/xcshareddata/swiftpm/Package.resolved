@@ -1,0 +1,49 @@
+{
+  "originHash" : "a66cfacc444d15ca8e9c41fb24c75a75d3bce4bce4355f1d0e957e8754e3ecaf",
+  "pins" : [
+    {
+      "identity" : "abysm",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/g-cqd/Abysm.git",
+      "state" : {
+        "revision" : "61511fa3df5669057150e4bc6e3a2439ea198f9e"
+      }
+    },
+    {
+      "identity" : "aemi",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Aemi-Studio/aemi.git",
+      "state" : {
+        "revision" : "70762bbd2cf97ca8aa37c1608db7b3744db21f53"
+      }
+    },
+    {
+      "identity" : "swift-collections",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-collections.git",
+      "state" : {
+        "revision" : "35a1edcb8ebd2bfe251d587f0b69e62af28f508c",
+        "version" : "1.7.3"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax.git",
+      "state" : {
+        "revision" : "050f1a346fbbac0ca2cfb15a95274f7bd1cf0ccf",
+        "version" : "604.0.0"
+      }
+    },
+    {
+      "identity" : "swift-system",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-system.git",
+      "state" : {
+        "revision" : "869129b7bf4ecc57b97d0193ad29690ca2134750",
+        "version" : "1.8.1"
+      }
+    }
+  ],
+  "version" : 3
+}

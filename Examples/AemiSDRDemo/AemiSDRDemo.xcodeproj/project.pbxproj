@@ -17,6 +17,7 @@
 		C45028CC6000985785F5DC8C /* VisualEffectDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93449F432684DF4893DA96AB /* VisualEffectDemo.swift */; };
 		E282175F68C72EBEC2A3CFD1 /* LiquidLensDemoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E04ABA3304FE60909C3AAF8 /* LiquidLensDemoView.swift */; };
 		F4F7A64EB2E59C12ABE943F9 /* LiquidSurfaceDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DF798F7D26979078F0AA625 /* LiquidSurfaceDemo.swift */; };
+		FA7BA33A0B2FE7359C877F28 /* RuntimeProbeDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = E726DA06295D5E0416644160 /* RuntimeProbeDemo.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -28,8 +29,10 @@
 		5DF798F7D26979078F0AA625 /* LiquidSurfaceDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidSurfaceDemo.swift; sourceTree = "<group>"; };
 		7E1503DF0D5A22BF65DA6F3E /* VariableBlurDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VariableBlurDemo.swift; sourceTree = "<group>"; };
 		91D2BDAA98C575E5823E9C89 /* DemoSettingsKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoSettingsKit.swift; sourceTree = "<group>"; };
+		933E9578A57834EE9CCC63D3 /* AemiSDR */ = {isa = PBXFileReference; lastKnownFileType = folder; name = AemiSDR; path = ../..; sourceTree = SOURCE_ROOT; };
 		93449F432684DF4893DA96AB /* VisualEffectDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectDemo.swift; sourceTree = "<group>"; };
 		D64C8E2AC38905CDDF32F2A6 /* AemiSDRDemo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AemiSDRDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E726DA06295D5E0416644160 /* RuntimeProbeDemo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeProbeDemo.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -47,6 +50,7 @@
 		278EEB55A1DA249E0AE79348 /* Packages */ = {
 			isa = PBXGroup;
 			children = (
+				933E9578A57834EE9CCC63D3 /* AemiSDR */,
 			);
 			name = Packages;
 			sourceTree = "<group>";
@@ -60,6 +64,7 @@
 				91D2BDAA98C575E5823E9C89 /* DemoSettingsKit.swift */,
 				2E04ABA3304FE60909C3AAF8 /* LiquidLensDemoView.swift */,
 				5DF798F7D26979078F0AA625 /* LiquidSurfaceDemo.swift */,
+				E726DA06295D5E0416644160 /* RuntimeProbeDemo.swift */,
 				2F980178FE12B58E2729CD69 /* SharedScrollContent.swift */,
 				7E1503DF0D5A22BF65DA6F3E /* VariableBlurDemo.swift */,
 				93449F432684DF4893DA96AB /* VisualEffectDemo.swift */,
@@ -132,7 +137,7 @@
 			mainGroup = 92FEBBD6AA2BCD2C5CF88249;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				E277BA374F5EAF00B451AB79 /* XCRemoteSwiftPackageReference "AemiSDR" */,
+				E277BA374F5EAF00B451AB79 /* XCLocalSwiftPackageReference "../.." */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E23D89620AEC4054D6DE2FCB /* Products */;
@@ -155,6 +160,7 @@
 				2E920D0CA074CAE1A9BEF46A /* DemoSettingsKit.swift in Sources */,
 				E282175F68C72EBEC2A3CFD1 /* LiquidLensDemoView.swift in Sources */,
 				F4F7A64EB2E59C12ABE943F9 /* LiquidSurfaceDemo.swift in Sources */,
+				FA7BA33A0B2FE7359C877F28 /* RuntimeProbeDemo.swift in Sources */,
 				30E78E003D512624DA255D54 /* SharedScrollContent.swift in Sources */,
 				826F652289AB523BD100439C /* VariableBlurDemo.swift in Sources */,
 				C45028CC6000985785F5DC8C /* VisualEffectDemo.swift in Sources */,
@@ -228,6 +234,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = NP94WB3P75;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -249,6 +256,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = NP94WB3P75;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -348,21 +356,16 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		E277BA374F5EAF00B451AB79 /* XCRemoteSwiftPackageReference "AemiSDR" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/Aemi-Studio/AemiSDR.git";
-			requirement = {
-				kind = branch;
-				branch = main;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		E277BA374F5EAF00B451AB79 /* XCLocalSwiftPackageReference "../.." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../..;
 		};
-/* End XCRemoteSwiftPackageReference section */
+/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		CEA8847E49EFA98FAB92469D /* AemiSDR */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = E277BA374F5EAF00B451AB79 /* XCRemoteSwiftPackageReference "AemiSDR" */;
 			productName = AemiSDR;
 		};
 /* End XCSwiftPackageProductDependency section */

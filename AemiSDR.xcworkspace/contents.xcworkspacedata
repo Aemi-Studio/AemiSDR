@@ -191,4 +191,7 @@
    <FileRef
       location = "group:Examples/AemiSDRDemo/AemiSDRDemo.xcodeproj">
    </FileRef>
+   <FileRef
+      location = "group:Examples/CAPrivateAPIProbe/CAPrivateAPIProbe.xcodeproj">
+   </FileRef>
 </Workspace>
