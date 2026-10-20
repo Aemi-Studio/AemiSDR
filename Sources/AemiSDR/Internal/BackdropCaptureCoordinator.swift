@@ -252,7 +252,7 @@
             displayLink?.isPaused = systemPaused
         }
 
-        fileprivate func displayLinkFired(_ link: CADisplayLink) {
+        func displayLinkFired(_ link: CADisplayLink) {
             guard let effectView, effectView.window != nil else { return }
             guard effectView.bounds.width > 0, effectView.bounds.height > 0 else { return }
             performCapture()
@@ -535,38 +535,9 @@
             updateDisplayLinkRate()
         }
 
-        // No explicit deinit: cleanup runs from `tearDown()` which SwiftUI
-        // invokes via `dismantleUIView`. The previous `isolated deinit`
-        // (SE-0371) appears to interact badly with the iOS 26.5 simulator
-        // runtime — XCPreviewAgent SIGABRTs ~12 s into module load when this
-        // class is touched, likely due to incomplete type-metadata support
-        // for isolated deinit in JIT'd preview frameworks.
-        //
-        // The audit's M4 concern (missed dismantleUIView → leaked display
-        // link + observer tokens) is bounded: each leak is one CADisplayLink
-        // and five NSObserver tokens, only when SwiftUI replaces a
-        // representable mid-flight without dismantling it (rare). Documented
-        // residual risk rather than blocking previews.
-    }
-
-    /// Weak forwarding target for `CADisplayLink`.
-    ///
-    /// `CADisplayLink` retains its `target` strongly. When the coordinator is
-    /// the direct target, missing a `tearDown()` keeps the coordinator alive
-    /// indefinitely and the display link keeps firing. Routing through this
-    /// proxy means the link retains the proxy (cheap, no observers) while the
-    /// coordinator may deallocate normally.
-    @MainActor
-    private final class DisplayLinkProxy: NSObject {
-        weak var target: BackdropCaptureCoordinator?
-
-        init(target: BackdropCaptureCoordinator) {
-            self.target = target
-        }
-
-        @objc func fire(_ link: CADisplayLink) {
-            target?.displayLinkFired(link)
-        }
+        // Explicit teardown remains the fast path. If dismantling is missed, the weak display-link proxy
+        // invalidates the orphan on its next tick, and the shared registry holds coordinators only weakly.
+        // No isolated deinit is needed (it previously caused simulator-preview metadata failures).
     }
 
     // MARK: - Shared lifecycle registry
