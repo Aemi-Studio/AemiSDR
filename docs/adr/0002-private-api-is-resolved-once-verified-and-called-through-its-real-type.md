@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-20
 ---
 
@@ -54,10 +54,11 @@ to public API (`UIBlurEffect` materials, `UIScreen` without corner radius → `0
 A public `AemiSDR.PrivateAPIPolicy` lets the host disable every entry. The strings stay interned and are
 decoded during resolution only (ADR-0003).
 
-**Where it lives:** the resolver is generic — any Aemi package that touches a private symbol needs it — so
-it belongs in Aemi (white paper: generic tools belong in Aemi). The **entries** are AemiSDR's. Until Aemi
-ships it, it is written test-first in AemiSDR behind an internal type with no AemiSDR knowledge, so the
-move is a file move.
+**Where it lives (amended 2026-10-20):** the resolver is generic, so it is not AemiSDR's. The first proposal put it in Aemi;
+the owner's direction was that InternedStrings keeps providing the easy way to hold names and that loading private
+classes and methods ergonomically is a new package relying on it. That package is **Abysm**
+(`../Abysm`, its ADR-0001 and ADR-0002), which implements steps 1-5 above with the signature as the contract. The
+**entries** are AemiSDR's and stay here. AemiSDR depends on Abysm by a local path until Abysm is published.
 
 ## Consequences
 

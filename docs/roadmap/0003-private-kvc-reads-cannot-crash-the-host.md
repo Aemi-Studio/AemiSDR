@@ -1,5 +1,5 @@
 ---
-status: pending
+status: done
 blocked-by: 
 date: 2026-10-20
 ---
@@ -24,3 +24,9 @@ deprecated `UIScreen.main`; the `@available(iOS 13.0, tvOS 13.0, *)` annotations
 
 Checked reads for every private KVC get/set (through the registry once it exists; a `responds(to:)`
 guard before then), and a corner-radius default that cannot throw.
+
+## Done (2026-10-20)
+
+ADR-0005, diary 2026-10-20-02. The corner reads go through Abysm: signature checked, `nil` on a missing key, and the idiom
+estimate is now reachable (it never was: the old read returned 0). Per-corner radii are the new API. Still unguarded: the
+KVC in `VisualEffectUIView` (`requestedValues`, `setValue(forKeyPath:)`) and `BackdropBlurConfiguration.systemStyle`: roadmap 0002, 0001.
