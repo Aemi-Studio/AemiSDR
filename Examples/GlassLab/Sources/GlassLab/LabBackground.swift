@@ -59,6 +59,15 @@ enum LabBackground {
                 (255, 0, 255), (255, 0, 0), (0, 0, 255), (16, 16, 16),
             ]
             return bars[min(7, Int(u * 8))]
+        case "phasex", "phasey":
+            // A position code that survives blur and an additive lift: the phase of a sinusoid, 48 px period, along x or y.
+            // Green is the sine and blue the cosine, so the decoded phase gives the sampled position modulo 48 px; red is flat.
+            let phase = 2 * Double.pi * (Double(name == "phasex" ? x : y) + 0.5) / 48
+            return (128, UInt8((127.5 + 127.5 * sin(phase)).rounded()), UInt8((127.5 + 127.5 * cos(phase)).rounded()))
+        case "phasegray":
+            // The same sinusoid in all three channels: any difference between channels inside the glass is dispersion.
+            let v = UInt8((127.5 + 127.5 * sin(2 * Double.pi * (Double(x) + 0.5) / 48)).rounded())
+            return (v, v, v)
         case "stripes": return gray(((x + y) / 12) % 2 == 0 ? 0.95 : 0.15)
         case "complex":
             // Deterministic photographic-ish content: smooth colour fields, fine texture and hard edges.

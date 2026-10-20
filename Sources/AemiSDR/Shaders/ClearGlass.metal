@@ -91,14 +91,22 @@ struct ClearGlassUniforms {
     float2 halfSize;        // analytic shape: half extents, centred in the view
     float4 radii;           // analytic shape: (tl, tr, bl, br) corner radii, negative = continuous
     float4 sdfRect;         // path shape: x, y, width, height of the distance texture inside the view
-    float rimDepth;         // displacement at the very edge, in pixels
-    float rimWidth;         // width of the Gaussian falloff of that displacement, in pixels
+    float rimEdge;          // the sharp part of the rim: displacement it adds at the very edge, in pixels
+    float rimEdgeFalloff;   // ... and the depth over which it decays exponentially, in pixels
+    float rimBody;          // the broad part: displacement it adds at the edge, in pixels
+    float rimBodyWidth;     // ... and the width of its Gaussian falloff, in pixels
     float lift;             // additive lift over black, 0...1
     float lumaFalloff;      // how fast the lift fades with the luminance of the backdrop
-    float edge;             // antialiasing half-width of the outline, in pixels
     float outline;          // strength of the dark ring just outside the shape, 0...1 (0 turns it off)
     float outlineReach;     // how far outside the edge the ring reaches, in pixels
-    float pad2;             // explicit padding: a float3 here would be 16-byte aligned and move the stride
+    float outlineDirection; // 0: the ring is the same all round; 1: it follows n.x^2 (strongest on vertical edges)
+    float lightEdge;        // inner rim light, sharp part: strength at the edge (0...1 of full scale)
+    float lightEdgeFalloff; // ... its exponential falloff with depth, in pixels
+    float lightEdgePower;   // ... and how sharply it concentrates on horizontal edges: |n.y|^power
+    float lightTail;        // inner rim light, soft tail: strength at the edge
+    float lightTailFalloff; // ... falloff, in pixels
+    float lightTailPower;   // ... angular power
+    float lightGain;        // how much brighter backdrops raise the light: factor 1 + gain * luma
 };
 
 constant bool kShapeFromTexture [[function_constant(0)]];
@@ -201,13 +209,9 @@ inline float3 shapeAt(float2 pixel, constant ClearGlassUniforms &u, texture2d<fl
         float2 local = (pixel - u.sdfRect.xy) / u.sdfRect.zw;
         // Outside the texture the shape is absent: a large positive distance.
         if (any(local < 0.0f) || any(local > 1.0f)) return float3(1.0e4f, 0.0f, 0.0f);
-        float2 texel = 1.0f / u.sdfRect.zw;
-        float d = field.sample(smp, local).r;
-        float dx = field.sample(smp, local + float2(texel.x, 0.0f)).r - field.sample(smp, local - float2(texel.x, 0.0f)).r;
-        float dy = field.sample(smp, local + float2(0.0f, texel.y)).r - field.sample(smp, local - float2(0.0f, texel.y)).r;
-        float2 g = float2(dx, dy);
-        float len = length(g);
-        return float3(d, len > 1.0e-5f ? g / len : float2(0.0f, 0.0f));
+        // Distance and the exact outward gradient, both written by the CPU: no finite differences to band.
+        float4 f = field.sample(smp, local);
+        return float3(f.r, f.g, f.b);
     }
     return roundedRectField(pixel - u.viewSize * 0.5f, u.halfSize, u.radii);
 }
@@ -228,7 +232,7 @@ fragment float4 clearGlassFragment(
     float3 shape = shapeAt(in.pixel, u, field);
     float d = shape.x;
     // Outline coverage: one pixel of antialiasing centred on the edge.
-    float coverage = saturate(0.5f - d / max(u.edge, 1.0e-3f));
+    float coverage = saturate(0.5f - d);
     // The ring outside the edge: native glass darkens what is just beyond it by a constant that falls off linearly.
     bool ring = u.outline > 0.0f && d > 0.0f && d < u.outlineReach + 1.0f;
     if (coverage <= 0.0f && !ring) return float4(0.0f);
@@ -237,15 +241,27 @@ fragment float4 clearGlassFragment(
     float3 rgb = float3(0.0f);
     if (coverage > 0.0f) {
         float depth = max(-d, 0.0f);
-        float pull = u.rimDepth * exp(-(depth * depth) / (u.rimWidth * u.rimWidth));
+        // Measured on native clear glass the pull depends on depth alone, whatever the shape: a sharp exponential spike
+        // at the edge plus a broad Gaussian body (rms 0.6 px against the measured profile; a single Gaussian is 6 px off).
+        float pull = u.rimEdge * exp(-depth / max(u.rimEdgeFalloff, 1.0e-3f))
+            + u.rimBody * exp(-(depth * depth) / (u.rimBodyWidth * u.rimBodyWidth));
         // Inward is against the outward gradient: the glass shows what lies further inside.
         float2 position = sourcePixel - shape.yz * pull;
         rgb = clearTone(blurred.sample(smp, position / u.sourceSize).rgb, u.lift, u.lumaFalloff);
+        // The light bouncing around the rim: native glass adds it where the edge faces up or down (n.y^2), not on the
+        // vertical edges, and more over bright backdrops. A sharp spike at the edge plus a soft tail.
+        float vertical = max(abs(shape.z), 1.0e-4f);
+        float light = u.lightEdge * exp(-depth / max(u.lightEdgeFalloff, 1.0e-3f)) * pow(vertical, u.lightEdgePower)
+            + u.lightTail * exp(-depth / max(u.lightTailFalloff, 1.0e-3f)) * pow(vertical, u.lightTailPower);
+        float luma = dot(rgb, float3(0.2126f, 0.7152f, 0.0722f));
+        rgb = saturate(rgb + light * (1.0f + u.lightGain * luma));
     }
     float alpha = coverage;
     if (ring) {
         float3 behind = original.sample(smp, sourcePixel / u.sourceSize).rgb;
-        float darkening = u.outline * saturate(1.0f - d / max(u.outlineReach, 1.0e-3f));
+        // The ring is darkest where the edge faces left or right (n.x^2) and absent on the horizontal edges.
+        float sideways = mix(1.0f, shape.y * shape.y, u.outlineDirection);
+        float darkening = u.outline * sideways * saturate(1.0f - d / max(u.outlineReach, 1.0e-3f));
         float3 darkened = saturate(behind - darkening);
         rgb = (coverage > 0.0f) ? mix(darkened, rgb, coverage) : darkened;
         // Opaque where the ring is, fading over the last pixel; the colour there already equals the backdrop.
