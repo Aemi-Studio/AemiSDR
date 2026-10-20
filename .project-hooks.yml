@@ -1,0 +1,21 @@
+# Hook configuration for `project-hooks` (https://github.com/g-cqd/project-hooks).
+#
+# pre-commit needs none: it discovers swift-format and SwiftLint and their configurations by itself.
+#
+# pre-push would otherwise run a plain `swift test` in a fresh verification worktree, rebuilding the whole
+# dependency graph (swift-syntax included) on every push. The automatic test stage is switched off and the real
+# invocation runs as a task with a fixed scratch path, so the build is reused between pushes. Tasks run in the
+# worktree at the pushed commit, not in the working tree, so uncommitted work never decides whether a push passes.
+#
+# The macOS suite includes the machine-checked proofs (ADR-0006: Z3 answers, negative controls, source pins) and the
+# documentation law (every done record cites regression tests that exist), so a push that breaks a modelled shader
+# function without re-checking its proof, or marks a record done without evidence, is refused. Z3 must be installed
+# (brew install z3); its absence fails the suite and therefore the push.
+pre-push:
+  test-override:
+    type: swift
+    skip: true
+  tasks:
+    - name: "macOS tests, including the proofs"
+      run: 'swift test --scratch-path "$HOME/Library/Caches/project-hooks/builds/aemisdr"'
+      timeout: 1500
