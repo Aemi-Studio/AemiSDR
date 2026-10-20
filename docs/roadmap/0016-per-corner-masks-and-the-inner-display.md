@@ -15,6 +15,10 @@ date: 2026-10-20
 - The inner display (2007×2853, 55 on all four per the device profile): whether a scene can be shown on it in the simulator.
 - Whether `UIScreen._exclusionArea` (the camera cutout) should feed the safe-area logic.
 
+## Invariant to keep
+
+The corner wedges stay fully covered (0017). The per-corner kernels must pass the same "every pixel outside the shape" scan with different radii per corner, including a zero-radius corner that stays pointy.
+
 ## What lands
 
 Four-radius kernels, mask-cache keys that carry four radii, and the rotation mapping with its probe in the diary.
