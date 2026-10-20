@@ -21,6 +21,9 @@
         private var pipelines: [String: MTLRenderPipelineState] = [:]
         private var scratch: [String: MTLTexture] = [:]
 
+        /// Fetch between texels to apply two weights at once. Off only to measure what it saves.
+        var usesPairedTaps = true
+
         init?(device: MTLDevice? = MTLCreateSystemDefaultDevice()) {
             guard let device, let queue = device.makeCommandQueue(), let library = Self.library(for: device) else {
                 Self.logger.error("Clear glass cannot start: no Metal device, queue or shader library.")
@@ -181,20 +184,20 @@
             else { return false }
 
             var sourceSize = SIMD2<Float>(Float(source.width), Float(source.height))
-            var weightsA = kernelA.weights
-            var weightsB = kernelB.weights
+            var tapsA = usesPairedTaps ? kernelA.pairedTaps : kernelA.plainTaps
+            var tapsB = usesPairedTaps ? kernelB.pairedTaps : kernelB.plainTaps
             func bindBlur(_ encoder: MTLRenderCommandEncoder, step: SIMD2<Float>) {
                 var parameters = BlurParameters(
-                    step: step, radiusA: Int32(kernelA.radius), radiusB: Int32(kernelB.radius), mixA: blur.coreWeight,
+                    step: step, tapsA: Int32(tapsA.count - 1), tapsB: Int32(tapsB.count - 1), mixA: blur.coreWeight,
                     pad: 0)
                 // Each value is copied into the command stream during the call.
                 unsafe encoder.setVertexBytes(&sourceSize, length: MemoryLayout<SIMD2<Float>>.size, index: 0)
                 unsafe encoder.setFragmentBytes(&sourceSize, length: MemoryLayout<SIMD2<Float>>.size, index: 0)
                 unsafe encoder.setFragmentBytes(&parameters, length: MemoryLayout<BlurParameters>.stride, index: 1)
-                unsafe weightsA.withUnsafeBytes {
+                unsafe tapsA.withUnsafeBytes {
                     if let base = $0.baseAddress { encoder.setFragmentBytes(base, length: $0.count, index: 2) }
                 }
-                unsafe weightsB.withUnsafeBytes {
+                unsafe tapsB.withUnsafeBytes {
                     if let base = $0.baseAddress { encoder.setFragmentBytes(base, length: $0.count, index: 3) }
                 }
             }
@@ -271,8 +274,8 @@
     /// The layout of the shader's `BlurUniforms`.
     private struct BlurParameters {
         var step: SIMD2<Float>
-        var radiusA: Int32
-        var radiusB: Int32
+        var tapsA: Int32
+        var tapsB: Int32
         var mixA: Float
         var pad: Float
     }

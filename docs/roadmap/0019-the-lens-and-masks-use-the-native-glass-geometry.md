@@ -4,7 +4,7 @@ blocked-by:
 date: 2026-10-20
 ---
 
-# 0019 — The lens matches native clear glass, for any shape
+# 0019 — Clear glass matches native clear glass, for any shape
 
 The goal: the lens reproduces native `clear` Liquid Glass, measured by bitmap similarity in Glass Lab, for any shape.
 Work is ordered by what depends on what, because optics tuned against the wrong shape is wasted and a faster shader that is
@@ -33,3 +33,16 @@ up to about 60 px, decaying to zero (fit still saturates at its bound; refit wit
 
 CI (deferred by the owner), the foreground highlight and the background pass beyond what clear glass needs, and the CPU side
 that fills Apple's uniforms (a dynamic capture would answer it; revisit only if the fit stalls).
+
+## Status (2026-10-20, end of the session)
+
+Done: the shape as a distance field (analytic with continuous corners and a radius per corner, verified against Apple's shader;
+any path through an exact distance transform), the two-Gaussian blur, the tone, the ring outside the edge, the rim, a view
+(`ClearGlassUIView`) and Glass Lab's `clear` mode; paired-tap blur (25 to 32% less GPU time). Similarity against native clear
+glass over 8 shapes and 4 backgrounds: mean 92.8, min 88.1 (the old lens: about 30; doing nothing: about 52). ADR-0008, diary
+2026-10-20-13.
+
+Not done, in the order they matter: (1) the rim band 3 to 15 px inside the edge, 41 to 55% of what is left; (2) the live
+backdrop (`ClearGlassUIView` takes a still image; the lens's capture coordinator is not wired in); (3) a SwiftUI wrapper;
+(4) regular, tinted and interactive glass; (5) the wide halo at half resolution; (6) the roadmap 0016 corner API on the lens.
+
