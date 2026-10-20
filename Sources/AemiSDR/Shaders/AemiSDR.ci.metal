@@ -22,6 +22,15 @@
 #include <CoreImage/CoreImage.h>
 using namespace metal;
 
+/**
+ * Half a pixel. `dest.coord()` is the centre of the pixel being shaded, which for the outermost row of a
+ * shape that fills its extent lies half a pixel INSIDE the shape's edge. A mask that reaches full strength
+ * only AT the edge would therefore leave that row short (a hard edge would leave it empty), and the corner
+ * wedges and edge rows must be fully covered. Adding this to the signed distance puts the edge on the
+ * boundary of the outermost pixel instead of half a pixel beyond it.
+ */
+constant float kPixelCenterBias = 0.5f;
+
 //======================================================================
 // MARK: - Mathematical Helper Functions (internal, not exported)
 //======================================================================
@@ -259,7 +268,7 @@ extern "C" { namespace coreimage {
         float2 half_size = max(float2(widthPx, heightPx) * 0.5f, float2(1.0f));
         float2 p         = dest.coord() - float2(widthPx * 0.5f, heightPx * 0.5f);
 
-        float dist  = rounded_rect_sdf(p, half_size, max(cornerRadiusPx, 0.0f));
+        float dist  = rounded_rect_sdf(p, half_size, max(cornerRadiusPx, 0.0f)) + kPixelCenterBias;
         float alpha = distance_to_alpha(dist, max(fadeInWidthPx, 0.0f));
 
         if (inverted > 0.5f) alpha = 1.0f - alpha;
@@ -300,7 +309,7 @@ extern "C" { namespace coreimage {
 
         float n = (exponent > 1.0f) ? clamp(exponent, 2.0f, 100.0f) : 5.0f;
 
-        float dist = simple_squircle_sdf(p, half_size, cornerRadiusPx, n);
+        float dist = simple_squircle_sdf(p, half_size, cornerRadiusPx, n) + kPixelCenterBias;
         float alpha = distance_to_alpha(dist, max(fadeInWidthPx, 0.0f));
 
         if (inverted > 0.5f) alpha = 1.0f - alpha;
@@ -378,7 +387,7 @@ extern "C" { namespace coreimage {
         float2 half_size = max(float2(widthPx, heightPx) * 0.5f, float2(1.0f));
         float2 p         = dest.coord() - float2(widthPx * 0.5f, heightPx * 0.5f);
 
-        float dist = rounded_rect_sdf(p, half_size, max(cornerRadiusPx, 0.0f));
+        float dist = rounded_rect_sdf(p, half_size, max(cornerRadiusPx, 0.0f)) + kPixelCenterBias;
 
         float alpha;
         if (fadeInWidthPx <= 0.0f) {
@@ -595,7 +604,7 @@ extern "C" { namespace coreimage {
 
         float n = (exponent > 1.0f) ? clamp(exponent, 2.0f, 100.0f) : 5.0f;
 
-        float dist = simple_squircle_sdf(p, half_size, cornerRadiusPx, n);
+        float dist = simple_squircle_sdf(p, half_size, cornerRadiusPx, n) + kPixelCenterBias;
 
         float alpha;
         if (fadeInWidthPx <= 0.0f) {
