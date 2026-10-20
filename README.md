@@ -239,5 +239,4 @@ The plugin is located in `Plugins/MetalShaderBuildPlugin/` and uses `MetalCompil
 
 ## License
 
-This software is available under either the [MIT License](LICENSE-MIT) or the
-[Mozilla Public License 2.0](LICENSE), at your option.
+This software is licensed under the [MIT License](LICENSE). Third-party dependencies retain their own licences.
