@@ -80,6 +80,17 @@ package enum _InternedKeys {
 
         // Private UIKit Properties
         @Interned static var screenCornerRadiusKey = "_displayCornerRadius"
+        @Interned static var traitCornerRadiusKey = "displayCornerRadius"
+
+        // Display corners, per corner: UIWindowScene -> FBSScene -> UIApplicationSceneSettings ->
+        // BSCornerRadiusConfiguration (diary 2026-10-20-02).
+        @Interned static var sceneBackingKey = "_FBSScene"
+        @Interned static var sceneSettingsKey = "settings"
+        @Interned static var cornerConfigurationKey = "cornerRadiusConfiguration"
+        @Interned static var cornerTopLeftKey = "topLeft"
+        @Interned static var cornerTopRightKey = "topRight"
+        @Interned static var cornerBottomLeftKey = "bottomLeft"
+        @Interned static var cornerBottomRightKey = "bottomRight"
 
         // CABackdropLayer (private API — capture composited content behind a view)
         @Interned static var backdropLayerClass = "CABackdropLayer"
