@@ -30,14 +30,8 @@
         )
 
         private var renderer: LiquidLensRenderer?
-        private var sourceTexture: MTLTexture?
+        private var source: TextureSourceLease?
         private var configuration: LiquidLensConfiguration
-
-        /// Closure to fire from each `MTLCommandBuffer` completion handler so the
-        /// `ZeroCopyTextureBridge` slot backing the current source texture can be
-        /// reclaimed. Set by `setSourceTexture(_:onConsumed:)` and re-used by any
-        /// follow-up render driven by `layoutSubviews` until a new texture arrives.
-        private var sourceTextureOnConsumed: (@Sendable () -> Void)?
 
         /// Optional shape path provider for masking the Metal layer to match the parent view's clip shape.
         var clipShapePath: ShapePathProvider? {
@@ -110,7 +104,7 @@
         /// Sets the source image to be distorted by the lens effect.
         public func setSourceImage(_ image: CGImage) {
             guard let renderer else { return }
-            sourceTexture = renderer.makeTexture(from: image)
+            source = renderer.makeTexture(from: image).map { TextureSourceLease(texture: $0) }
             renderIfNeeded()
         }
 
@@ -129,19 +123,11 @@
         ///
         /// - Parameters:
         ///   - texture: The Metal texture to render with.
-        ///   - onConsumed: Optional closure invoked from the command-buffer
-        ///     completion handler of every render driven by this texture. Used by
-        ///     `ZeroCopyTextureBridge` to reclaim its slot once the GPU is done.
+        ///   - onConsumed: Called once after the source is replaced or the view is destroyed AND all GPU reads
+        ///     using it have completed. The callback may run on a completion thread. The producer must not
+        ///     overwrite the texture until this callback, including when the view cannot obtain a drawable yet.
         public func setSourceTexture(_ texture: MTLTexture, onConsumed: (@Sendable () -> Void)? = nil) {
-            // If a previous capture's consumer is still pending (the prior texture
-            // was never GPU-rendered), fire it now to release that slot. Without
-            // this, two captures in quick succession lose the first consumer and
-            // the bridge slot is leaked.
-            if let stale = sourceTextureOnConsumed {
-                stale()
-            }
-            sourceTexture = texture
-            sourceTextureOnConsumed = onConsumed
+            source = TextureSourceLease(texture: texture, onConsumed: onConsumed)
             renderIfNeeded()
         }
 
@@ -193,8 +179,7 @@
             super.layoutSubviews()
             syncDrawableMetrics()
             updateClipMask()
-            // Always attempt a render: `renderIfNeeded` is a no-op when no
-            // source texture is set yet (early `drainPendingConsumer` exit).
+            // Always attempt a render: `renderIfNeeded` is a no-op when no source texture is set yet.
             // Gating this on `metricsChanged` skipped the retry that lets a
             // late-arriving source texture redraw on the next layout pass —
             // visible as "starts blank, fixes on interaction" the first time
@@ -255,23 +240,11 @@
         // MARK: - Rendering
 
         private func renderIfNeeded() {
-            // On every early-return path, fire and clear `sourceTextureOnConsumed`
-            // — the texture was never handed to the GPU, so the bridge slot
-            // wouldn't otherwise be reclaimed (it would stay in-flight forever).
-            // Without this, three thermally-throttled drops permanently exhaust
-            // the bridge's 3-slot ring.
-            guard let renderer, let sourceTexture else {
-                drainPendingConsumer()
-                return
-            }
-            guard metalLayer.drawableSize.width > 0, metalLayer.drawableSize.height > 0 else {
-                drainPendingConsumer()
-                return
-            }
-            guard let drawable = metalLayer.nextDrawable() else {
-                drainPendingConsumer()
-                return
-            }
+            // Keep the source reserved on an early exit: a later layout/configuration update may retry it.
+            // Replacement or view destruction drops that hold; GPU submissions own independent holds below.
+            guard let renderer, let source else { return }
+            guard metalLayer.drawableSize.width > 0, metalLayer.drawableSize.height > 0 else { return }
+            guard let drawable = metalLayer.nextDrawable() else { return }
 
             let textureSize = SIMD2<Float>(
                 Float(metalLayer.drawableSize.width),
@@ -282,28 +255,15 @@
                 scale: Float(metalLayer.contentsScale)
             )
 
-            // The bridge's per-frame consumer must fire exactly once. The first
-            // successful render of a freshly captured texture wires it into a
-            // command-buffer completion handler; subsequent `renderIfNeeded`
-            // calls (driven by `layoutSubviews`, `didMoveToWindow`, etc.) reuse
-            // the same `sourceTexture` but pass `nil` so they don't queue a
-            // second `markCompleted` against the same slot.
-            let consumed = sourceTextureOnConsumed
-            sourceTextureOnConsumed = nil
+            let read = source.beginRead()
 
             renderer.render(
-                sourceTexture: sourceTexture,
+                sourceTexture: source.texture,
                 uniforms: uniforms,
                 pipelineKey: configuration.pipelineKey(),
                 drawable: drawable,
-                onCompleted: consumed
+                onCompleted: { read.finish() }
             )
-        }
-
-        private func drainPendingConsumer() {
-            guard let pending = sourceTextureOnConsumed else { return }
-            sourceTextureOnConsumed = nil
-            pending()
         }
     }
 #endif

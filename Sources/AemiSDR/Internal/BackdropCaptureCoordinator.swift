@@ -466,14 +466,12 @@
         // MARK: - Bridge
 
         /// The captured dimensions this coordinator most recently rendered at.
-        /// Used to size-bucket the pooled bridge.
+        /// Used to select an exactly sized pooled bridge.
         private var bridgeWidth: Int = 0
         private var bridgeHeight: Int = 0
 
-        /// Lazily acquires (or rebuckets) a pooled bridge sized for the given
-        /// capture dimensions. Subsequent calls with similar dimensions reuse
-        /// the same physical IOSurface ring; consumers with different
-        /// dimensions sit in different buckets.
+        /// Lazily acquires a pooled bridge for the exact capture dimensions.
+        /// Equal dimensions share a ring; unequal dimensions never resize each other's backing buffers.
         private func ensureBridge(width: Int, height: Int) {
             guard let effectView else { return }
             let device: MTLDevice?
@@ -484,13 +482,13 @@
             }
             guard let device else { return }
 
-            // Same bucket as last time — keep the current bridge handle.
+            // Same dimensions as last time — keep the current bridge handle.
             if bridge != nil, width == bridgeWidth, height == bridgeHeight {
                 return
             }
 
             // Dimensions changed (or first call): unregister from the old
-            // bridge, acquire one from the pool for the new bucket, register.
+            // bridge, acquire an exactly sized bridge from the pool, register.
             if let oldBridge = bridge, let oldID = bridgeConsumerID {
                 oldBridge.unregister(oldID)
             }
@@ -506,9 +504,8 @@
         func tearDown() {
             stopDisplayLink()
             removeCaptureView()
-            // Release this coordinator's slot bookkeeping from the pooled bridge
-            // so other consumers of the same bucket don't pay for our stale
-            // in-flight set.
+            // Retire the consumer. Its outstanding source/GPU reservations remain protected until their
+            // callbacks complete, even though this coordinator no longer owns the bridge.
             if let bridge, let id = bridgeConsumerID {
                 bridge.unregister(id)
             }
@@ -608,39 +605,44 @@
 
         private func installObservers() {
             let center = NotificationCenter.default
-            observers.append(center.addObserver(
-                forName: UIApplication.didEnterBackgroundNotification,
-                object: nil, queue: .main
-            ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.broadcast { $0.handleBackground() } }
-            })
-            observers.append(center.addObserver(
-                forName: UIApplication.willEnterForegroundNotification,
-                object: nil, queue: .main
-            ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.broadcast { $0.handleForeground() } }
-            })
+            observers.append(
+                center.addObserver(
+                    forName: UIApplication.didEnterBackgroundNotification,
+                    object: nil, queue: .main
+                ) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.broadcast { $0.handleBackground() } }
+                })
+            observers.append(
+                center.addObserver(
+                    forName: UIApplication.willEnterForegroundNotification,
+                    object: nil, queue: .main
+                ) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.broadcast { $0.handleForeground() } }
+                })
             // `UIAccessibility.reduceMotionStatusDidChangeNotification` is
             // annotated `@unsafe` on iOS 26 SDK (it isn't on every SDK), so
             // wrap the assignment expression accordingly.
-            observers.append(unsafe center.addObserver(
-                forName: UIAccessibility.reduceMotionStatusDidChangeNotification,
-                object: nil, queue: .main
-            ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.broadcast { $0.handleRefreshRateChange() } }
-            })
-            observers.append(center.addObserver(
-                forName: Notification.Name.NSProcessInfoPowerStateDidChange,
-                object: nil, queue: .main
-            ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.broadcast { $0.handleRefreshRateChange() } }
-            })
-            observers.append(center.addObserver(
-                forName: ProcessInfo.thermalStateDidChangeNotification,
-                object: nil, queue: .main
-            ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.broadcast { $0.handleRefreshRateChange() } }
-            })
+            observers.append(
+                unsafe center.addObserver(
+                    forName: UIAccessibility.reduceMotionStatusDidChangeNotification,
+                    object: nil, queue: .main
+                ) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.broadcast { $0.handleRefreshRateChange() } }
+                })
+            observers.append(
+                center.addObserver(
+                    forName: Notification.Name.NSProcessInfoPowerStateDidChange,
+                    object: nil, queue: .main
+                ) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.broadcast { $0.handleRefreshRateChange() } }
+                })
+            observers.append(
+                center.addObserver(
+                    forName: ProcessInfo.thermalStateDidChangeNotification,
+                    object: nil, queue: .main
+                ) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.broadcast { $0.handleRefreshRateChange() } }
+                })
         }
 
         /// Iterates a snapshot of `allObjects` so a coordinator can safely
