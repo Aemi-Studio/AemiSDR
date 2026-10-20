@@ -96,6 +96,8 @@ macOS `swift test` for iOS-only code, a simulator result claimed for a device.
 
 Private API is why this package exists and the largest risk it ships. Every use obeys all of these:
 
+(Implemented by Abysm, `../Abysm`; AemiSDR declares the entries.)
+
 1. **Declared once.** Each class, selector, KVC key and C symbol is one entry in a registry, with its
    expected owning image (`QuartzCore`, `UIKitCore`) and expected type encoding.
 2. **Resolved once, verified, cached.** `objc_lookUpClass` / `dlsym(RTLD_DEFAULT, "OBJC_CLASS_$_…")`,
