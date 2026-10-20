@@ -48,8 +48,6 @@ package enum _InternedKeys {
     @Interned static var darkHueKey = "darkeningTintHue"
     @Interned static var darkSatKey = "darkeningTintSaturation"
     @Interned static var zoomKey = "zoom"
-    @Interned static var lightenGrayFlag = "lightenGrayscaleWithSourceOver"
-    @Interned static var darkenCompFlag = "darkenWithSourceOver"
 
     // MARK: - iOS-Only Keys
 
@@ -105,9 +103,6 @@ package enum _InternedKeys {
         @Interned static var backdropCaptureOnlyKey = "captureOnly"
         @Interned static var backdropDisablesOccludedKey = "disablesOccludedBackdropBlurs"
         @Interned static var backdropReducesBitDepthKey = "reducesCaptureBitDepth"
-        @Interned static var backdropAllowsInPlaceKey = "allowsInPlaceFiltering"
-        @Interned static var backdropRectKey = "backdropRect"
-        @Interned static var backdropUpdateRateKey = "updateRate"
     #endif
 
     // MARK: - macOS-Only Keys
