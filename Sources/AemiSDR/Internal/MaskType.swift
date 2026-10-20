@@ -73,13 +73,14 @@ public enum MaskType: Sendable, Equatable, Hashable, CaseIterable {
     ///   - cornerStyle: The corner style to use (.circular or .continuous)
     ///   - transition: The transition algorithm (.linear or .eased)
     public init(cornerStyle: RoundedCornerStyle, transition: TransitionAlgorithm) {
-        self = switch (cornerStyle, transition) {
-        case (.circular, .linear): .roundedRectangle
-        case (.circular, .eased): .easedRoundedRectangle
-        case (.continuous, .linear): .superellipseSquircle
-        case (.continuous, .eased): .easedSuperellipseSquircle
-        @unknown default: .easedSuperellipseSquircle
-        }
+        self =
+            switch (cornerStyle, transition) {
+            case (.circular, .linear): .roundedRectangle
+            case (.circular, .eased): .easedRoundedRectangle
+            case (.continuous, .linear): .superellipseSquircle
+            case (.continuous, .eased): .easedSuperellipseSquircle
+            @unknown default: .easedSuperellipseSquircle
+            }
     }
 }
 
@@ -112,48 +113,66 @@ extension MaskType {
 
         switch self {
         case .linearTopToBottom:
-            return (CIKernelCache.linearMask,
-                    [scaledWidth, scaledHeight, startOffset, inverted ? 1.0 : 0.0])
+            return (
+                CIKernelCache.linearMask,
+                [scaledWidth, scaledHeight, startOffset, inverted ? 1.0 : 0.0]
+            )
 
         case .linearBottomToTop:
-            return (CIKernelCache.linearMask,
-                    [scaledWidth, scaledHeight, startOffset, inverted ? 0.0 : 1.0])
+            return (
+                CIKernelCache.linearMask,
+                [scaledWidth, scaledHeight, startOffset, inverted ? 0.0 : 1.0]
+            )
 
         case .easeInTopToBottom:
-            return (CIKernelCache.easeInAlphaMask,
-                    [scaledWidth, scaledHeight, startOffset, 0.0, inv])
+            return (
+                CIKernelCache.easeInAlphaMask,
+                [scaledWidth, scaledHeight, startOffset, 0.0, inv]
+            )
 
         case .easeInBottomToTop:
-            return (CIKernelCache.easeInAlphaMask,
-                    [scaledWidth, scaledHeight, startOffset, 1.0, inv])
+            return (
+                CIKernelCache.easeInAlphaMask,
+                [scaledWidth, scaledHeight, startOffset, 1.0, inv]
+            )
 
         case .roundedRectangle:
             let cr = cornerRadius * scale
             let fw = fadeWidth * scale
-            return (CIKernelCache.roundedRectAlphaMask,
-                    [scaledWidth, scaledHeight, cr, fw, inv])
+            return (
+                CIKernelCache.roundedRectAlphaMask,
+                [scaledWidth, scaledHeight, cr, fw, inv]
+            )
 
         case .easedRoundedRectangle:
             let cr = cornerRadius * scale
             let fw = fadeWidth * scale
-            return (CIKernelCache.roundedRectEaseAlphaMask,
-                    [scaledWidth, scaledHeight, cr, fw, inv])
+            return (
+                CIKernelCache.roundedRectEaseAlphaMask,
+                [scaledWidth, scaledHeight, cr, fw, inv]
+            )
 
         case .superellipseSquircle:
             let cr = cornerRadius * scale
             let fw = fadeWidth * scale
-            return (CIKernelCache.superellipseAlphaMask,
-                    [scaledWidth, scaledHeight, cr, fw, 2, inv])
+            return (
+                CIKernelCache.superellipseAlphaMask,
+                [scaledWidth, scaledHeight, cr, fw, 2, inv]
+            )
 
         case .easedSuperellipseSquircle:
             let cr = cornerRadius * scale
             let fw = fadeWidth * scale
-            return (CIKernelCache.superellipseEaseAlphaMask,
-                    [scaledWidth, scaledHeight, cr, fw, 2, inv])
+            return (
+                CIKernelCache.superellipseEaseAlphaMask,
+                [scaledWidth, scaledHeight, cr, fw, 2, inv]
+            )
 
         case .uniform:
-            return (CIKernelCache.uniformMask,
-                    [scaledWidth, scaledHeight])
+            return (
+                CIKernelCache.uniformMask,
+                [scaledWidth, scaledHeight]
+            )
 
         case .easeInCenterVertical:
             // Caller-controlled inversion: the underlying field peaks at
@@ -163,30 +182,42 @@ extension MaskType {
             // consumer's alpha convention — variable blur (alpha=1→blur)
             // passes `inverted: true` to get the spotlight pattern;
             // SwiftUI .mask (alpha=1→reveal) leaves `inverted: false`.
-            return (CIKernelCache.easeInCenterMask,
-                    [scaledWidth, scaledHeight, startOffset, inv])
+            return (
+                CIKernelCache.easeInCenterMask,
+                [scaledWidth, scaledHeight, startOffset, inv]
+            )
 
         case .linearLeftToRight:
-            return (CIKernelCache.linearMaskHorizontal,
-                    [scaledWidth, scaledHeight, startOffset, inverted ? 1.0 : 0.0])
+            return (
+                CIKernelCache.linearMaskHorizontal,
+                [scaledWidth, scaledHeight, startOffset, inverted ? 1.0 : 0.0]
+            )
 
         case .linearRightToLeft:
-            return (CIKernelCache.linearMaskHorizontal,
-                    [scaledWidth, scaledHeight, startOffset, inverted ? 0.0 : 1.0])
+            return (
+                CIKernelCache.linearMaskHorizontal,
+                [scaledWidth, scaledHeight, startOffset, inverted ? 0.0 : 1.0]
+            )
 
         case .easeInLeftToRight:
-            return (CIKernelCache.easeInAlphaMaskHorizontal,
-                    [scaledWidth, scaledHeight, startOffset, 0.0, inv])
+            return (
+                CIKernelCache.easeInAlphaMaskHorizontal,
+                [scaledWidth, scaledHeight, startOffset, 0.0, inv]
+            )
 
         case .easeInRightToLeft:
-            return (CIKernelCache.easeInAlphaMaskHorizontal,
-                    [scaledWidth, scaledHeight, startOffset, 1.0, inv])
+            return (
+                CIKernelCache.easeInAlphaMaskHorizontal,
+                [scaledWidth, scaledHeight, startOffset, 1.0, inv]
+            )
 
         case .easeInCenterHorizontal:
             // X-axis mirror of `.easeInCenterVertical`: caller controls
             // inversion. See the vertical case for the convention notes.
-            return (CIKernelCache.easeInCenterMaskHorizontal,
-                    [scaledWidth, scaledHeight, startOffset, inv])
+            return (
+                CIKernelCache.easeInCenterMaskHorizontal,
+                [scaledWidth, scaledHeight, startOffset, inv]
+            )
         }
     }
 }
@@ -258,15 +289,25 @@ final class MaskCacheKeyBox: NSObject {
 /// Process-wide mask cache.
 ///
 /// `NSCache` evicts under memory pressure and is thread-safe by contract.
-/// A modest count limit caps worst-case retention; mask images are small
-/// (single-channel alpha, bounded by view size) so the upper bound on
-/// memory is comfortable.
+/// Retention is bounded by **bytes**, not entries: a screen-sized mask is
+/// ~12–16 MiB of backing memory, so a count limit alone would allow hundreds
+/// of MiB. `totalCostLimit` is the real budget; the count limit only stops an
+/// unbounded key population of tiny masks.
 enum MaskCache {
+    /// Upper bound on retained mask backing memory: 32 MiB.
+    static let byteBudget = 32 * 1024 * 1024
+
     nonisolated(unsafe) static let storage: NSCache<MaskCacheKeyBox, CGImage> = {
         let cache = NSCache<MaskCacheKeyBox, CGImage>()
         cache.countLimit = 32
+        cache.totalCostLimit = byteBudget
         return cache
     }()
+
+    /// The backing bytes a cached image retains.
+    static func cost(of image: CGImage) -> Int {
+        image.bytesPerRow * image.height
+    }
 
     /// Returns the cached image for `key`, generating and inserting one on miss.
     static func image(for key: MaskCacheKey, generate: () -> CGImage?) -> CGImage? {
@@ -275,7 +316,7 @@ enum MaskCache {
         // can't see that contract, so opt in explicitly here.
         if let cached = unsafe storage.object(forKey: box) { return cached }
         guard let image = generate() else { return nil }
-        unsafe storage.setObject(image, forKey: box)
+        unsafe storage.setObject(image, forKey: box, cost: cost(of: image))
         return image
     }
 
@@ -291,6 +332,6 @@ enum MaskCache {
     /// image off the main thread and need to publish it back into the cache.
     static func insert(_ image: CGImage, for key: MaskCacheKey) {
         let box = MaskCacheKeyBox(key)
-        unsafe storage.setObject(image, forKey: box)
+        unsafe storage.setObject(image, forKey: box, cost: cost(of: image))
     }
 }
