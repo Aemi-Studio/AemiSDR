@@ -1,0 +1,27 @@
+name: GlassLab
+options:
+  bundleIdPrefix: studio.aemi
+  deploymentTarget:
+    iOS: "26.0"
+
+packages:
+  AemiSDR:
+    path: ../..
+
+targets:
+  GlassLab:
+    type: application
+    platform: iOS
+    sources:
+      - Sources/GlassLab
+    dependencies:
+      - package: AemiSDR
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: true
+        INFOPLIST_KEY_UILaunchScreen_Generation: true
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
+        INFOPLIST_KEY_UIStatusBarHidden: true
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
