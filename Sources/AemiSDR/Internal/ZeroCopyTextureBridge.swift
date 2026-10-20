@@ -14,7 +14,7 @@
     ///
     /// Multiple `BackdropCaptureCoordinator`s can share a single bridge (and
     /// therefore a single IOSurface ring) when their target capture dimensions
-    /// fall into the same bucket. Each consumer tracks its own in-flight set
+    /// are exactly equal. Each consumer tracks its own in-flight set
     /// and generation independently, so completion handlers from different
     /// consumers don't interfere.
     struct BridgeConsumerID: Hashable, Sendable {
@@ -34,9 +34,8 @@
     ///
     /// ## Multi-consumer slot ring
     ///
-    /// The bridge holds an N-slot ring sized to `max(registeredConsumers + 2, 3)`
-    /// so that each consumer can always find a slot the GPU isn't currently
-    /// reading. Each `render(consumer:...)` writes that consumer's content into
+    /// The bridge holds a bounded ring with at least three slots, growing as consumers register.
+    /// A frame is skipped when every slot is reserved. Each `render(consumer:...)` writes content into
     /// a slot not held by any consumer, marks it in-flight on behalf of the
     /// consumer, and returns a `ConsumableTexture` whose `onConsumed` closure
     /// releases it back when the GPU finishes.
@@ -49,7 +48,6 @@
     /// `CGContext` over an unlocked `CVPixelBuffer`.
     @MainActor
     final class ZeroCopyTextureBridge {
-
         private static let logger = Logger(
             subsystem: "studio.aemi.AemiSDR",
             category: "ZeroCopyTextureBridge"
@@ -64,7 +62,7 @@
             CGColorSpace(name: CGColorSpace.displayP3) ?? CGColorSpaceCreateDeviceRGB()
         private static let bitmapInfo =
             CGImageAlphaInfo.premultipliedFirst.rawValue
-                | CGBitmapInfo.byteOrder32Little.rawValue
+            | CGBitmapInfo.byteOrder32Little.rawValue
 
         private var textureCache: CVMetalTextureCache?
 
@@ -83,9 +81,12 @@
         private nonisolated let stateLock = NSLock()
         private nonisolated(unsafe) var inFlight: [BridgeConsumerID: Set<Int>] = [:]
         private nonisolated(unsafe) var generation: [BridgeConsumerID: UInt] = [:]
+        private nonisolated(unsafe) var retiredConsumers: Set<BridgeConsumerID> = []
         nonisolated(unsafe) private static var nextConsumerID: UInt = 0
 
-        private struct BufferSlot {
+        // Completion closures retain a value copy of this metadata; they never read or write pixel memory.
+        // Keeping all three wrappers alive is required even after resize/unregister releases the ring.
+        private struct BufferSlot: @unchecked Sendable {
             var pixelBuffer: CVPixelBuffer?
             var cvTexture: CVMetalTexture?
             var texture: MTLTexture?
@@ -120,8 +121,8 @@
             let id = unsafe BridgeConsumerID(raw: Self.nextConsumerID)
             unsafe inFlight[id] = []
             unsafe generation[id] = 0
-            // Grow the ring so even with all consumers maximally in-flight we
-            // still have a writable slot.
+            // Give an additional consumer capacity; a delayed GPU can still exhaust the ring, in which case
+            // render skips a frame rather than overwriting a reservation.
             let target = max(unsafe inFlight.count + 2, 3)
             if slots.count < target {
                 let needed = target - slots.count
@@ -137,14 +138,18 @@
             return id
         }
 
-        /// Removes a consumer's bookkeeping. Slots that were in-flight on its
-        /// behalf are freed immediately — by contract the consumer must not
-        /// invoke `markCompleted` after unregistering.
+        /// Rejects new captures for this consumer. Outstanding reservations remain until completion;
+        /// unregistering a view does not mean the GPU has finished reading its last source.
         func unregister(_ consumer: BridgeConsumerID) {
             stateLock.lock()
             defer { stateLock.unlock() }
-            unsafe inFlight.removeValue(forKey: consumer)
-            unsafe generation.removeValue(forKey: consumer)
+            guard let pending = unsafe inFlight[consumer] else { return }
+            if pending.isEmpty {
+                unsafe inFlight.removeValue(forKey: consumer)
+                unsafe generation.removeValue(forKey: consumer)
+            } else {
+                unsafe retiredConsumers.insert(consumer)
+            }
         }
 
         // MARK: - Slot ring
@@ -164,6 +169,12 @@
             // fails and it no-ops).
             stateLock.lock()
             defer { stateLock.unlock() }
+            // Retired consumers only refer to old physical buffers, retained by their completion closures.
+            for id in unsafe retiredConsumers {
+                unsafe inFlight.removeValue(forKey: id)
+                unsafe generation.removeValue(forKey: id)
+            }
+            unsafe retiredConsumers.removeAll()
             for (id, _) in unsafe inFlight {
                 unsafe inFlight[id] = []
                 unsafe generation[id] = unsafe (generation[id] ?? 0) &+ 1
@@ -266,6 +277,11 @@
             defer { stateLock.unlock() }
             guard unsafe self.generation[consumer] == generation else { return }
             unsafe inFlight[consumer]?.remove(slotID)
+            if unsafe retiredConsumers.contains(consumer), unsafe inFlight[consumer]?.isEmpty == true {
+                unsafe inFlight.removeValue(forKey: consumer)
+                unsafe self.generation.removeValue(forKey: consumer)
+                unsafe retiredConsumers.remove(consumer)
+            }
         }
 
         // MARK: - Render
@@ -286,6 +302,10 @@
         ) -> ConsumableTexture? {
             guard width > 0, height > 0 else { return nil }
             guard textureCache != nil else { return nil }
+            let registered = stateLock.withLock {
+                unsafe generation[consumer] != nil && !retiredConsumers.contains(consumer)
+            }
+            guard registered else { return nil }
 
             ensureBuffers(width: width, height: height)
 
@@ -303,15 +323,17 @@
             // the pointer is only guaranteed valid inside this lock/unlock pair.
             guard let baseAddress = unsafe CVPixelBufferGetBaseAddress(pixelBuffer) else { return nil }
             let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
-            guard let context = unsafe CGContext(
-                data: baseAddress,
-                width: width,
-                height: height,
-                bitsPerComponent: 8,
-                bytesPerRow: bytesPerRow,
-                space: colorSpace,
-                bitmapInfo: Self.bitmapInfo
-            ) else { return nil }
+            guard
+                let context = unsafe CGContext(
+                    data: baseAddress,
+                    width: width,
+                    height: height,
+                    bitsPerComponent: 8,
+                    bytesPerRow: bytesPerRow,
+                    space: colorSpace,
+                    bitmapInfo: Self.bitmapInfo
+                )
+            else { return nil }
 
             actions(context)
 
@@ -324,8 +346,10 @@
 
             return ConsumableTexture(
                 texture: texture,
-                onConsumed: { [weak self] in
-                    self?.markCompleted(slotID, generation: capturedGeneration, consumer: consumer)
+                onConsumed: { [weak self, slot] in
+                    withExtendedLifetime(slot) {
+                        self?.markCompleted(slotID, generation: capturedGeneration, consumer: consumer)
+                    }
                 }
             )
         }
@@ -334,24 +358,18 @@
     // MARK: - Bridge Pool
 
     /// Process-wide pool of `ZeroCopyTextureBridge` instances keyed on
-    /// `(device, bucketed-size)`. Multiple coordinators capturing at similar
-    /// dimensions reuse the same physical IOSurface ring instead of each
-    /// allocating ~26 MB.
-    ///
-    /// Buckets round up to the next power-of-two with a minimum of 256. A
-    /// coordinator capturing at 1002×2173 lands in the (1024, 2176) bucket
-    /// along with anything else in the same range; mixed-dimension scenes
-    /// allocate one bridge per cluster.
+    /// `(device, exact-size)`. Coordinators capturing at equal dimensions reuse the same physical IOSurface ring.
+    /// Unequal dimensions must not share: each render sizes the ring exactly, so rounded keys cause alternating
+    /// captures to reallocate each other's buffers and invalidate every outstanding generation.
     ///
     /// Storage is `weak`-referenced: a bridge is released when no consumer
     /// holds a strong reference, freeing its IOSurface ring.
     @MainActor
     enum ZeroCopyTextureBridgePool {
-
         private struct Key: Hashable {
             let device: ObjectIdentifier
-            let widthBucket: Int
-            let heightBucket: Int
+            let width: Int
+            let height: Int
         }
 
         private final class WeakBridge {
@@ -365,8 +383,8 @@
         static func bridge(for device: MTLDevice, width: Int, height: Int) -> ZeroCopyTextureBridge {
             let key = Key(
                 device: ObjectIdentifier(device),
-                widthBucket: bucket(width),
-                heightBucket: bucket(height)
+                width: width,
+                height: height
             )
             if let existing = pool[key]?.bridge { return existing }
             let fresh = ZeroCopyTextureBridge(device: device)
@@ -374,15 +392,6 @@
             box.bridge = fresh
             pool[key] = box
             return fresh
-        }
-
-        /// Next power-of-two ≥ value, minimum 256. Caps growth at 8192 (any
-        /// requested dimension above that bucket to itself).
-        private static func bucket(_ value: Int) -> Int {
-            guard value > 0 else { return 256 }
-            var b = 256
-            while b < value, b < 8192 { b <<= 1 }
-            return max(b, value)
         }
     }
 #endif
