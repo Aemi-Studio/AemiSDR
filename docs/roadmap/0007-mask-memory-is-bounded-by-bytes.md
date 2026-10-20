@@ -6,6 +6,8 @@ date: 2026-10-20
 
 # 0007 — Mask memory is bounded by bytes, not by count
 
+Regression: `full size RGBA masks do not retain more than 32 MiB in the shared cache`
+
 ## Done (2026-10-20)
 
 Red: four 2048×2048 RGBA masks retained 64 MiB with `countLimit = 32` — a count bound allows hundreds of MiB at screen size.

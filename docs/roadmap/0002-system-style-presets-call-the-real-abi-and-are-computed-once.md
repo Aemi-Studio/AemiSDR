@@ -6,6 +6,8 @@ date: 2026-10-20
 
 # 0002 — System style presets call the real ABI, map styles, and are computed once
 
+Regression: `classicStylesDoNotUseBackdropSettingsConstants`, `modernMaterialsDoNotCollapseToUltraLight`, `explicitAppearancesResolveIndependently`, `sameStyleAndAppearanceAreStable`
+
 `BackdropBlurConfiguration.systemStyle(_:)` passes `style.rawValue` through `perform(_:with:)` to a
 selector that takes `NSInteger` (`@24@0:8q16`). Probed on the iOS 18.6 and 27.0 simulators: every
 style returns `_UIBackdropViewSettingsUltraLight` (radius 20). Through a typed IMP, 0/1/2 return

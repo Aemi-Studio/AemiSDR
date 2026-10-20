@@ -80,6 +80,8 @@ macOS `swift test` for iOS-only code, a simulator result claimed for a device.
 - Green by the minimum *general* code. Refactor with tests green, one named move at a time.
 - Red and green land in the same commit. Never assert on nothing; never share mutable state between tests.
 - Coverage is measured by behaviour, never by percentage.
+- **Every fix is regression-tested, and the test is shown to fail without it** (revert the fix or mutate it, watch the red, restore). A roadmap record may be `status: done` only if a `Regression:` line cites the tests, in backticks, that guard it; `RegressionEvidenceTests` rejects a done record that cites none or cites one that does not exist.
+- New behaviour is built red first. A probe or experiment is not product code and is kept apart from it; whatever a probe produces that ships gets tests.
 
 ## 2. Performance doctrine
 
