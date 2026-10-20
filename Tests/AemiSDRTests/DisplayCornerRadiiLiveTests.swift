@@ -32,10 +32,10 @@
         }
 
         @Test func `every private symbol the corner reading touches resolved, or is reported as the one that moved`() {
-            PrivateAPI.resetResolutions()
+            RuntimeAccess.resetResolutions()
             _ = UIScreen.main.displayCornerRadii
             // A canary in miniature: on a runtime where UIKit renamed one of these, this names it.
-            let failed = PrivateAPI.failures.map(\.symbol)
+            let failed = RuntimeAccess.failures.map(\.symbol)
             #expect(failed.filter { $0.contains("displayCornerRadius") }.isEmpty, "failed: \(failed)")
         }
 
@@ -46,7 +46,7 @@
             // BSCornerRadiusConfiguration, through Abysm, with the Duo's values. Eight in both left corners, 59 in both
             // right ones, so a swapped getter (topRight read as bottomLeft) cannot hide behind symmetry: use four
             // distinct numbers.
-            let configurationClass = try PrivateClass("BSCornerRadiusConfiguration", in: "BaseBoard")
+            let configurationClass = try RuntimeClass("BSCornerRadiusConfiguration", in: "BaseBoard")
             let allocate = try configurationClass.method("alloc", kind: .class, as: (() -> NSObject?).self)
             let initialise = try configurationClass.method(
                 "initWithTopLeft:bottomLeft:bottomRight:topRight:",
@@ -66,7 +66,7 @@
         }
 
         @Test func `the Duo's own values survive the same round trip`() throws {
-            let configurationClass = try PrivateClass("BSCornerRadiusConfiguration", in: "BaseBoard")
+            let configurationClass = try RuntimeClass("BSCornerRadiusConfiguration", in: "BaseBoard")
             let allocate = try configurationClass.method("alloc", kind: .class, as: (() -> NSObject?).self)
             let initialise = try configurationClass.method(
                 "initWithTopLeft:bottomLeft:bottomRight:topRight:",
