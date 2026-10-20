@@ -1,10 +1,15 @@
 ---
-status: pending
+status: done
 blocked-by: 
 date: 2026-10-20
 ---
 
 # 0007 — Mask memory is bounded by bytes, not by count
+
+## Done (2026-10-20)
+
+Red: four 2048×2048 RGBA masks retained 64 MiB with `countLimit = 32` — a count bound allows hundreds of MiB at screen size.
+Green: `totalCostLimit = 32 MiB` plus per-image cost (`bytesPerRow × height`) on every insert. Retention now bounded by bytes (MaskCacheBudgetTests).
 
 `MaskCache` is an `NSCache` with `countLimit = 32` and no cost. Probed on macOS: `createCGImage` from the
 mask context yields 32 bits per pixel, 12.2 MiB for a 1206×2622 full-screen mask, so 32 entries can hold
