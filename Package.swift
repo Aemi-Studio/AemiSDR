@@ -26,14 +26,18 @@ private let package = Package(
         .package(
             url: "https://github.com/Aemi-Studio/aemi.git",
             revision: "70762bbd2cf97ca8aa37c1608db7b3744db21f53"
-        )
+        ),
+        // Typed, verified private-API access (docs/adr/0002). TEMPORARY local path: Abysm has no remote yet
+        // (its roadmap 0004). Pin it by revision once pushed; this branch is not mergeable before then.
+        .package(path: "../Abysm"),
     ],
     targets: [
         // Main library target
         .target(
             name: "AemiSDR",
             dependencies: [
-                .product(name: "InternedStrings", package: "aemi")
+                .product(name: "InternedStrings", package: "aemi"),
+                .product(name: "Abysm", package: "Abysm"),
             ],
             // The shader plugin compiles these into per-destination metallibs;
             // leaving them in the sources would also compile them natively
