@@ -15,7 +15,7 @@ import SwiftUI
 /// it drives `CABackdropLayer` filter values.  Both paths give continuous
 /// control over the blur rendering pipeline.
 ///
-/// Use the static presets to get system-matching configurations:
+/// Use the static presets for system-style scalar configurations (not complete material recipes):
 /// ```swift
 /// BackdropBlurView(configuration: .light)
 /// BackdropBlurView(configuration: .ultraThinMaterial)
@@ -139,88 +139,24 @@ public struct BackdropBlurConfiguration: Sendable, Equatable {
 // MARK: - System Style Presets
 
 #if os(iOS)
+    @MainActor
     extension BackdropBlurConfiguration {
-        /// Creates a configuration matching the system's visual effect style.
+        /// Creates a scalar approximation of the system style from a live effect view.
         ///
-        /// This reads property values at runtime from `_UIBackdropViewSettings`
-        /// so it automatically matches the current OS version.
+        /// Radius and saturation come from the view's actual filter recipe, not from the unrelated legacy
+        /// backdrop-settings constants. Classic styles also supply tint settings. Modern materials include tonal
+        /// mapping that this configuration cannot represent; use a system effect view for an exact reproduction.
         ///
-        /// - Parameter style: The blur effect style to match.
-        /// - Returns: A configuration with values matching the system style.
-        public static func systemStyle(_ style: UIBlurEffect.Style) -> BackdropBlurConfiguration {
-            guard let settingsClass = NSClassFromString(_InternedKeys.backdropViewSettingsClass) as? NSObject.Type else {
-                _PrivateAPIDiagnostics.logOnce(
-                    key: "backdropViewSettingsClass",
-                    "Private class `\(_InternedKeys.backdropViewSettingsClass)` not found; systemStyle presets degrade to .clear. The host iOS version may have renamed this class."
-                )
-                return .clear
-            }
-            let sel = Selector(_InternedKeys.settingsCreationSelector)
-            guard settingsClass.responds(to: sel) else {
-                _PrivateAPIDiagnostics.logOnce(
-                    key: "settingsCreationSelector",
-                    "Private selector `\(_InternedKeys.settingsCreationSelector)` not implemented by \(settingsClass); systemStyle presets degrade to .clear."
-                )
-                return .clear
-            }
-            guard
-                let settings = unsafe settingsClass.perform(sel, with: style.rawValue)?
-                    .takeUnretainedValue() as? NSObject
-            else {
-                return .clear
-            }
-
-            var config = BackdropBlurConfiguration()
-
-            if let value = settings.value(forKey: _InternedKeys.radiusValueKey) as? CGFloat {
-                config.blurRadius = value
-            }
-            if let value = settings.value(forKey: _InternedKeys.scaleFactorKey) as? CGFloat {
-                config.scale = value
-            }
-            if let value = settings.value(forKey: _InternedKeys.saturationKey) as? CGFloat {
-                config.saturationDeltaFactor = value
-            }
-            if let value = settings.value(forKey: _InternedKeys.grayLevelKey) as? CGFloat {
-                config.grayscaleTintLevel = value
-            }
-            if let value = settings.value(forKey: _InternedKeys.grayAlphaKey) as? CGFloat {
-                config.grayscaleTintAlpha = value
-            }
-            if let value = settings.value(forKey: _InternedKeys.burnLevelKey) as? CGFloat {
-                config.colorBurnTintLevel = value
-            }
-            if let value = settings.value(forKey: _InternedKeys.burnAlphaKey) as? CGFloat {
-                config.colorBurnTintAlpha = value
-            }
-            if let value = settings.value(forKey: _InternedKeys.darkAlphaKey) as? CGFloat {
-                config.darkeningTintAlpha = value
-            }
-            if let value = settings.value(forKey: _InternedKeys.darkHueKey) as? CGFloat {
-                config.darkeningTintHue = value
-            }
-            if let value = settings.value(forKey: _InternedKeys.darkSatKey) as? CGFloat {
-                config.darkeningTintSaturation = value
-            }
-            if let value = settings.value(forKey: _InternedKeys.zoomKey) as? CGFloat {
-                config.zoom = value
-            }
-            if settings.value(forKey: _InternedKeys.grayTintEnabledKey) as? Bool == true {
-                config.lightenGrayscaleWithSourceOver = true
-            }
-            if settings.value(forKey: _InternedKeys.burnTintEnabledKey) as? Bool == true {
-                config.darkenWithSourceOver = true
-            }
-
-            // Extract color tint if the style uses one
-            if settings.value(forKey: _InternedKeys.tintEnabledKey) as? Bool == true,
-               let color = settings.value(forKey: _InternedKeys.tintColorKey) as? UIColor
-            {
-                config.colorTint = Color(color)
-                config.colorTintAlpha = settings.value(forKey: _InternedKeys.tintAlphaKey) as? CGFloat ?? 0
-            }
-
-            return config
+        /// UIKit introspection requires the main actor. Results are cached by style and appearance.
+        /// Missing private getters degrade to `.clear` and are retried rather than cached.
+        /// - Parameters:
+        ///   - style: The blur effect style to inspect.
+        ///   - userInterfaceStyle: Appearance to resolve; `.unspecified` is treated as `.light`.
+        public static func systemStyle(
+            _ style: UIBlurEffect.Style,
+            userInterfaceStyle: UIUserInterfaceStyle = .light
+        ) -> BackdropBlurConfiguration {
+            SystemBlurStyleReader.configuration(for: style, appearance: userInterfaceStyle)
         }
 
         // MARK: - Named Presets
@@ -315,21 +251,21 @@ public struct BackdropBlurConfiguration: Sendable, Equatable {
 
             // Read gaussianBlur inputRadius -> blurRadius
             if let blur = view.gaussianBlurFilter,
-               let radius = blur.value(forKeyPath: _InternedKeys.radiusParam) as? CGFloat
+                let radius = blur.value(forKeyPath: _InternedKeys.radiusParam) as? CGFloat
             {
                 config.blurRadius = radius
             }
 
             // Read colorSaturate inputAmount -> saturationDeltaFactor
             if let saturate = view.colorSaturateFilter,
-               let amount = saturate.value(forKeyPath: _InternedKeys.amountParam) as? CGFloat
+                let amount = saturate.value(forKeyPath: _InternedKeys.amountParam) as? CGFloat
             {
                 config.saturationDeltaFactor = amount
             }
 
             // Read colorBrightness inputAmount -> grayscaleTintLevel or darkeningTintAlpha
             if let brightness = view.colorBrightnessFilter,
-               let amount = brightness.value(forKeyPath: _InternedKeys.amountParam) as? CGFloat
+                let amount = brightness.value(forKeyPath: _InternedKeys.amountParam) as? CGFloat
             {
                 if amount >= 0 {
                     config.grayscaleTintLevel = amount + 1.0
@@ -340,7 +276,7 @@ public struct BackdropBlurConfiguration: Sendable, Equatable {
 
             // Read backdrop scale
             if let backdrop = view.backdropLayer,
-               let scale = backdrop.value(forKeyPath: _InternedKeys.scaleFactorKey) as? CGFloat
+                let scale = backdrop.value(forKeyPath: _InternedKeys.scaleFactorKey) as? CGFloat
             {
                 config.scale = scale
             }
