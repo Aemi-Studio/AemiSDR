@@ -82,6 +82,34 @@
             #expect(coordinator.delivered == 4, "a failed attempt must not cache a successful content signature")
             withExtendedLifetime(fixture.window) {}
         }
+
+        @available(iOS 26.0, *)
+        @Test func `moving the effect view over static content invalidates the content signature`() throws {
+            _ = try #require(MTLCreateSystemDefaultDevice())
+            let effect = UIView(frame: CGRect(x: 10, y: 12, width: 37, height: 29))
+            let fixture = CaptureFixture(effect: effect)
+            let coordinator = RecordingCaptureCoordinator()
+            coordinator.effectView = effect
+            coordinator.forceCaptureEveryFrame = false
+            defer {
+                coordinator.consumeAll()
+                coordinator.tearDown()
+                fixture.window.isHidden = true
+            }
+            try #require(effect.window != nil)
+            coordinator.captureOnce()
+            #expect(coordinator.delivered == 1)
+
+            // Capture again with unchanged frame and static content: signature matches, should skip.
+            coordinator.captureOnce()
+            #expect(coordinator.delivered == 1, "unchanged frame and static content must skip capture")
+
+            // Moving the effect view: position relative to content changed, must trigger a new capture.
+            effect.frame.origin.x += 40
+            coordinator.captureOnce()
+            #expect(coordinator.delivered == 2, "moving the effect view must invalidate signature and trigger capture")
+            withExtendedLifetime(fixture.window) {}
+        }
     }
 
     @MainActor

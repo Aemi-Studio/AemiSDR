@@ -78,6 +78,7 @@
 
         private struct ContentSignature: Equatable {
             let bounds: CGRect
+            let frameInContent: CGRect
             let subviewCount: Int
             let sublayerCount: Int
             let contentsIdentifier: ObjectIdentifier?
@@ -318,6 +319,7 @@
                 ? nil
                 : ContentSignature(
                     bounds: contentView.bounds,
+                    frameInContent: frameInContent,
                     subviewCount: contentView.subviews.count,
                     sublayerCount: contentView.layer.sublayers?.count ?? 0,
                     contentsIdentifier: contentView.layer.contents.map { ObjectIdentifier($0 as AnyObject) }
@@ -485,6 +487,11 @@
         /// Lazily acquires a pooled bridge for the exact capture dimensions.
         /// Equal dimensions share a ring; unequal dimensions never resize each other's backing buffers.
         private func ensureBridge(width: Int, height: Int) {
+            // Same dimensions as last time — keep the current bridge handle without querying device or layers.
+            if bridge != nil, width == bridgeWidth, height == bridgeHeight {
+                return
+            }
+
             guard let effectView else { return }
             let device: MTLDevice?
             if let metalLayer = effectView.layer as? CAMetalLayer {
@@ -493,11 +500,6 @@
                 device = MTLCreateSystemDefaultDevice()
             }
             guard let device else { return }
-
-            // Same dimensions as last time — keep the current bridge handle.
-            if bridge != nil, width == bridgeWidth, height == bridgeHeight {
-                return
-            }
 
             // Dimensions changed (or first call): unregister from the old
             // bridge, acquire an exactly sized bridge from the pool, register.
