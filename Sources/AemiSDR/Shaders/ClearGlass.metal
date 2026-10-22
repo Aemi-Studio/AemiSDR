@@ -4,11 +4,9 @@
 //
 //  Clear glass: the backdrop seen through a thin glass body of any shape.
 //
-//  The look, as measured on native Liquid Glass (clear), is three things:
-//    1. a soft Gaussian blur of the whole interior (sigma about 0.94 pt),
-//    2. an additive lift that fades with the luminance of what is behind it,
-//    3. a rim band where the backdrop is pulled from further inside the shape, by an amount that falls off as a
-//       Gaussian of the distance from the edge (about 28 pt at the edge, 9 pt wide).
+//  Native-clear appearance is modelled by a Gaussian-mixture blur, a luminance-dependent lift, directional rim light,
+//  and inward displacement following a circular arc (60 pt at the edge, zero past 20 pt). Blur and light remain
+//  approximations; geometric agreement alone does not establish full native optical parity.
 //
 //  Everything depends on the shape only through a signed distance and its gradient. The shape is either analytic (a
 //  rounded rectangle with a radius per corner and a continuous or circular curve) or an arbitrary one read from a
@@ -28,9 +26,17 @@ constant float kContinuousExtent = 1.52866495f;
 /// radius (its sign is read by the caller, the magnitude here); `m` blends the continuous curve (0) with a circle (1).
 inline float3 cornerDistance(float2 p, float2 b, float k, float2 m) {
     float r = fabs(k);
+    float2 q = p - b;
+    if (r == 0.0f) {
+        // A single sharp corner must work among rounded ones, not only when all four radii are zero.
+        float2 positive = max(q, float2(0.0f));
+        float len = length(positive);
+        float2 axis = (q.x > q.y) ? float2(1.0f, 0.0f) : float2(0.0f, 1.0f);
+        float2 direction = len > 0.0f ? positive / len : axis;
+        return float3(len + min(max(q.x, q.y), 0.0f), direction);
+    }
     float R = r * kContinuousExtent;
     float inner = mix(R, r, max(m.x, m.y));
-    float2 q = p - b;
     float2 cc = q + inner;
     float2 w = fabs(max(float2(0.0f), (q + R) / R));
     float len = sqrt(dot(w, w));
@@ -47,9 +53,9 @@ inline float3 cornerDistance(float2 p, float2 b, float k, float2 m) {
     // The corner term is rounded to half precision before it is scaled, as in the reference.
     half rounded = half(f);
     float2 outside = max(float2(0.0f), cc);
-    float2 n = outside * rsqrt(dot(outside, outside));
+    float lengthSquared = dot(outside, outside);
     float2 axis = (cc.x > cc.y) ? float2(1.0f, 0.0f) : float2(0.0f, 1.0f);
-    float2 g = (n.x + n.y > 0.0f) ? n : axis;
+    float2 g = lengthSquared > 0.0f ? outside * rsqrt(lengthSquared) : axis;
     return float3(min(max(cc.x, cc.y), 0.0f) + R * float(rounded), g);
 }
 

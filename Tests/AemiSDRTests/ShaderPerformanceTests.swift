@@ -187,8 +187,9 @@
             let photo = try #require(device.makeTexture(descriptor: sourceDescriptor))
             _ = source
             // Incompressible content: a texture of zeros would compress perfectly and flatter the memory system.
-            var texels = [Float16](repeating: 0, count: side * side * 4)
-            for index in texels.indices { texels[index] = Float16(random.unit()) }
+            // UInt16 payloads also compile on Intel, where Swift's Float16 arithmetic is unavailable.
+            var texels = [UInt16](repeating: 0, count: side * side * 4)
+            for index in texels.indices { texels[index] = ClearGlassRenderer.halfBits(random.unit()) }
             // The array holds exactly side*side RGBA16F texels.
             unsafe photo.replace(
                 region: MTLRegionMake2D(0, 0, side, side), mipmapLevel: 0, withBytes: texels, bytesPerRow: side * 8)

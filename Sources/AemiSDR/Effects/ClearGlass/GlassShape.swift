@@ -9,7 +9,7 @@
 
 import CoreGraphics
 
-/// The radius of each corner, in points. A radius of zero is a sharp corner.
+/// The radius of each corner, in points. Zero, negative and non-finite values produce a sharp corner.
 public struct GlassCornerRadii: Equatable, Sendable {
     public var topLeading: CGFloat
     public var topTrailing: CGFloat
@@ -54,6 +54,7 @@ public enum GlassShape: Equatable, @unchecked Sendable {
     func shaderRadii(size: CGSize, scale: CGFloat) -> SIMD4<Float> {
         let half = min(size.width, size.height) / 2 * scale
         func pixels(_ points: CGFloat, _ curve: GlassCornerCurve) -> Float {
+            guard points.isFinite else { return 0 }
             let value = Float(min(max(points * scale, 0), half))
             // A sharp corner is a plain zero: a negative zero is a different bit pattern the shader would have to special-case.
             return curve == .continuous && value > 0 ? -value : value
