@@ -583,7 +583,8 @@
                 // Pixel centre `depth - 0.5` from the edge; the glass looks `pull` pixels further in.
                 let x = depth - 1
                 let looked = Double(pixels[(height / 2 * width + x) * 4]) * 1.5
-                let expected = Double(x) + 0.5 + Double(rim.pull(atDepth: CGFloat(depth) - 0.5))
+                let effective = rim.constrained(to: CGSize(width: width, height: height))
+                let expected = Double(x) + 0.5 + Double(effective.pull(atDepth: CGFloat(depth) - 0.5))
                 worst = max(worst, abs(looked - expected))
             }
             #expect(worst < 3.5, "the shader's pull differs from the rim function by \(worst) px")
@@ -781,9 +782,12 @@
                 try render(
                     source: source, sourceSize: (width, height), view: (width, height), configuration: configuration))
             #expect(fringed.r > fringed.g && fringed.g > fringed.b, "red is pulled furthest, blue least: \(fringed)")
-            // The pull at 3.5 px deep is about 29 px; 20% of it is about 5.8 px, which the ramp (0.85 level per px) shows as about 5.
+            // Include the shared geometry cap and the actual source ramp, not the formerly unbounded 30 px request.
+            let effective = configuration.rim.constrained(to: CGSize(width: width, height: height), chromatic: 0.2)
+            let separation = Double(effective.pull(atDepth: 3.5) * 0.2) * 255 / Double(width - 1)
             #expect(
-                abs(Double(fringed.r - fringed.g) - 5) <= 1.5 && abs(Double(fringed.g - fringed.b) - 5) <= 1.5,
+                abs(Double(fringed.r - fringed.g) - separation) <= 1.5
+                    && abs(Double(fringed.g - fringed.b) - separation) <= 1.5,
                 "\(fringed)")
         }
 

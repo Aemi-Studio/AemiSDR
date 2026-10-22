@@ -117,6 +117,9 @@
             return sign | half
         }
 
+        /// Safe after this renderer's earlier command buffers finish; the image renderer fences each call.
+        func removeScratchTextures() { scratch.removeAll(keepingCapacity: true) }
+
         private func scratchTexture(_ label: String, width: Int, height: Int) -> MTLTexture? {
             let key = "\(label)-\(width)x\(height)"
             if let cached = scratch[key] { return cached }
