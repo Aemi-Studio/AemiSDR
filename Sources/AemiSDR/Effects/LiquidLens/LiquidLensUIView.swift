@@ -7,6 +7,7 @@
     import Metal
     import OSLog
     import QuartzCore
+    import Synchronization
     import UIKit
 
     /// A `UIView` backed by `CAMetalLayer` that renders the physics-based liquid lens effect.
@@ -29,13 +30,25 @@
             category: "LiquidLensUIView"
         )
 
+        /// Test seam: counts the number of render attempts dispatched by layout, configuration, or metric changes.
+        var renderAttemptCount: Int = 0
+
+        /// Test seam: the number of drawables currently being processed by the GPU.
+        var inFlightDrawableCount: Int { inFlightDrawables.load(ordering: .relaxed) }
+
+        private var needsRender = true
+        private let inFlightDrawables = Atomic<Int>(0)
+
         private var renderer: LiquidLensRenderer?
         private var source: TextureSourceLease?
         private var configuration: LiquidLensConfiguration
 
         /// Optional shape path provider for masking the Metal layer to match the parent view's clip shape.
         var clipShapePath: ShapePathProvider? {
-            didSet { updateClipMask() }
+            didSet {
+                needsRender = true
+                updateClipMask()
+            }
         }
 
         /// Fired once when the view first becomes ready for capture (has a window
@@ -105,6 +118,7 @@
         public func setSourceImage(_ image: CGImage) {
             guard let renderer else { return }
             source = renderer.makeTexture(from: image).map { TextureSourceLease(texture: $0) }
+            needsRender = true
             renderIfNeeded()
         }
 
@@ -128,6 +142,7 @@
         ///     overwrite the texture until this callback, including when the view cannot obtain a drawable yet.
         public func setSourceTexture(_ texture: MTLTexture, onConsumed: (@Sendable () -> Void)? = nil) {
             source = TextureSourceLease(texture: texture, onConsumed: onConsumed)
+            needsRender = true
             renderIfNeeded()
         }
 
@@ -148,6 +163,7 @@
         public func updateConfiguration(_ newConfiguration: LiquidLensConfiguration) {
             guard configuration != newConfiguration else { return }
             configuration = newConfiguration
+            needsRender = true
             renderIfNeeded()
         }
 
@@ -172,6 +188,7 @@
             metalLayer.drawableSize = size
             lastDrawableSize = size
             lastContentsScale = scale
+            needsRender = true
             return true
         }
 
@@ -240,10 +257,14 @@
         // MARK: - Rendering
 
         private func renderIfNeeded() {
+            guard needsRender else { return }
+            renderAttemptCount += 1
             // Keep the source reserved on an early exit: a later layout/configuration update may retry it.
             // Replacement or view destruction drops that hold; GPU submissions own independent holds below.
             guard let renderer, let source else { return }
             guard metalLayer.drawableSize.width > 0, metalLayer.drawableSize.height > 0 else { return }
+            let maxDrawables = max(1, metalLayer.maximumDrawableCount - 1)
+            guard inFlightDrawables.load(ordering: .relaxed) < maxDrawables else { return }
             guard let drawable = metalLayer.nextDrawable() else { return }
 
             let textureSize = SIMD2<Float>(
@@ -256,13 +277,23 @@
             )
 
             let read = source.beginRead()
+            inFlightDrawables.wrappingAdd(1, ordering: .relaxed)
+            needsRender = false
 
             renderer.render(
                 sourceTexture: source.texture,
                 uniforms: uniforms,
                 pipelineKey: configuration.pipelineKey(),
                 drawable: drawable,
-                onCompleted: { read.finish() }
+                onCompleted: { [weak self] in
+                    read.finish()
+                    guard let self else { return }
+                    self.inFlightDrawables.wrappingSubtract(1, ordering: .relaxed)
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.needsRender else { return }
+                        self.renderIfNeeded()
+                    }
+                }
             )
         }
     }
