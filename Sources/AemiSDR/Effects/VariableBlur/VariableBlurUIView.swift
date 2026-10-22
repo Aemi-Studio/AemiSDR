@@ -42,11 +42,20 @@
         private var configuredScale: CGFloat
         private var variableBlurFilter: NSObject?
 
+        /// Test seam: counts the number of times `backdropLayer.filters` was reassigned.
+        var filterAssignmentCount: Int = 0
+
         /// Identity of the most recently *requested* mask. Background generations
         /// publish their result back to main only when the latch still matches —
         /// any newer `updateMask` call invalidates an in-flight task by writing
         /// a different key here.
         private var pendingMaskKey: MaskCacheKey?
+
+        /// Identity of the currently installed mask image, to avoid redundant filter reassignments.
+        private var appliedMaskKey: MaskCacheKey?
+
+        /// The blur radius currently configured on `variableBlurFilter`.
+        private var installedRadius: CGFloat?
 
         /// Whether a mask CGImage has ever been applied to the filter. The first
         /// `updateMask` call needs to install a mask before the filter is
@@ -175,7 +184,8 @@
             // `UIScreen.main.scale` (or the live environment scale)
             // explicitly through `scale:`.
             backdropLayer.setValue(configuredScale, forKey: _InternedKeys.scaleFactorKey)
-            logger.debug("didMoveToWindow: bounds=\(String(describing: self.bounds.size)) captureScale=\(self.configuredScale)")
+            logger.debug(
+                "didMoveToWindow: bounds=\(String(describing: self.bounds.size)) captureScale=\(self.configuredScale)")
             updateMask(for: bounds.size)
         }
 
@@ -195,20 +205,9 @@
     extension VariableBlurUIView {
         fileprivate func setupVariableBlurFilter() {
             if let variableBlurFilter {
-                variableBlurFilter.setValue(configuredMaxBlurRadius, forKey: _InternedKeys.radiusParam)
-                variableBlurFilter.setValue(true, forKey: _InternedKeys.normalizeParam)
-
-                // Force CA to re-evaluate by clearing then re-assigning.
-                // Re-assigning the same NSObject reference is optimized away.
-                let backdropLayer = subviews.first?.layer
-                if backdropLayer == nil {
-                    logger.error("setupVariableBlurFilter: backdrop layer missing on reuse path")
-                }
-                backdropLayer?.filters = []
-                backdropLayer?.filters = [variableBlurFilter]
-
-                for subview in subviews.dropFirst() {
-                    subview.alpha = 0
+                if installedRadius != configuredMaxBlurRadius {
+                    variableBlurFilter.setValue(configuredMaxBlurRadius, forKey: _InternedKeys.radiusParam)
+                    installedRadius = configuredMaxBlurRadius
                 }
                 return
             }
@@ -243,9 +242,13 @@
 
             let backdropLayer = subviews.first?.layer
             if backdropLayer == nil {
-                logger.error("setupVariableBlurFilter: backdrop layer missing at filter install (subviews=\(self.subviews.count))")
+                logger.error(
+                    "setupVariableBlurFilter: backdrop layer missing at filter install (subviews=\(self.subviews.count))"
+                )
             }
+            filterAssignmentCount += 1
             backdropLayer?.filters = [variableBlur]
+            installedRadius = configuredMaxBlurRadius
             logger.debug(
                 "setupVariableBlurFilter: filter created radius=\(self.configuredMaxBlurRadius) backdropLayerPresent=\(backdropLayer != nil)"
             )
@@ -262,8 +265,6 @@
 
     extension VariableBlurUIView {
         fileprivate func updateMask(for size: CGSize) {
-            setupVariableBlurFilter()
-
             guard size.width > 0, size.height > 0 else {
                 logger.debug("updateMask: skipping, size=\(String(describing: size))")
                 return
@@ -280,6 +281,12 @@
                 inverted: configuredInverted
             )
 
+            // When the mask and radius are already installed, layout does no filter work.
+            guard key != appliedMaskKey || variableBlurFilter == nil || installedRadius != configuredMaxBlurRadius
+            else { return }
+
+            setupVariableBlurFilter()
+
             // Fast path: identical mask already cached. NSCache lookup is
             // O(1) hashed, and we're staying on main to apply the filter
             // value immediately — no flicker on scroll-on / scroll-off of
@@ -288,6 +295,7 @@
                 pendingMaskKey = nil
                 variableBlurFilter?.setValue(cached, forKey: _InternedKeys.maskParam)
                 hasAppliedMask = true
+                appliedMaskKey = key
                 logger.debug(
                     "updateMask: cache HIT size=\(String(describing: size)) mask=\(String(describing: self.configuredMaskType)) inverted=\(self.configuredInverted) cgImage=\(cached.width)x\(cached.height) filterPresent=\(self.variableBlurFilter != nil)"
                 )
@@ -327,6 +335,7 @@
                     MaskCache.insert(image, for: key)
                     variableBlurFilter?.setValue(image, forKey: _InternedKeys.maskParam)
                     hasAppliedMask = true
+                    appliedMaskKey = key
                     pendingMaskKey = nil
                     logger.debug(
                         "updateMask: first-paint SYNC mask=\(String(describing: maskType)) cgImage=\(image.width)x\(image.height)"
@@ -380,6 +389,7 @@
                             return
                         }
                         self.pendingMaskKey = nil
+                        self.appliedMaskKey = key
                         guard let filter = self.variableBlurFilter else {
                             logger.error("updateMask: apply FAILED — filter is nil at mask-arrival time")
                             return
@@ -397,6 +407,7 @@
                         // attached to the backdrop layer in a prior tick.
                         let backdropLayer = self.subviews.first?.layer
                         backdropLayer?.filters = []
+                        self.filterAssignmentCount += 1
                         backdropLayer?.filters = [filter]
                         logger.debug(
                             "updateMask: APPLIED mask=\(String(describing: maskType)) backdropLayerPresent=\(backdropLayer != nil)"
@@ -430,6 +441,5 @@
                 context: CIKernelCache.maskContext
             )
         }
-
     }
 #endif
