@@ -158,9 +158,10 @@
         /// Renders the glass over a BGRA source and returns the BGRA result, `view` pixels in size.
         private func render(
             source: [UInt8], sourceSize: (Int, Int), view: (Int, Int), configuration: ClearGlassConfiguration,
-            field: GlassDistanceField? = nil
+            field: GlassDistanceField? = nil, origin: CGPoint = .zero, paired: Bool = true
         ) throws -> [UInt8] {
             let renderer = try #require(ClearGlassRenderer())
+            renderer.usesPairedTaps = paired
             let device = renderer.device
             let descriptor = MTLTextureDescriptor.texture2DDescriptor(
                 pixelFormat: .bgra8Unorm, width: sourceSize.0, height: sourceSize.1, mipmapped: false)
@@ -181,14 +182,17 @@
             let target = try #require(device.makeTexture(descriptor: targetDescriptor))
             let uniforms = configuration.uniforms(
                 size: CGSize(width: view.0, height: view.1), scale: 1,
-                sourceOrigin: CGPoint(x: -margin, y: -margin),
+                sourceOrigin: CGPoint(x: origin.x - CGFloat(margin), y: origin.y - CGFloat(margin)),
                 sourceSize: CGSize(width: sourceSize.0, height: sourceSize.1))
             let fieldTexture = try field.map {
                 try #require(renderer.makeFieldTexture($0))
             }
+            var blur = configuration.blurPlan(scale: 1)
+            blur.lookReach = configuration.lookReach(
+                size: CGSize(width: view.0, height: view.1), scale: 1, field: field)
             try #require(
                 renderer.renderAndWait(
-                    source: sourceTexture, uniforms: uniforms, blur: configuration.blurPlan(scale: 1),
+                    source: sourceTexture, uniforms: uniforms, blur: blur,
                     field: fieldTexture,
                     target: target))
             var pixels = [UInt8](repeating: 0, count: outer.0 * outer.1 * 4)
@@ -200,6 +204,79 @@
                 }
             }
             return pixels
+        }
+
+        @Test func `paired blur taps preserve displaced textured sampling at fractional positions`() throws {
+            let side = 256
+            var source = [UInt8](repeating: 255, count: side * side * 4)
+            for y in 0..<side {
+                for x in 0..<side {
+                    for channel in 0..<3 {
+                        source[(y * side + x) * 4 + channel] = UInt8((x * 31 + y * 17 + channel * 71) % 256)
+                    }
+                }
+            }
+            let configuration = ClearGlassConfiguration(
+                shape: .capsule, rim: .nativeClear, lift: 0, chromatic: 0.03, rimLight: .none, outline: 0)
+            let expected = try render(
+                source: source, sourceSize: (side, side), view: (120, 100), configuration: configuration,
+                origin: CGPoint(x: 64, y: 64), paired: false)
+            let actual = try render(
+                source: source, sourceSize: (side, side), view: (120, 100), configuration: configuration,
+                origin: CGPoint(x: 64, y: 64))
+            let worst = zip(actual, expected).map { abs(Int($0) - Int($1)) }.max() ?? 255
+            #expect(worst <= 1, "paired taps changed fractional displaced sampling by \(worst)/255")
+        }
+
+        @Test func `capsule optics use the native continuous field near off-axis joins`() throws {
+            let side = 512
+            var source = [UInt8](repeating: 255, count: side * side * 4)
+            for y in 0..<side {
+                for x in 0..<side {
+                    let level: UInt8 = x % 11 < 2 || y % 13 < 2 ? 255 : 20
+                    for channel in 0..<3 { source[(y * side + x) * 4 + channel] = level }
+                }
+            }
+            let nativeField = ClearGlassConfiguration.nativeClear(shape: .roundedRect(radii: GlassCornerRadii(60)))
+            let capsule = ClearGlassConfiguration.nativeClear(shape: .capsule)
+            let expected = try render(
+                source: source, sourceSize: (side, side), view: (300, 120), configuration: nativeField,
+                origin: CGPoint(x: 100, y: 160))
+            let actual = try render(
+                source: source, sourceSize: (side, side), view: (300, 120), configuration: capsule,
+                origin: CGPoint(x: 100, y: 160))
+            let worst = zip(actual, expected).map { abs(Int($0) - Int($1)) }.max() ?? 255
+            #expect(worst <= 1, "the capsule differs from the native continuous field by \(worst)/255")
+        }
+
+        @Test(arguments: [0.0, 0.35, 0.9])
+        func `triangle corners preserve a uniform backdrop when the rim looks beyond the shape bounds`(
+            chromatic: Double
+        )
+            throws
+        {
+            let width = 220
+            let height = 200
+            let sourceSide = 512
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: width / 2, y: 0))
+            path.addLine(to: CGPoint(x: width, y: height))
+            path.addLine(to: CGPoint(x: 0, y: height))
+            path.closeSubpath()
+            let field = SignedDistanceField.exact(path: path, width: width, height: height, scale: 1)
+            let configuration = ClearGlassConfiguration(
+                shape: .path(path), rim: .nativeClear, lift: 0, chromatic: CGFloat(chromatic), rimLight: .none,
+                outline: 0)
+            var source = [UInt8](repeating: 128, count: sourceSide * sourceSide * 4)
+            for index in stride(from: 3, to: source.count, by: 4) { source[index] = 255 }
+            let pixels = try render(
+                source: source, sourceSize: (sourceSide, sourceSide), view: (width, height),
+                configuration: configuration,
+                field: field, origin: CGPoint(x: 100, y: 100))
+            let interior = field.distance.indices.filter { field.distance[$0] < -1.5 }
+            let worst =
+                interior.flatMap { index in (0..<3).map { abs(Int(pixels[index * 4 + $0]) - 128) } }.max() ?? 255
+            #expect(worst <= 1, "a uniform backdrop acquired a dark wedge: worst error \(worst)/255")
         }
 
         /// A glass that only blurs: no rim, no lift.
@@ -437,7 +514,8 @@
             )
         }
 
-        @Test func `the shader pulls by the same amount as the rim function`() throws {
+        @Test(arguments: [ClearGlassRim(edgeDepth: 40, edgeFalloff: 3, bodyDepth: 30, bodyWidth: 12), .nativeClear])
+        func `the shader pulls by the same amount as the rim function`(rim: ClearGlassRim) throws {
             let (width, height) = (400, 60)
             // Blue rises one level per 1.5 px, so the value read at the left edge says how far the glass looks.
             var source = [UInt8](repeating: 255, count: width * height * 4)
@@ -448,14 +526,13 @@
                     source[(y * width + x) * 4 + 2] = 0
                 }
             }
-            let rim = ClearGlassRim(edgeDepth: 40, edgeFalloff: 3, bodyDepth: 30, bodyWidth: 12)
             let configuration = ClearGlassConfiguration(
                 shape: .roundedRect(radii: .zero), blur: .gaussian(0.4), rim: rim, lift: 0, liftFalloff: 0,
                 rimLight: .none, outline: 0)
             let pixels = try render(
                 source: source, sourceSize: (width, height), view: (width, height), configuration: configuration)
             var worst = 0.0
-            for depth in [3, 6, 10, 16, 24, 36] {
+            for depth in [1, 2, 3, 6, 10, 16, 24, 36] {
                 // Pixel centre `depth - 0.5` from the edge; the glass looks `pull` pixels further in.
                 let x = depth - 1
                 let looked = Double(pixels[(height / 2 * width + x) * 4]) * 1.5
@@ -542,6 +619,165 @@
             #expect(
                 extraGray > 1.4 * extraBlack,
                 "a brighter backdrop must raise the light: \(extraGray) against \(extraBlack)")
+        }
+
+        private func quiet(shape: GlassShape = .roundedRect(radii: .zero), blur: ClearGlassBlur)
+            -> ClearGlassConfiguration
+        {
+            ClearGlassConfiguration(
+                shape: shape, blur: blur, rim: .none, lift: 0, liftFalloff: 0, rimLight: .none, outline: 0)
+        }
+
+        @Test func `three Gaussians blur an impulse into the isotropic mixture of all three`() throws {
+            let side = 96
+            var source = [UInt8](repeating: 0, count: side * side * 4)
+            let centre = (side / 2 * side + side / 2) * 4
+            for channel in 0..<3 { source[centre + channel] = 255 }
+            for index in stride(from: 3, to: source.count, by: 4) { source[index] = 255 }
+            let blur = ClearGlassBlur(components: [
+                .init(radius: 0.8, weight: 0.5), .init(radius: 2.5, weight: 0.3), .init(radius: 6, weight: 0.2),
+            ])
+            let pixels = try render(
+                source: source, sourceSize: (side, side), view: (side, side), configuration: quiet(blur: blur))
+            let kernels = [
+                (0.5, GaussianKernel(sigma: 0.8)), (0.3, GaussianKernel(sigma: 2.5)), (0.2, GaussianKernel(sigma: 6)),
+            ]
+            var worst: Float = 0
+            for y in 0..<side {
+                for x in 0..<side {
+                    let (dx, dy) = (abs(x - side / 2), abs(y - side / 2))
+                    var expected: Float = 0
+                    for (weight, kernel) in kernels where dx <= kernel.radius && dy <= kernel.radius {
+                        expected += Float(weight) * kernel.weights[dx] * kernel.weights[dy]
+                    }
+                    worst = max(worst, abs(Float(pixels[(y * side + x) * 4 + 2]) - 255 * expected))
+                }
+            }
+            #expect(worst <= 1.5, "the impulse response differs from the three-Gaussian mixture by \(worst)/255")
+        }
+
+        /// A sharp component at the edge and a wide one inside: an impulse seen from pixels at different depths is blurred
+        /// by the mix that depth takes.
+        @Test func `the blur mix follows the depth below the edge`() throws {
+            let (width, height) = (200, 60)
+            var source = [UInt8](repeating: 0, count: width * height * 4)
+            let impulse = (height / 2 * width + 8) * 4
+            for channel in 0..<3 { source[impulse + channel] = 255 }
+            for index in stride(from: 3, to: source.count, by: 4) { source[index] = 255 }
+            let blur = ClearGlassBlur(
+                components: [
+                    .init(radius: 1, edgeWeight: 1, innerWeight: 0), .init(radius: 4, edgeWeight: 0, innerWeight: 1),
+                ],
+                rampDepth: 20, rampCurve: 1)
+            let pixels = try render(
+                source: source, sourceSize: (width, height), view: (width, height), configuration: quiet(blur: blur))
+            let (sharp, wide) = (GaussianKernel(sigma: 1), GaussianKernel(sigma: 4))
+            func g(_ kernel: GaussianKernel, _ offset: Int) -> Float {
+                offset <= kernel.radius ? kernel.weights[offset] : 0
+            }
+            var worst: Float = 0
+            for x in 0..<24 {
+                // Pixel x is x + 0.5 deep; the ramp is smoothstep over 20 px.
+                let ramp = min(Float(x) + 0.5, 20) / 20
+                let t = ramp * ramp * (3 - 2 * ramp)
+                let expected =
+                    255 * ((1 - t) * g(sharp, abs(x - 8)) * g(sharp, 0) + t * g(wide, abs(x - 8)) * g(wide, 0))
+                worst = max(worst, abs(Float(pixels[(height / 2 * width + x) * 4 + 2]) - expected))
+            }
+            #expect(worst <= 1.5, "the depth-dependent blur differs from the exact mix by \(worst)/255")
+        }
+
+        @Test func `the veil takes the colour it is given, and no lift removes it`() throws {
+            let side = 40
+            let source = [UInt8](repeating: 0, count: side * side * 4)
+            var configuration = ClearGlassConfiguration(
+                shape: .roundedRect(radii: .zero), blur: .gaussian(0.5), rim: .none, lift: 0.2, liftFalloff: 0,
+                veilColor: ClearGlassColor(red: 1, green: 0.5, blue: 0), rimLight: .none, outline: 0)
+            var pixels = try render(
+                source: source, sourceSize: (side, side), view: (side, side), configuration: configuration)
+            let centre = (side / 2 * side + side / 2) * 4
+            #expect(
+                abs(Int(pixels[centre + 2]) - 51) <= 1 && abs(Int(pixels[centre + 1]) - 26) <= 1 && pixels[centre] <= 1,
+                "RGB \(pixels[centre + 2]) \(pixels[centre + 1]) \(pixels[centre])")
+            configuration.lift = 0
+            pixels = try render(
+                source: source, sourceSize: (side, side), view: (side, side), configuration: configuration)
+            #expect(
+                pixels[centre] == 0 && pixels[centre + 1] == 0 && pixels[centre + 2] == 0,
+                "with no lift, black stays black")
+        }
+
+        @Test func `chromatic fringing is off by default and separates the channels when asked`() throws {
+            let (width, height) = (300, 40)
+            var source = [UInt8](repeating: 255, count: width * height * 4)
+            for y in 0..<height {
+                for x in 0..<width {
+                    let v = UInt8(x * 255 / (width - 1))
+                    source[(y * width + x) * 4] = v
+                    source[(y * width + x) * 4 + 1] = v
+                    source[(y * width + x) * 4 + 2] = v
+                }
+            }
+            var configuration = ClearGlassConfiguration(
+                shape: .roundedRect(radii: .zero), blur: .gaussian(0.4), rim: .gaussian(depth: 30, width: 10), lift: 0,
+                liftFalloff: 0, rimLight: .none, outline: 0)
+            func channels(_ pixels: [UInt8]) -> (r: Int, g: Int, b: Int) {
+                let offset = (height / 2 * width + 3) * 4
+                return (Int(pixels[offset + 2]), Int(pixels[offset + 1]), Int(pixels[offset]))
+            }
+            let plain = channels(
+                try render(
+                    source: source, sourceSize: (width, height), view: (width, height), configuration: configuration))
+            #expect(plain.r == plain.g && plain.g == plain.b, "no fringing by default: \(plain)")
+            configuration.chromatic = 0.2
+            let fringed = channels(
+                try render(
+                    source: source, sourceSize: (width, height), view: (width, height), configuration: configuration))
+            #expect(fringed.r > fringed.g && fringed.g > fringed.b, "red is pulled furthest, blue least: \(fringed)")
+            // The pull at 3.5 px deep is about 29 px; 20% of it is about 5.8 px, which the ramp (0.85 level per px) shows as about 5.
+            #expect(
+                abs(Double(fringed.r - fringed.g) - 5) <= 1.5 && abs(Double(fringed.g - fringed.b) - 5) <= 1.5,
+                "\(fringed)")
+        }
+
+        /// An impulse spreads a wide Gaussian below the 8-bit floor, so the wide components are checked on a step edge.
+        @Test func `three Gaussians blur a step edge into the weighted sum of three error functions`() throws {
+            let (width, height) = (160, 24)
+            var source = [UInt8](repeating: 255, count: width * height * 4)
+            for y in 0..<height {
+                for x in 0..<width where x < width / 2 {
+                    source[(y * width + x) * 4] = 0
+                    source[(y * width + x) * 4 + 1] = 0
+                    source[(y * width + x) * 4 + 2] = 0
+                }
+            }
+            let blur = ClearGlassBlur(components: [
+                .init(radius: 0.8, weight: 0.5), .init(radius: 2.5, weight: 0.3), .init(radius: 6, weight: 0.2),
+            ])
+            let pixels = try render(
+                source: source, sourceSize: (width, height), view: (width, height), configuration: quiet(blur: blur))
+            let kernels = [
+                (0.5, GaussianKernel(sigma: 0.8)), (0.3, GaussianKernel(sigma: 2.5)), (0.2, GaussianKernel(sigma: 6)),
+            ]
+            func blurred(at x: Int) -> Double {
+                var total = 0.0
+                for (weight, kernel) in kernels {
+                    var sum = Double(kernel.weights[0]) * (x >= width / 2 ? 255 : 0)
+                    for offset in 1...kernel.radius {
+                        let (right, left) = (min(width - 1, x + offset), max(0, x - offset))
+                        sum +=
+                            Double(kernel.weights[offset])
+                            * ((right >= width / 2 ? 255 : 0) + (left >= width / 2 ? 255 : 0))
+                    }
+                    total += weight * sum
+                }
+                return total
+            }
+            var worst = 0.0
+            for x in (width / 2 - 14)..<(width / 2 + 14) {
+                worst = max(worst, abs(Double(pixels[(height / 2 * width + x) * 4 + 2]) - blurred(at: x)))
+            }
+            #expect(worst <= 2.0, "the blurred step differs from the weighted sum by \(worst)/255")
         }
     }
 #endif

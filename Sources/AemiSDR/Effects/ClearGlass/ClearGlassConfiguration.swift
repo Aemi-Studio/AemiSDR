@@ -7,46 +7,122 @@
 
 import CoreGraphics
 
-/// The blur of what is behind the glass: a tight core and a wide halo, each an exact Gaussian, mixed.
-///
-/// Measured on native clear glass the blur is not one Gaussian: a sharp core over a long soft halo (the best-fit kernel
-/// has weight 0.31 at one pixel and a flat tail of about 0.05 out to eight). Two Gaussians reproduce that with half the
-/// error of one (rms 0.0157 against 0.0276 in the interior) and stay smooth and free of the plateau of a box or disc.
-public struct ClearGlassBlur: Equatable, Sendable {
-    /// Standard deviation of the tight component, in points.
-    public var coreRadius: CGFloat
-    /// Standard deviation of the wide component, in points.
-    public var haloRadius: CGFloat
-    /// How much of the result is the core, 0...1. One makes it a single Gaussian.
-    public var coreWeight: CGFloat
+/// A colour for the veil, as red, green and blue in 0...1.
+public struct ClearGlassColor: Equatable, Sendable {
+    public var red: CGFloat
+    public var green: CGFloat
+    public var blue: CGFloat
 
+    public init(red: CGFloat, green: CGFloat, blue: CGFloat) {
+        self.red = red
+        self.green = green
+        self.blue = blue
+    }
+
+    public static let white = ClearGlassColor(red: 1, green: 1, blue: 1)
+}
+
+/// The blur of what is behind the glass: a sum of up to three exact Gaussians, whose weights can change with the depth below
+/// the edge.
+///
+/// Each component has a weight at the edge and a weight deep inside, and the weights move from one to the other over
+/// `rampDepth` along `rampCurve`, so the glass can be crisper at the rim and softer inside (or the reverse). Weights are
+/// normalised at each depth, so the blur never changes brightness. With a `rampDepth` of zero the inner weights apply
+/// everywhere.
+///
+/// Measured on native clear glass the blur is not one Gaussian: a sharp core over a long soft halo (the best-fit kernel has
+/// weight 0.31 at one pixel and a flat tail of about 0.05 out to eight). Two Gaussians reproduce that with half the error of
+/// one (rms 0.0157 against 0.0276 in the interior) and stay smooth and free of the plateau of a box or disc.
+public struct ClearGlassBlur: Equatable, Sendable {
+    public struct Component: Equatable, Sendable {
+        /// Standard deviation of this Gaussian, in points.
+        public var radius: CGFloat
+        /// Its weight at the very edge.
+        public var edgeWeight: CGFloat
+        /// Its weight deep inside.
+        public var innerWeight: CGFloat
+
+        public init(radius: CGFloat, edgeWeight: CGFloat, innerWeight: CGFloat) {
+            self.radius = radius
+            self.edgeWeight = edgeWeight
+            self.innerWeight = innerWeight
+        }
+
+        /// A component with the same weight at every depth.
+        public init(radius: CGFloat, weight: CGFloat) {
+            self.init(radius: radius, edgeWeight: weight, innerWeight: weight)
+        }
+    }
+
+    /// The Gaussians, one to three; any beyond the third are ignored.
+    public var components: [Component]
+    /// Depth over which the weights move from their edge values to their inner values, in points. Zero: no ramp.
+    public var rampDepth: CGFloat
+    /// The shape of that move: 1 is smooth, larger holds the edge values longer.
+    public var rampCurve: CGFloat
+
+    public init(components: [Component], rampDepth: CGFloat = 0, rampCurve: CGFloat = 1) {
+        self.components = components.isEmpty ? [Component(radius: 1, weight: 1)] : Array(components.prefix(3))
+        self.rampDepth = rampDepth
+        self.rampCurve = rampCurve
+    }
+
+    /// Public mutation must obey the same one-to-three component contract as construction.
+    fileprivate var activeComponents: [Component] {
+        components.isEmpty ? [Component(radius: 1, weight: 1)] : Array(components.prefix(3))
+    }
+
+    /// Two Gaussians with a constant mix.
     public init(coreRadius: CGFloat, haloRadius: CGFloat, coreWeight: CGFloat) {
-        self.coreRadius = coreRadius
-        self.haloRadius = haloRadius
-        self.coreWeight = coreWeight
+        self.init(components: [
+            Component(radius: coreRadius, weight: coreWeight), Component(radius: haloRadius, weight: 1 - coreWeight),
+        ])
     }
 
     /// A single Gaussian of standard deviation `radius` points.
     public static func gaussian(_ radius: CGFloat) -> ClearGlassBlur {
-        ClearGlassBlur(coreRadius: radius, haloRadius: radius, coreWeight: 1)
+        ClearGlassBlur(components: [Component(radius: radius, weight: 1)])
     }
 
     /// The blur measured on native clear glass: a 21% core of 0.24 pt over a 79% halo of 1.41 pt.
     public static let nativeClear = ClearGlassBlur(coreRadius: 0.243, haloRadius: 1.41, coreWeight: 0.21)
+
+    /// A heavier-tailed, lens-like blur: a tight core, a mid component and a wide glow, close to the soft shoulder and long
+    /// tail of a real defocused point (a Moffat-like profile) and without the plateau of a box or disc.
+    public static let optical = ClearGlassBlur(components: [
+        Component(radius: 0.35, weight: 0.45), Component(radius: 1.2, weight: 0.35),
+        Component(radius: 3.6, weight: 0.20),
+    ])
+
+    /// Frosted glass: no sharp core, a soft body and a wide halo.
+    public static let frosted = ClearGlassBlur(components: [
+        Component(radius: 1.2, weight: 0.35), Component(radius: 3.2, weight: 0.65),
+    ])
 }
 
 /// How far the backdrop is pulled inward near the edge, as a function of the depth below the edge, in points.
 ///
-/// Measured on native clear glass the pull depends on depth alone, identically for every shape (a square, a capsule, a
-/// circle, a rounded rectangle and a triangle agree to 1 or 2 px), and is purely inward. It is the sum of a sharp
-/// exponential spike at the edge and a broad Gaussian body: `edgeDepth * exp(-d / edgeFalloff) + bodyDepth * exp(-(d / bodyWidth)^2)`.
+/// Native clear glass uses a circular arc: `depth * (1 - sqrt(t * (2 - t)))`, with `t = clamp(d / height, 0, 1)`.
+/// This has the steep slope at the very edge that an exponential/Gaussian approximation misses (diary 15).
 public struct ClearGlassRim: Equatable, Sendable {
+    public enum Profile: Equatable, Sendable {
+        case exponentialAndGaussian
+        case circularArc
+    }
+
+    public var profile: Profile
+    /// Exponential amplitude, or the arc's total pull at the edge, in points.
     public var edgeDepth: CGFloat
+    /// Exponential falloff depth, or the arc's height, in points.
     public var edgeFalloff: CGFloat
     public var bodyDepth: CGFloat
     public var bodyWidth: CGFloat
 
-    public init(edgeDepth: CGFloat, edgeFalloff: CGFloat, bodyDepth: CGFloat, bodyWidth: CGFloat) {
+    public init(
+        edgeDepth: CGFloat, edgeFalloff: CGFloat, bodyDepth: CGFloat, bodyWidth: CGFloat,
+        profile: Profile = .exponentialAndGaussian
+    ) {
+        self.profile = profile
         self.edgeDepth = edgeDepth
         self.edgeFalloff = edgeFalloff
         self.bodyDepth = bodyDepth
@@ -61,14 +137,24 @@ public struct ClearGlassRim: Equatable, Sendable {
         ClearGlassRim(edgeDepth: 0, edgeFalloff: 1, bodyDepth: depth, bodyWidth: width)
     }
 
-    /// How far, in points, the backdrop is pulled inward at `depth` points below the edge. The shader evaluates the same sum.
-    public func pull(atDepth depth: CGFloat) -> CGFloat {
-        edgeDepth * exp(-depth / max(edgeFalloff, 0.001)) + bodyDepth * exp(-(depth * depth) / (bodyWidth * bodyWidth))
+    /// A circular-arc pull, strongest at the edge and exactly zero past `height` points inside.
+    /// `edgeDepth` holds the amplitude and `edgeFalloff` the height; the Gaussian body is unused in this profile.
+    public static func circularArc(depth: CGFloat, height: CGFloat) -> ClearGlassRim {
+        ClearGlassRim(edgeDepth: depth, edgeFalloff: height, bodyDepth: 0, bodyWidth: 1, profile: .circularArc)
     }
 
-    /// The pull measured on native clear glass: 29.1 pt spike decaying over 2.5 pt, plus a 21.4 pt body 9.6 pt wide.
-    public static let nativeClear = ClearGlassRim(
-        edgeDepth: 29.09, edgeFalloff: 2.522, bodyDepth: 21.37, bodyWidth: 9.63)
+    /// How far, in points, the backdrop is pulled inward at `depth` points below the edge.
+    public func pull(atDepth depth: CGFloat) -> CGFloat {
+        if profile == .circularArc {
+            let t = min(max(depth / max(edgeFalloff, 0.001), 0), 1)
+            return edgeDepth * (1 - sqrt(t * (2 - t)))
+        }
+        return edgeDepth * exp(-depth / max(edgeFalloff, 0.001))
+            + bodyDepth * exp(-(depth * depth) / (bodyWidth * bodyWidth))
+    }
+
+    /// The AIR shader's circular-arc form, with amplitude/height inferred from native captures: 60 pt over 20 pt.
+    public static let nativeClear = circularArc(depth: 60, height: 20)
 }
 
 /// The light bouncing around the inside of the rim: a bright stroke along the edge that fades with depth.
@@ -132,6 +218,11 @@ public struct ClearGlassConfiguration: Equatable, Sendable {
     public var lift: CGFloat
     /// How quickly the lift fades as the backdrop gets brighter, 0...1.
     public var liftFalloff: CGFloat
+    /// The colour of the lift over black. White is the neutral veil of native glass; set `lift` to 0 to remove it.
+    public var veilColor: ClearGlassColor
+    /// Colour fringing at the rim: red is pulled `1 + chromatic` times as far as green and blue `1 - chromatic` times. Native
+    /// clear glass has none; it is off by default.
+    public var chromatic: CGFloat
     /// How the light bouncing around the rim looks.
     public var rimLight: ClearGlassRimLight
     /// Strength of the dark ring just outside the shape, 0...1. Zero turns it off.
@@ -144,7 +235,9 @@ public struct ClearGlassConfiguration: Equatable, Sendable {
     public init(
         shape: GlassShape = .roundedRect(radii: GlassCornerRadii(32)), blur: ClearGlassBlur = .nativeClear,
         rim: ClearGlassRim = .nativeClear,
-        lift: CGFloat = 32.0 / 255, liftFalloff: CGFloat = 0.83, rimLight: ClearGlassRimLight = .nativeClear,
+        lift: CGFloat = 32.0 / 255, liftFalloff: CGFloat = 0.83, veilColor: ClearGlassColor = .white,
+        chromatic: CGFloat = 0,
+        rimLight: ClearGlassRimLight = .nativeClear,
         outline: CGFloat = 0.3785, outlineReach: CGFloat = 0.82, outlineDirection: CGFloat = 1
     ) {
         self.shape = shape
@@ -152,6 +245,8 @@ public struct ClearGlassConfiguration: Equatable, Sendable {
         self.rim = rim
         self.lift = lift
         self.liftFalloff = liftFalloff
+        self.veilColor = veilColor
+        self.chromatic = chromatic
         self.rimLight = rimLight
         self.outline = outline
         self.outlineReach = outlineReach
@@ -188,6 +283,13 @@ struct ClearGlassUniforms: Equatable {
     var lightTailFalloff: Float
     var lightTailPower: Float
     var lightGain: Float
+    var weightsEdge: SIMD4<Float>
+    var weightsInner: SIMD4<Float>
+    var veilColor: SIMD4<Float>
+    var rampDepth: Float
+    var rampCurve: Float
+    var chromatic: Float
+    var rimProfile: Int32
 }
 
 extension ClearGlassConfiguration {
@@ -213,8 +315,62 @@ extension ClearGlassConfiguration {
             lightEdge: Float(rimLight.edgeStrength), lightEdgeFalloff: Float(rimLight.edgeFalloff * scale),
             lightEdgePower: Float(rimLight.edgePower), lightTail: Float(rimLight.tailStrength),
             lightTailFalloff: Float(rimLight.tailFalloff * scale), lightTailPower: Float(rimLight.tailPower),
-            lightGain: Float(rimLight.backdropGain)
+            lightGain: Float(rimLight.backdropGain), weightsEdge: blurWeights.edge, weightsInner: blurWeights.inner,
+            veilColor: SIMD4(Float(veilColor.red), Float(veilColor.green), Float(veilColor.blue), 0),
+            rampDepth: Float(blur.rampDepth * scale), rampCurve: Float(blur.rampCurve), chromatic: Float(chromatic),
+            rimProfile: rim.profile == .circularArc ? 1 : 0
         )
+    }
+}
+
+extension ClearGlassConfiguration {
+    /// The blur weights at the edge and deep inside, each normalised to sum to one over the components in use.
+    var blurWeights: (edge: SIMD4<Float>, inner: SIMD4<Float>) {
+        func normalised(_ values: [CGFloat]) -> SIMD4<Float> {
+            let clamped = values.map { $0.isFinite ? max($0, 0) : 0 }
+            guard let largest = clamped.max(), largest > 0 else { return SIMD4(1, 0, 0, 0) }
+            // Scaling before summing avoids overflow for finite but very large weights.
+            let scaled = clamped.map { $0 / largest }
+            let total = scaled.reduce(0, +)
+            var result = SIMD4<Float>.zero
+            for (index, value) in scaled.enumerated() { result[index] = Float(value / total) }
+            return result
+        }
+        return (
+            normalised(blur.activeComponents.map(\.edgeWeight)), normalised(blur.activeComponents.map(\.innerWeight))
+        )
+    }
+}
+
+extension ClearGlassConfiguration {
+    /// The rim's pull, in pixels, at a depth in pixels, for a layer drawn at `scale`.
+    func pullInPixels(atDepth depth: Float, scale: CGFloat) -> Float {
+        Float(rim.pull(atDepth: CGFloat(depth) / scale) * scale)
+    }
+
+    /// How far beyond the layer the glass can look, in pixels, so the blur can be computed that far out.
+    ///
+    /// The rim pulls the backdrop from along the inward normal by up to `pull(0)` pixels. A shape thinner than that, or one
+    /// whose inward normals point toward its own bounding box (a triangle's base corners), looks past the box; samples there
+    /// would otherwise read texels the blur never wrote, which are black. `field` is the shape's field when it is a path;
+    /// an analytic shape is a rounded rectangle, whose normals point inward, so only a thin one can look out.
+    func lookReach(size: CGSize, scale: CGFloat, field: GlassDistanceField?) -> Float {
+        if let field {
+            return field.lookReach(chromatic: Float(chromatic)) { pullInPixels(atDepth: $0, scale: scale) }
+        }
+        // Straight opposite edges `thickness` apart: from depth d a sample lands d + pull(d) from the near edge.
+        let thickness = Float(min(size.width, size.height) * scale)
+        var overshoot: Float = 0
+        var depth: Float = 0
+        while depth <= thickness {
+            let pull = pullInPixels(atDepth: depth, scale: scale)
+            for factor in [1 - Float(chromatic), 1 + Float(chromatic)] {
+                let position = depth + pull * factor
+                overshoot = max(overshoot, -position, position - thickness)
+            }
+            depth += 1
+        }
+        return overshoot
     }
 }
 
@@ -222,9 +378,7 @@ extension ClearGlassConfiguration {
     extension ClearGlassConfiguration {
         /// The blur in pixels of a source drawn at `scale` pixels per point.
         func blurPlan(scale: CGFloat) -> BlurPlan {
-            BlurPlan(
-                coreSigma: Float(blur.coreRadius * scale), haloSigma: Float(blur.haloRadius * scale),
-                coreWeight: Float(min(max(blur.coreWeight, 0), 1)))
+            BlurPlan(sigmas: blur.activeComponents.map { Float($0.radius * scale) })
         }
     }
 #endif
