@@ -162,15 +162,23 @@
                     let parts = found.split(separator: " ")
                     guard parts.count == 2, parts[1].hasPrefix("sha256:"), let hash = parts[0].firstIndex(of: "#")
                     else {
-                        continue
+                        return nil
                     }
+                    guard parts[1].dropFirst("sha256:".count).count == 64,
+                        parts[1].dropFirst("sha256:".count).allSatisfy({ "0123456789abcdef".contains($0) }),
+                        hash != parts[0].startIndex,
+                        parts[0].index(after: hash) != parts[0].endIndex
+                    else { return nil }
                     sources.append(
                         Source(
                             path: String(parts[0][..<hash]), function: String(parts[0][parts[0].index(after: hash)...]),
                             sha256: String(parts[1].dropFirst("sha256:".count))))
                 }
             }
-            guard !id.isEmpty, !expected.isEmpty else { return nil }
+            guard !id.isEmpty, !claim.isEmpty, !sources.isEmpty,
+                expected.contains("unsat"), expected.contains("sat"),
+                expected.allSatisfy({ $0 == "sat" || $0 == "unsat" })
+            else { return nil }
             return ProofSpec(id: id, claim: claim, sources: sources, expected: expected)
         }
     }
@@ -184,6 +192,8 @@
 
         enum Failure: Error, Equatable {
             case solverMissing
+            case unsuccessfulExit(Int32)
+            case invalidOutput(String)
         }
 
         /// The solver, or nil when it is not installed. A missing solver is a failure of the test run, never a pass.
@@ -208,9 +218,17 @@
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
             let raw = String(decoding: data, as: UTF8.self)
-            let verdicts: Set<String> = ["sat", "unsat", "unknown", "timeout"]
-            let answers = raw.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter {
-                verdicts.contains($0)
+            return try validated(
+                raw: raw, status: process.terminationStatus,
+                exitedNormally: process.terminationReason == .exit)
+        }
+
+        /// Accepts only a successful process containing decided verdict lines.
+        static func validated(raw: String, status: Int32, exitedNormally: Bool = true) throws -> Outcome {
+            guard exitedNormally, status == 0 else { throw Failure.unsuccessfulExit(status) }
+            let answers = raw.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+            guard !answers.isEmpty, answers.allSatisfy({ $0 == "sat" || $0 == "unsat" }) else {
+                throw Failure.invalidOutput(raw)
             }
             return Outcome(answers: answers, raw: raw)
         }
