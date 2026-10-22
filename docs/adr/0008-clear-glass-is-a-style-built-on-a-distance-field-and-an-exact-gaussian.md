@@ -82,7 +82,8 @@ sampling have explicit red-first regressions (diary 15). An experimental merged 
 - Clear flat colours matched in light/dark appearance; textured dark, regular, tinted and interactive matrices remain open.
 - Phase scores exclude clipped/weak codes and the first 1.5 px. Sampling-map similarity is not an exact optical oracle.
 - Path distance is exact to flattened segments, not Beziers; flattening and overlapping nonzero-fill boundaries need bounds.
-- Mixed zero/nonzero corner radii need dedicated finite GPU coverage; nonsquare `.circle` is a circular capsule, not an ellipse.
+- Mixed zero/nonzero corner radii take a box branch before division and have finite GPU/independent circular-reference
+  coverage. Non-finite radii become sharp corners. Nonsquare `.circle` is a circular capsule, not an ellipse.
 - Blur scissors include the furthest displaced sample, including chromatic extremes; otherwise triangle base corners read
   cleared/unwritten scratch texels and turn black. The field-based reach is currently scanned on redraw.
 - `ClearGlassUIView` still takes a still image and requests drawables on the main thread (roadmap 0005). GPU timing on M2 Pro:

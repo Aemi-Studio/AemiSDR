@@ -153,6 +153,53 @@
             }
         }
 
+        @Test(arguments: [
+            SIMD4<Float>(0, 20, 40, 0), SIMD4<Float>(0, -20, -40, 0),
+            SIMD4<Float>(20, 0, 40, 50), SIMD4<Float>(0, -20, -40, -50),
+            SIMD4<Float>(20, 30, 0, 50), SIMD4<Float>(-20, -30, 0, -50),
+        ])
+        func `mixed sharp and rounded corners keep finite distances and unit gradients`(radii: SIMD4<Float>) throws {
+            let device = try #require(MTLCreateSystemDefaultDevice())
+            let production = try String(
+                contentsOf: Self.root.appending(path: "Sources/AemiSDR/Shaders/ClearGlass.metal"), encoding: .utf8)
+            let kernel = """
+
+                kernel void probe(constant float2 *points [[buffer(0)]], device float4 *out [[buffer(1)]],
+                                  constant float2 &half_ [[buffer(2)]], constant float4 &radii [[buffer(3)]],
+                                  constant uint &n [[buffer(4)]], uint i [[thread_position_in_grid]]) {
+                    if (i >= n) return;
+                    out[i] = float4(roundedRectField(points[i], half_, radii), 0.0f);
+                }
+                """
+            let half = SIMD2<Float>(100, 60)
+            var points = grid(halfSize: half)
+            // Subpixel probes immediately inside/outside each sharp vertex, not just the axes and 45-degree diagonals.
+            for sx: Float in [-1, 1] {
+                for sy: Float in [-1, 1] {
+                    for offset in [SIMD2<Float>(-0.2, -0.7), SIMD2(0.3, 0.8), SIMD2(-0.6, 0.2)] {
+                        points.append((half + offset) * SIMD2(sx, sy))
+                    }
+                }
+            }
+            let result = try evaluate(
+                source: production + kernel, kernel: "probe", device: device, points: points,
+                block2: [half.x, half.y], block3: [radii.x, radii.y, radii.z, radii.w])
+            try #require(result.allSatisfy { $0.x.isFinite && $0.y.isFinite && $0.z.isFinite })
+            for (point, field) in zip(points, result) {
+                #expect(abs(field.y * field.y + field.z * field.z - 1) < 1e-4, "normal at \(point)")
+                if (0..<4).allSatisfy({ radii[$0] >= 0 }) {
+                    let index = (point.y < 0 ? 0 : 2) + (point.x < 0 ? 0 : 1)
+                    let radius = radii[index]
+                    let q = SIMD2(abs(point.x), abs(point.y)) - half + SIMD2(repeating: radius)
+                    let outside = SIMD2(max(q.x, 0), max(q.y, 0))
+                    let expected =
+                        (outside.x * outside.x + outside.y * outside.y).squareRoot()
+                        + min(max(q.x, q.y), 0) - radius
+                    #expect(abs(field.x - expected) < 0.08, "circular-corner distance at \(point)")
+                }
+            }
+        }
+
         // MARK: Rendering
 
         /// Renders the glass over a BGRA source and returns the BGRA result, `view` pixels in size.
