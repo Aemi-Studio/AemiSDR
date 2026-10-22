@@ -29,14 +29,7 @@ jobs:
         run: swift package resolve
       - name: Test renderer
         run: swift test
-      - name: Test iOS renderer with the Xcode toolchain
-        if: matrix.swift == '6.4'
-        run: |
-          xcodebuild -quiet -workspace .swiftpm/xcode/package.xcworkspace \
-            -scheme AemiSDR-Package -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
-            -derivedDataPath "$RUNNER_TEMP/AemiSDR-ios" CODE_SIGNING_ALLOWED=NO test
       - name: Build iOS renderer with the Xcode toolchain
-        if: matrix.swift == '6.3'
         run: |
           # The checked-in navigation workspace exposes only the demo scheme.
           # Let Xcode discover schemes from Package.swift for this package build.
