@@ -16,9 +16,11 @@
         @MainActor
         static func read(scene: UIWindowScene?, screen: UIScreen) -> DisplayCornerSources {
             var sources = DisplayCornerSources()
-            sources.screenScalar = scalar(of: screen, getter: _InternedKeys.screenCornerRadiusKey)
             let traits = scene?.traitCollection ?? screen.traitCollection
             sources.traitScalar = scalar(of: traits, getter: _InternedKeys.traitCornerRadiusKey)
+            if sources.traitScalar == nil {
+                sources.screenScalar = scalar(of: screen, getter: _InternedKeys.screenCornerRadiusKey)
+            }
 
             if let scene,
                 let backing = object(of: scene, getter: _InternedKeys.sceneBackingKey),
