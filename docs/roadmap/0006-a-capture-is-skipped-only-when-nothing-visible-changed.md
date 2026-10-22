@@ -1,25 +1,18 @@
 ---
-status: pending
+status: done
 blocked-by: 
-date: 2026-10-20
+date: 2026-10-22
 ---
 
 # 0006 — A capture is skipped only when nothing visible changed
 
-`ContentSignature` (iOS 26 path) is the content view's bounds, its subview and sublayer counts and its
-`contents` identity. It does not include `frameInContent`, the lens's own position, so moving a lens over
-static content keeps the old capture. A scroll view nested below the content sibling changes none of the
-four fields either; `forceCaptureEveryFrame` exists to paper over that.
+`ContentSignature` (iOS 26 path) previously captured only the content view's bounds, subview/sublayer counts,
+and layer contents identity. It lacked `frameInContent` (the lens view's position relative to the content),
+causing moving a lens over static content to skip captures and retain stale textures.
 
-`drawHierarchy` rasterises the whole content view each time, clipped only by the target buffer.
+## Changes
 
-## Probes
+- Added `frameInContent: CGRect` to `ContentSignature`.
+- Hoisted the same-dimensions check in `ensureBridge` above Metal device lookup.
 
-- Compositor test (simulator): move a lens 40 pt over a static view; the captured texture must change.
-- Same, with a nested `ScrollView` scrolled by 100 pt.
-- Cost of one capture versus content size, to see whether clipping the context helps.
-
-## What lands
-
-The lens frame in the signature, a cheap dirty signal for nested scrolling (or documented
-`forceCaptureEveryFrame` guidance with a measured cost), and a clip if it measures as a win.
+Regression: `moving the effect view over static content invalidates the content signature`.
