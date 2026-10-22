@@ -157,9 +157,16 @@ extension LabViewController {
         var configuration = ClearGlassConfiguration.nativeClear(shape: shape)
         let p = arguments.parameters
         if let value = p["blur"] { configuration.blur = .gaussian(value) }
-        if let value = p["blurCore"] { configuration.blur.coreRadius = value }
-        if let value = p["blurHalo"] { configuration.blur.haloRadius = value }
-        if let value = p["blurMix"] { configuration.blur.coreWeight = value }
+        if let value = p["blurCore"] { configuration.blur.components[0].radius = value }
+        if let value = p["blurHalo"], configuration.blur.components.count > 1 {
+            configuration.blur.components[1].radius = value
+        }
+        if let value = p["blurMix"], configuration.blur.components.count > 1 {
+            configuration.blur.components[0].edgeWeight = value
+            configuration.blur.components[0].innerWeight = value
+            configuration.blur.components[1].edgeWeight = 1 - value
+            configuration.blur.components[1].innerWeight = 1 - value
+        }
         if let value = p["outline"] { configuration.outline = value }
         if let value = p["rimEdge"] { configuration.rim.edgeDepth = value }
         if let value = p["rimEdgeFalloff"] { configuration.rim.edgeFalloff = value }

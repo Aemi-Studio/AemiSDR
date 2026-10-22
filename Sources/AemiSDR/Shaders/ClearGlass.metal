@@ -107,10 +107,23 @@ struct ClearGlassUniforms {
     float lightTailFalloff; // ... falloff, in pixels
     float lightTailPower;   // ... angular power
     float lightGain;        // how much brighter backdrops raise the light: factor 1 + gain * luma
+    float4 weightsEdge;     // blur: the weight of each Gaussian component at the very edge (xyz, summing to 1)
+    float4 weightsInner;    // ... and deep inside, past `rampDepth`
+    float4 veilColor;       // the colour of the lift over black (rgb); white is the neutral veil of native glass
+    float rampDepth;        // blur: depth over which the weights move from the edge values to the inner ones, in pixels
+    float rampCurve;        // ... and the shape of that move: 1 is smooth, larger holds the edge values longer
+    float chromatic;        // fringing: the rim pulls red by (1 + c) and blue by (1 - c) times the green pull; 0 is off
+    int rimProfile;         // 0: exponential + Gaussian; 1: native circular arc (rimEdge amplitude, rimEdgeFalloff height)
 };
 
 constant bool kShapeFromTexture [[function_constant(0)]];
 constant bool useTexture = is_function_constant_defined(kShapeFromTexture) ? kShapeFromTexture : false;
+constant int kBlurComponents [[function_constant(1)]];
+constant int components = is_function_constant_defined(kBlurComponents) ? kBlurComponents : 1;
+constant bool kChromatic [[function_constant(2)]];
+constant bool chromaticOn = is_function_constant_defined(kChromatic) ? kChromatic : false;
+constant bool hasSecond = components >= 2;
+constant bool hasThird = components >= 3;
 
 struct VertexOut {
     float4 position [[position]];
@@ -128,9 +141,9 @@ vertex VertexOut clearGlassVertex(uint vertexID [[vertex_id]], constant float2 &
 
 // MARK: - Blur
 
-/// The blur is the sum of two isotropic Gaussians: a tight core and a wide halo, mixed by `mixA`. Each Gaussian is
-/// separable, so each is two passes; the first pass computes both horizontal blurs at once into two targets and the
-/// second computes both vertical blurs and mixes them. (A separable product of the mixed kernel would not do: its cross
+/// The blur is a sum of up to three isotropic Gaussians. Each is separable, so each is two passes: the first computes the
+/// horizontal blur of every component at once into one target each, the second the vertical blur. They stay separate
+/// because the glass mixes them by depth. (A separable product of a mixed one-dimensional kernel would not do: its cross
 /// terms are wide in one direction and narrow in the other and streak along the axes.)
 ///
 /// Each kernel arrives as paired taps: element 0 is the centre (weight in `.y`), every other element is a fetch at
@@ -138,66 +151,84 @@ vertex VertexOut clearGlassVertex(uint vertexID [[vertex_id]], constant float2 &
 /// both, so one fetch applies the weights of two neighbouring taps.
 struct BlurUniforms {
     float2 step;            // one texel, in texture coordinates: (1/width, 0) or (0, 1/height)
-    int tapsA;              // paired taps after the centre, kernel A
-    int tapsB;              // the same for kernel B
-    float mixA;             // weight of kernel A in the result; B takes the rest
+    int tapsA;              // paired taps after the centre, for each component
+    int tapsB;
+    int tapsC;
     float pad;
 };
 
-struct BlurPair {
+struct BlurOut {
     float4 a [[color(0)]];
-    float4 b [[color(1)]];
+    float4 b [[color(1), function_constant(hasSecond)]];
+    float4 c [[color(2), function_constant(hasThird)]];
 };
 
-/// First pass: both horizontal Gaussians of the source.
-fragment BlurPair clearGlassBlurHorizontal(
+/// First pass: the horizontal Gaussian of every component.
+fragment BlurOut clearGlassBlurHorizontal(
     VertexOut in [[stage_in]], texture2d<float> source [[texture(0)]], constant float2 &viewSize [[buffer(0)]],
-    constant BlurUniforms &u [[buffer(1)]], constant float2 *ka [[buffer(2)]], constant float2 *kb [[buffer(3)]]
+    constant BlurUniforms &u [[buffer(1)]], constant float2 *ka [[buffer(2)]], constant float2 *kb [[buffer(3)]],
+    constant float2 *kc [[buffer(4)]]
 ) {
     constexpr sampler smp(filter::linear, address::clamp_to_edge);
     float2 uv = in.pixel / viewSize;
     float4 centre = source.sample(smp, uv);
     float4 sumA = centre * ka[0].y;
-    float4 sumB = centre * kb[0].y;
-    int reach = max(u.tapsA, u.tapsB);
+    float4 sumB = hasSecond ? centre * kb[0].y : float4(0.0f);
+    float4 sumC = hasThird ? centre * kc[0].y : float4(0.0f);
+    int reach = max(u.tapsA, max(hasSecond ? u.tapsB : 0, hasThird ? u.tapsC : 0));
     for (int i = 1; i <= reach; i++) {
         if (i <= u.tapsA) {
             float2 offset = u.step * ka[i].x;
             sumA += (source.sample(smp, uv + offset) + source.sample(smp, uv - offset)) * ka[i].y;
         }
-        if (i <= u.tapsB) {
+        if (hasSecond && i <= u.tapsB) {
             float2 offset = u.step * kb[i].x;
             sumB += (source.sample(smp, uv + offset) + source.sample(smp, uv - offset)) * kb[i].y;
         }
+        if (hasThird && i <= u.tapsC) {
+            float2 offset = u.step * kc[i].x;
+            sumC += (source.sample(smp, uv + offset) + source.sample(smp, uv - offset)) * kc[i].y;
+        }
     }
-    BlurPair out;
+    BlurOut out;
     out.a = sumA;
-    out.b = sumB;
+    if (hasSecond) out.b = sumB;
+    if (hasThird) out.c = sumC;
     return out;
 }
 
-/// Second pass: both vertical Gaussians of the two horizontal results, mixed.
-fragment float4 clearGlassBlurVertical(
+/// Second pass: the vertical Gaussian of every component's horizontal result.
+fragment BlurOut clearGlassBlurVertical(
     VertexOut in [[stage_in]], texture2d<float> horizontalA [[texture(0)]], texture2d<float> horizontalB [[texture(1)]],
-    constant float2 &viewSize [[buffer(0)]], constant BlurUniforms &u [[buffer(1)]], constant float2 *ka [[buffer(2)]],
-    constant float2 *kb [[buffer(3)]]
+    texture2d<float> horizontalC [[texture(2)]], constant float2 &viewSize [[buffer(0)]],
+    constant BlurUniforms &u [[buffer(1)]], constant float2 *ka [[buffer(2)]], constant float2 *kb [[buffer(3)]],
+    constant float2 *kc [[buffer(4)]]
 ) {
     constexpr sampler smp(filter::linear, address::clamp_to_edge);
     float2 uv = in.pixel / viewSize;
     float4 sumA = horizontalA.sample(smp, uv) * ka[0].y;
-    float4 sumB = horizontalB.sample(smp, uv) * kb[0].y;
-    int reach = max(u.tapsA, u.tapsB);
+    float4 sumB = hasSecond ? horizontalB.sample(smp, uv) * kb[0].y : float4(0.0f);
+    float4 sumC = hasThird ? horizontalC.sample(smp, uv) * kc[0].y : float4(0.0f);
+    int reach = max(u.tapsA, max(hasSecond ? u.tapsB : 0, hasThird ? u.tapsC : 0));
     for (int i = 1; i <= reach; i++) {
         if (i <= u.tapsA) {
             float2 offset = u.step * ka[i].x;
             sumA += (horizontalA.sample(smp, uv + offset) + horizontalA.sample(smp, uv - offset)) * ka[i].y;
         }
-        if (i <= u.tapsB) {
+        if (hasSecond && i <= u.tapsB) {
             float2 offset = u.step * kb[i].x;
             sumB += (horizontalB.sample(smp, uv + offset) + horizontalB.sample(smp, uv - offset)) * kb[i].y;
         }
+        if (hasThird && i <= u.tapsC) {
+            float2 offset = u.step * kc[i].x;
+            sumC += (horizontalC.sample(smp, uv + offset) + horizontalC.sample(smp, uv - offset)) * kc[i].y;
+        }
     }
-    return mix(sumB, sumA, u.mixA);
+    BlurOut out;
+    out.a = sumA;
+    if (hasSecond) out.b = sumB;
+    if (hasThird) out.c = sumC;
+    return out;
 }
 
 // MARK: - Glass
@@ -219,14 +250,28 @@ inline float3 shapeAt(float2 pixel, constant ClearGlassUniforms &u, texture2d<fl
 inline float srgbToLinear(float c) { return c <= 0.04045f ? c * (1.0f / 12.92f) : pow((c + 0.055f) * (1.0f / 1.055f), 2.4f); }
 
 /// The additive lift: strongest over black, fading with the linear luminance of the (blurred) backdrop behind it.
-inline float3 clearTone(float3 rgb, float lift, float falloff) {
+inline float3 clearTone(float3 rgb, float lift, float falloff, float3 veil) {
     float L = 0.2126f * srgbToLinear(rgb.r) + 0.7152f * srgbToLinear(rgb.g) + 0.0722f * srgbToLinear(rgb.b);
-    return saturate(rgb + lift * (1.0f - falloff * L));
+    return saturate(rgb + lift * (1.0f - falloff * L) * veil);
+}
+
+/// The backdrop as the glass sees it: isotropic blur components mixed by this pixel's depth-dependent weights.
+/// Keep vertical convolution at integer texels: bilinear tap pairing and fractional displaced lookup do not commute.
+inline float3 lookThrough(
+    float2 sourcePixel, float2 sourceSize, float3 weights, texture2d<float> a, texture2d<float> b, texture2d<float> c
+) {
+    constexpr sampler smp(filter::linear, address::clamp_to_edge);
+    float2 uv = sourcePixel / sourceSize;
+    float3 sum = a.sample(smp, uv).rgb * weights.x;
+    if (hasSecond) sum += b.sample(smp, uv).rgb * weights.y;
+    if (hasThird) sum += c.sample(smp, uv).rgb * weights.z;
+    return sum;
 }
 
 fragment float4 clearGlassFragment(
     VertexOut in [[stage_in]], texture2d<float> blurred [[texture(0)]], texture2d<float> original [[texture(1)]],
-    texture2d<float> field [[texture(2)]], constant ClearGlassUniforms &u [[buffer(1)]]
+    texture2d<float> field [[texture(2)]], texture2d<float> blurredB [[texture(3)]], texture2d<float> blurredC [[texture(4)]],
+    constant ClearGlassUniforms &u [[buffer(1)]]
 ) {
     constexpr sampler smp(filter::linear, address::clamp_to_edge);
     float3 shape = shapeAt(in.pixel, u, field);
@@ -241,13 +286,33 @@ fragment float4 clearGlassFragment(
     float3 rgb = float3(0.0f);
     if (coverage > 0.0f) {
         float depth = max(-d, 0.0f);
-        // Measured on native clear glass the pull depends on depth alone, whatever the shape: a sharp exponential spike
-        // at the edge plus a broad Gaussian body (rms 0.6 px against the measured profile; a single Gaussian is 6 px off).
-        float pull = u.rimEdge * exp(-depth / max(u.rimEdgeFalloff, 1.0e-3f))
-            + u.rimBody * exp(-(depth * depth) / (u.rimBodyWidth * u.rimBodyWidth));
+        // Native AIR's inner refraction is a circular arc: A * (1 - sqrt(t * (2 - t))), t = clamp(depth / H).
+        // The former exponential/Gaussian approximation missed up to 11 px of pull at the first half-pixel (diary 15).
+        float pull;
+        if (u.rimProfile == 1) {
+            float t = saturate(depth / max(u.rimEdgeFalloff, 1.0e-3f));
+            pull = u.rimEdge * (1.0f - sqrt(t * (2.0f - t)));
+        } else {
+            pull = u.rimEdge * exp(-depth / max(u.rimEdgeFalloff, 1.0e-3f))
+                + u.rimBody * exp(-(depth * depth) / (u.rimBodyWidth * u.rimBodyWidth));
+        }
         // Inward is against the outward gradient: the glass shows what lies further inside.
-        float2 position = sourcePixel - shape.yz * pull;
-        rgb = clearTone(blurred.sample(smp, position / u.sourceSize).rgb, u.lift, u.lumaFalloff);
+        // How much of each blur component this depth takes: edge weights at the edge, inner weights past the ramp.
+        float ramp = u.rampDepth > 0.0f ? pow(saturate(depth / u.rampDepth), max(u.rampCurve, 1.0e-3f)) : 1.0f;
+        ramp = ramp * ramp * (3.0f - 2.0f * ramp);
+        float3 weights = mix(u.weightsEdge.xyz, u.weightsInner.xyz, ramp);
+        float2 inward = -shape.yz;
+        float3 seen;
+        if (chromaticOn) {
+            // Fringing: each channel looks through a slightly different pull.
+            seen = float3(
+                lookThrough(sourcePixel + inward * (pull * (1.0f + u.chromatic)), u.sourceSize, weights, blurred, blurredB, blurredC).r,
+                lookThrough(sourcePixel + inward * pull, u.sourceSize, weights, blurred, blurredB, blurredC).g,
+                lookThrough(sourcePixel + inward * (pull * (1.0f - u.chromatic)), u.sourceSize, weights, blurred, blurredB, blurredC).b);
+        } else {
+            seen = lookThrough(sourcePixel + inward * pull, u.sourceSize, weights, blurred, blurredB, blurredC);
+        }
+        rgb = clearTone(seen, u.lift, u.lumaFalloff, u.veilColor.rgb);
         // The light bouncing around the rim: native glass adds it where the edge faces up or down (n.y^2), not on the
         // vertical edges, and more over bright backdrops. A sharp spike at the edge plus a soft tail.
         float vertical = max(abs(shape.z), 1.0e-4f);

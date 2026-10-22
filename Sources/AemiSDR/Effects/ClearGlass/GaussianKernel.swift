@@ -3,7 +3,7 @@
 //  AemiSDR
 //
 //  The weights of one separable Gaussian pass. Exact, normalised so the whole kernel sums to one (a brightness-neutral
-//  blur), and wide enough (three sigma on each side) that the truncated tail is below 1.2% of the peak.
+//  blur). Nominal reach is three sigma on each side (tail below 1.2% of the peak), capped at `maximumRadius`.
 //
 
 import Foundation
@@ -18,8 +18,10 @@ struct GaussianKernel: Equatable {
     static let maximumRadius = 32
 
     init(sigma: Float) {
-        let safe = max(sigma, 0.05)
-        let radius = min(Self.maximumRadius, max(1, Int((3 * safe).rounded(.up))))
+        // Non-finite input is effectively identity. Clamp the radius BEFORE integer conversion: even a finite sigma
+        // can overflow when multiplied by three, and converting infinity or NaN to Int traps.
+        let safe = sigma.isFinite ? max(sigma, 0.05) : 0.05
+        let radius = Int(min(Float(Self.maximumRadius), max(1, (3 * safe).rounded(.up))))
         var raw = (0...radius).map { index -> Double in
             let x = Double(index)
             return exp(-x * x / (2 * Double(safe) * Double(safe)))

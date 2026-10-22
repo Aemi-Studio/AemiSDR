@@ -177,3 +177,29 @@ extension SignedDistanceField {
         return GlassDistanceField(width: width, height: height, distance: distance, gradient: gradient)
     }
 }
+
+extension GlassDistanceField {
+    /// How far beyond the raster the glass can look: the largest distance, in pixels, by which a sample position
+    /// `pixel - gradient * pull(depth)` falls outside the raster, over every pixel inside the shape. `pull` gives the
+    /// displacement in pixels at a depth in pixels.
+    func lookReach(chromatic: Float = 0, pull: (Float) -> Float) -> Float {
+        var reach: Float = 0
+        let (maxX, maxY) = (Float(width), Float(height))
+        for y in 0..<height {
+            for x in 0..<width {
+                let index = y * width + x
+                let depth = -distance[index]
+                guard depth > 0 else { continue }
+                let amount = pull(depth)
+                let pixel = SIMD2(Float(x) + 0.5, Float(y) + 0.5)
+                // The green sample lies between red and blue. Include both extremes, even when fringing reverses a pull.
+                let red = pixel - gradient[index] * (amount * (1 + chromatic))
+                let blue = pixel - gradient[index] * (amount * (1 - chromatic))
+                reach = max(
+                    reach, -red.x, red.x - maxX, -red.y, red.y - maxY,
+                    -blue.x, blue.x - maxX, -blue.y, blue.y - maxY)
+            }
+        }
+        return reach
+    }
+}
