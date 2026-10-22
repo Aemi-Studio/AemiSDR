@@ -301,6 +301,7 @@ extension ClearGlassConfiguration {
     /// source, in pixels.
     func uniforms(size: CGSize, scale: CGFloat, sourceOrigin: CGPoint, sourceSize: CGSize) -> ClearGlassUniforms {
         let outer = CGSize(width: size.width + 2 * margin, height: size.height + 2 * margin)
+        let rim = self.rim.constrained(to: size, chromatic: chromatic)
         return ClearGlassUniforms(
             viewSize: SIMD2(Float(outer.width * scale), Float(outer.height * scale)),
             sourceOrigin: SIMD2(Float(sourceOrigin.x), Float(sourceOrigin.y)),
@@ -344,8 +345,8 @@ extension ClearGlassConfiguration {
 
 extension ClearGlassConfiguration {
     /// The rim's pull, in pixels, at a depth in pixels, for a layer drawn at `scale`.
-    func pullInPixels(atDepth depth: Float, scale: CGFloat) -> Float {
-        Float(rim.pull(atDepth: CGFloat(depth) / scale) * scale)
+    func pullInPixels(atDepth depth: Float, scale: CGFloat, rim: ClearGlassRim? = nil) -> Float {
+        Float((rim ?? self.rim).pull(atDepth: CGFloat(depth) / scale) * scale)
     }
 
     /// How far beyond the layer the glass can look, in pixels, so the blur can be computed that far out.
@@ -355,15 +356,16 @@ extension ClearGlassConfiguration {
     /// would otherwise read texels the blur never wrote, which are black. `field` is the shape's field when it is a path;
     /// an analytic shape is a rounded rectangle, whose normals point inward, so only a thin one can look out.
     func lookReach(size: CGSize, scale: CGFloat, field: GlassDistanceField?) -> Float {
+        let rim = self.rim.constrained(to: size, chromatic: chromatic)
         if let field {
-            return field.lookReach(chromatic: Float(chromatic)) { pullInPixels(atDepth: $0, scale: scale) }
+            return field.lookReach(chromatic: Float(chromatic)) { pullInPixels(atDepth: $0, scale: scale, rim: rim) }
         }
         // Straight opposite edges `thickness` apart: from depth d a sample lands d + pull(d) from the near edge.
         let thickness = Float(min(size.width, size.height) * scale)
         var overshoot: Float = 0
         var depth: Float = 0
         while depth <= thickness {
-            let pull = pullInPixels(atDepth: depth, scale: scale)
+            let pull = pullInPixels(atDepth: depth, scale: scale, rim: rim)
             for factor in [1 - Float(chromatic), 1 + Float(chromatic)] {
                 let position = depth + pull * factor
                 overshoot = max(overshoot, -position, position - thickness)

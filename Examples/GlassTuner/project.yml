@@ -1,0 +1,64 @@
+name: GlassTuner
+options:
+  bundleIdPrefix: studio.aemi
+  deploymentTarget:
+    macOS: "26.0"
+    iOS: "26.0"
+packages:
+  AemiSDR:
+    path: ../..
+targets:
+  GlassTuner:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/GlassTuner
+      - ../GlassLab/Sources/GlassLab/LabBackground.swift
+    dependencies:
+      - package: AemiSDR
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        GENERATE_INFOPLIST_FILE: true
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
+  GlassTunerPad:
+    type: application
+    platform: iOS
+    sources:
+      - Sources/GlassTuner
+      - ../GlassLab/Sources/GlassLab/LabBackground.swift
+    dependencies:
+      - package: AemiSDR
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        GENERATE_INFOPLIST_FILE: true
+        TARGETED_DEVICE_FAMILY: "2"
+        INFOPLIST_KEY_UILaunchScreen_Generation: true
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+  GlassTunerTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests
+    dependencies:
+      - target: GlassTuner
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: true
+schemes:
+  GlassTunerPad:
+    build:
+      targets:
+        GlassTunerPad: all
+  GlassTuner:
+    build:
+      targets:
+        GlassTuner: all
+    test:
+      targets:
+        - GlassTunerTests

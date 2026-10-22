@@ -32,6 +32,7 @@
         private var sourceOriginOverride: CGPoint?
         private var field: MTLTexture?
         private var fieldKey: String?
+        private var fieldShape: GlassShape?
         private var fieldValues: GlassDistanceField?
         private var redrawPending = false
 
@@ -130,13 +131,16 @@
             guard case .path(let path) = configuration.shape else { return (nil, nil) }
             let width = Int((outer.width * scale).rounded())
             let height = Int((outer.height * scale).rounded())
-            let key = "\(path.hashValue)-\(width)x\(height)-\(margin)"
-            if let field, let fieldValues, fieldKey == key { return (field, fieldValues) }
+            let key = "\(width)x\(height)-\(margin)-\(scale)"
+            if let field, let fieldValues, fieldKey == key, fieldShape == configuration.shape {
+                return (field, fieldValues)
+            }
             let values = SignedDistanceField.exact(
-                path: path, width: width, height: height, scale: scale, origin: CGPoint(x: margin, y: margin))
+                path: path.value, width: width, height: height, scale: scale, origin: CGPoint(x: margin, y: margin))
             field = renderer.makeFieldTexture(values)
             fieldValues = values
             fieldKey = key
+            fieldShape = configuration.shape
             return (field, values)
         }
     }
