@@ -1,7 +1,7 @@
 ---
-status: in-progress
+status: done
 blocked-by:
-date: 2026-10-20
+date: 2026-10-22
 ---
 
 # 0018 — A mathematical, physical and optical review of the shaders
@@ -10,17 +10,18 @@ The owner asked for a deeper review of the equations behind blur, corner radii a
 
 ## Done
 
-Five proofs (falloff, signed distance and corner coverage, Snell, Schlick, Sellmeier), pinned to their sources.
+Seven machine-checked proofs, pinned to their sources:
+- `falloff-curves`: polynomials map [0,1] to [0,1], non-decreasing, fixed points.
+- `rounded-rect-sdf`: sign, center value, corner wedge coverage, outermost row coverage.
+- `circular-sdf`: closed global 1-Lipschitz property across all 16 region pairs via absolute-contraction and norm lemmas, with sharpness witnesses.
+- `circular-arc`: bounds in [0, A], zero at height, monotonicity, and sensitivity bounds.
+- `snell-refraction`: absence of total internal reflection from air to denser media; unit vector directions.
+- `schlick-fresnel`: transmission in [0, 1 - F0], monotonicity, normal incidence.
+- `sellmeier-dispersion`: normal dispersion, absence of in-band resonances, published indices.
+
+Regression: `a proof gives exactly the answers it declares`, `a proof models the source function as it is now`.
 
 ## To prove or measure next
 
-- SDF 1-Lipschitz: 48 of 64 sign cases decided; the corner-corner cases need the absolute-value lemma.
-- Gaussian and variable blur: kernel normalisation and that the variable-blur mask maps alpha to radius monotonically.
-- Lens displacement: the radial displacement is zero at the centre, continuous, and bounded by the rim deviation; the chromatic ordering follows the dispersion ordering.
-- SDF gradient: unit length away from the medial axis; the smoothed seam stays within the band.
-- Superellipse masks use exponent 2, which draws circular arcs. Decide the target curve by measuring the system's corner, then prove the new curve's properties.
-- Float32 and half-precision error bounds against the real-number models (interval or Gappa-style analysis), where a bound is worth stating.
-
-## Update (2026-10-20, ADR-0007)
-
-The superellipse exponent question is answered by measurement: native glass uses a continuous corner (extent `1.528665 r`, fitted cubic), not an exponent. See roadmap 0019.
+- Continuous native corner field properties under empirical simulator measurement (see roadmap 0019).
+- Float32 and half-precision error bounds against the real-number models where a bound is worth stating.

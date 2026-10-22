@@ -58,8 +58,8 @@
             let text = """
                 ; id: falloff-curves
                 ; claim: every curve maps [0,1] into [0,1]
-                ; source: Sources/AemiSDR/Shaders/LiquidLens.metal#applyFalloff sha256:abc123
-                ; source: Sources/AemiSDR/Shaders/AemiSDR.ci.metal#distance_to_alpha sha256:def456
+                ; source: Sources/AemiSDR/Shaders/LiquidLens.metal#applyFalloff sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                ; source: Sources/AemiSDR/Shaders/AemiSDR.ci.metal#distance_to_alpha sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
                 ; expect: unsat unsat sat
                 (check-sat)
                 """
@@ -68,12 +68,24 @@
             #expect(spec.claim == "every curve maps [0,1] into [0,1]")
             #expect(
                 spec.sources == [
-                    .init(path: "Sources/AemiSDR/Shaders/LiquidLens.metal", function: "applyFalloff", sha256: "abc123"),
+                    .init(
+                        path: "Sources/AemiSDR/Shaders/LiquidLens.metal", function: "applyFalloff",
+                        sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
                     .init(
                         path: "Sources/AemiSDR/Shaders/AemiSDR.ci.metal", function: "distance_to_alpha",
-                        sha256: "def456"),
+                        sha256: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
                 ])
             #expect(spec.expected == ["unsat", "unsat", "sat"])
+        }
+
+        @Test(arguments: ["", "; source: x#f sha256:bad\n"])
+        func `missing or malformed pins reject a proof`(source: String) {
+            #expect(ProofSpec.parse("; id: x\n; claim: y\n" + source + "; expect: unsat sat\n") == nil)
+        }
+
+        @Test func `a proof requires a negative control`() {
+            let source = "; source: x#f sha256:" + String(repeating: "a", count: 64)
+            #expect(ProofSpec.parse("; id: x\n; claim: y\n" + source + "\n; expect: unsat\n") == nil)
         }
 
         @Test func `stale pins are rewritten to the current digest and nothing else changes`() {
@@ -113,6 +125,25 @@
             return url
         }
 
+        @Test func `matching verdicts cannot hide a nonzero exit`() {
+            #expect(throws: Z3.Failure.unsuccessfulExit(1)) {
+                try Z3.validated(raw: "unsat\nsat\n", status: 1)
+            }
+        }
+
+        @Test(arguments: ["unsat\nsat\n(error bad command)\n", "unsat\nunknown\n", "timeout\n", ""])
+        func `errors and undecided output cannot pass`(raw: String) {
+            #expect(throws: Z3.Failure.invalidOutput(raw)) {
+                try Z3.validated(raw: raw, status: 0)
+            }
+        }
+
+        @Test func `abnormal termination rejects matching verdicts`() {
+            #expect(throws: Z3.Failure.unsuccessfulExit(0)) {
+                try Z3.validated(raw: "unsat\nsat\n", status: 0, exitedNormally: false)
+            }
+        }
+
         @Test func `the solver is installed`() {
             #expect(Z3.executable() != nil, "Z3 is required to verify the proofs: brew install z3")
         }
@@ -138,6 +169,12 @@
                 """)
             defer { try? FileManager.default.removeItem(at: url) }
             #expect(try Z3.run(file: url).answers == ["sat"])
+        }
+
+        @Test func `solver error after a verdict is rejected`() throws {
+            let url = try write("(check-sat)\n(not-a-command)\n")
+            defer { try? FileManager.default.removeItem(at: url) }
+            #expect(throws: Z3.Failure.self) { try Z3.run(file: url) }
         }
 
         @Test func `a missing solver is an error and never an empty success`() throws {
