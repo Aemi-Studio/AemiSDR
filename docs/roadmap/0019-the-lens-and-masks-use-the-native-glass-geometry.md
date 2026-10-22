@@ -62,7 +62,10 @@ Regression: `capsule optics use the native continuous field near off-axis joins`
 `triangle corners preserve a uniform backdrop when the rim looks beyond the shape bounds`,
 `paired blur taps preserve displaced textured sampling at fractional positions`.
 
-Next, in dependency order: edge-local blur/rim-light colour and triangle residuals; mixed-zero/per-corner GPU robustness;
-the macOS native/custom tuning app; measured performance and scratch-memory budgets; live backdrop and SwiftUI wrapper;
+Mixed-zero/per-corner GPU robustness is now guarded by `mixed sharp and rounded corners keep finite distances and unit
+gradients` and `nonfinite corner radii become sharp finite corners` (diary 2026-10-22-01). The earlier all-zero-only guard
+was insufficient.
+
+Next, in dependency order: edge-local blur/rim-light colour and triangle residuals; the macOS native/custom tuning app; measured performance and scratch-memory budgets; live backdrop and SwiftUI wrapper;
 original-lens corner adoption and the remaining review/proof tasks. CI stays last.
 

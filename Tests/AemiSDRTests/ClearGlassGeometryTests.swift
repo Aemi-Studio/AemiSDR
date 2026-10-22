@@ -176,6 +176,15 @@ struct ClearGlassGeometryTests {
             "a zero radius is a positive zero, never the bit pattern of -0.0")
     }
 
+    @Test func `nonfinite corner radii become sharp finite corners`() {
+        let shape = GlassShape.roundedRect(
+            radii: GlassCornerRadii(
+                topLeading: .nan, topTrailing: .infinity, bottomLeading: -.infinity, bottomTrailing: 24))
+        let radii = shape.shaderRadii(size: CGSize(width: 200, height: 120), scale: 1)
+        #expect(radii == SIMD4(0, 0, 0, -24))
+        #expect((0..<3).allSatisfy { radii[$0].sign == .plus })
+    }
+
     @Test func `a capsule uses native continuous corners and a circle stays circular`() {
         let size = CGSize(width: 200, height: 60)
         #expect(GlassShape.capsule.shaderRadii(size: size, scale: 2) == SIMD4(repeating: -60))
