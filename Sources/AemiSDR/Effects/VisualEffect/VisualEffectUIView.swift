@@ -7,6 +7,7 @@
 //
 
 #if os(iOS)
+    import Abysm
     import OSLog
     import UIKit
 
@@ -32,12 +33,13 @@
         /// The `_UICustomBlurEffect` instance used to store KVC property values.
         /// Properties like grayscale/darkening are set here; blur and saturation
         /// are overridden via direct filter manipulation for reliability.
-        private let blurEffect: UIBlurEffect? = {
+        private var blurEffect: UIBlurEffect? {
+            guard PrivateAPIPolicy.isEnabled else { return nil }
             guard let effectClass = NSClassFromString(_InternedKeys.customBlurEffectClass) as? UIBlurEffect.Type else {
                 return nil
             }
             return effectClass.init()
-        }()
+        }
 
         /// Last configuration applied via `applyConfiguration(_:)`.
         /// Used to short-circuit no-op repeated calls from `updateUIView` cascades.
@@ -49,7 +51,7 @@
         /// one-shot `.fault` log and return — better than the ObjC runtime
         /// raising an uncatchable `NSInvalidArgumentException`.
         private func applyEffectIfResponding(on receiver: NSObject?) {
-            guard let receiver else { return }
+            guard PrivateAPIPolicy.isEnabled, let receiver else { return }
             let sel = Selector(_InternedKeys.applyEffectSelector)
             guard receiver.responds(to: sel) else {
                 _PrivateAPIDiagnostics.logOnce(
@@ -68,12 +70,15 @@
         /// The default value is `nil`.
         open var colorTint: UIColor? {
             get {
-                sourceOver?.value(forKeyPath: _InternedKeys.colorKey) as? UIColor
+                guard let sourceOver else { return nil }
+                return (try? RuntimeObject(sourceOver).value(forKey: _InternedKeys.colorKey)) as? UIColor
             }
             set {
                 lastConfiguration = nil
                 prepareForChanges()
-                sourceOver?.setValue(newValue, forKeyPath: _InternedKeys.colorKey)
+                if let sourceOver {
+                    try? RuntimeObject(sourceOver).setValue(newValue, forKey: _InternedKeys.colorKey)
+                }
                 applyEffectIfResponding(on: sourceOver)
                 applyChanges()
                 overlayView?.backgroundColor = newValue
@@ -123,7 +128,10 @@
             }
             set {
                 lastConfiguration = nil
-                blurEffect?.setValue(newValue, forKeyPath: BlurEffectKey.saturationDeltaFactor.rawValue)
+                if let blurEffect {
+                    try? RuntimeObject(blurEffect).setValue(
+                        newValue, forKey: BlurEffectKey.saturationDeltaFactor.rawValue)
+                }
                 prepareForChanges()
                 colorSaturate?.requestedValues?[_InternedKeys.amountParam] = newValue
                 applyChanges()
@@ -308,7 +316,9 @@
             } else {
                 resolvedTint = nil
             }
-            sourceOver?.setValue(resolvedTint, forKeyPath: _InternedKeys.colorKey)
+            if let sourceOver {
+                try? RuntimeObject(sourceOver).setValue(resolvedTint, forKey: _InternedKeys.colorKey)
+            }
             applyEffectIfResponding(on: sourceOver)
 
             // Set `backgroundColor` BEFORE `applyChanges()`. On iOS 26 the
@@ -348,13 +358,16 @@
         }
 
         fileprivate func blurEffectValue<T>(forKey key: BlurEffectKey) -> T? {
-            blurEffect?.value(forKeyPath: key.rawValue) as? T
+            guard let blurEffect else { return nil }
+            return (try? RuntimeObject(blurEffect).value(forKey: key.rawValue)) as? T
         }
 
         /// Sets a KVC value on the `_UICustomBlurEffect` and rebuilds.
         fileprivate func setBlurEffectValue(_ value: (some Any)?, forKey key: BlurEffectKey) {
             lastConfiguration = nil
-            blurEffect?.setValue(value, forKeyPath: key.rawValue)
+            if let blurEffect {
+                try? RuntimeObject(blurEffect).setValue(value, forKey: key.rawValue)
+            }
             prepareForChanges()
             applyChanges()
         }
