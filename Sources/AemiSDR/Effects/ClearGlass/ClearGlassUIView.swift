@@ -28,13 +28,20 @@
         }
 
         private let renderer: ClearGlassRenderer?
-        private var source: MTLTexture?
+        private var source: TextureSourceLease?
         private var sourceOriginOverride: CGPoint?
         private var field: MTLTexture?
         private var fieldKey: String?
         private var fieldShape: GlassShape?
         private var fieldValues: GlassDistanceField?
         private var redrawPending = false
+
+        /// Fired once when the view first becomes ready for capture (has a window and a non-zero size).
+        var onReadyForFirstCapture: (() -> Void)?
+        private var didFireReady = false
+
+        /// Fires when the view's superview chain or appearance changes.
+        var onContentHierarchyChanged: (() -> Void)?
 
         /// The glass is drawn in a child layer that reaches `configuration.margin` points beyond the bounds, so the dark
         /// ring outside the edge is not clipped.
@@ -72,19 +79,42 @@
         /// What is behind the glass. `origin` is where this view's top-left corner sits in the image, in points; when
         /// nil, the view's position in its window is used, which is right when the image covers the window.
         public func setSourceImage(_ image: CGImage, origin: CGPoint? = nil) {
-            source = renderer?.makeSourceTexture(from: image)
+            if let texture = renderer?.makeSourceTexture(from: image) {
+                source = TextureSourceLease(texture: texture)
+            } else {
+                source = nil
+            }
+            sourceOriginOverride = origin
+            setNeedsRedraw()
+        }
+
+        /// Sets a pre-existing Metal texture as the source with a completion lease.
+        public func setSourceTexture(
+            _ texture: MTLTexture, origin: CGPoint? = nil, onConsumed: (@Sendable () -> Void)? = nil
+        ) {
+            source = TextureSourceLease(texture: texture, onConsumed: onConsumed)
             sourceOriginOverride = origin
             setNeedsRedraw()
         }
 
         public override func layoutSubviews() {
             super.layoutSubviews()
+            fireReadyIfPossible()
             redraw()
         }
 
         public override func didMoveToWindow() {
             super.didMoveToWindow()
+            guard window != nil else { return }
+            onContentHierarchyChanged?()
+            fireReadyIfPossible()
             setNeedsRedraw()
+        }
+
+        private func fireReadyIfPossible() {
+            guard !didFireReady, window != nil, bounds.width > 0, bounds.height > 0 else { return }
+            didFireReady = true
+            onReadyForFirstCapture?()
         }
 
         private func setNeedsRedraw() {
@@ -110,15 +140,21 @@
             let uniforms = configuration.uniforms(
                 size: bounds.size, scale: scale,
                 sourceOrigin: CGPoint(x: (origin.x - margin) * scale, y: (origin.y - margin) * scale),
-                sourceSize: CGSize(width: source.width, height: source.height))
+                sourceSize: CGSize(width: source.texture.width, height: source.texture.height))
             guard let drawable = metalLayer.nextDrawable(), let buffer = renderer.makeCommandBuffer() else { return }
             let (sdf, exact) = distanceField(renderer: renderer, outer: outer.size, margin: margin, scale: scale)
             var plan = configuration.blurPlan(scale: scale)
             plan.lookReach = configuration.lookReach(size: bounds.size, scale: scale, field: exact)
+            let read = source.beginRead()
             guard
                 renderer.encode(
-                    into: buffer, source: source, uniforms: uniforms, blur: plan, field: sdf, target: drawable.texture)
-            else { return }
+                    into: buffer, source: source.texture, uniforms: uniforms, blur: plan, field: sdf,
+                    target: drawable.texture)
+            else {
+                read.finish()
+                return
+            }
+            buffer.addCompletedHandler { _ in read.finish() }
             buffer.present(drawable)
             buffer.commit()
         }
