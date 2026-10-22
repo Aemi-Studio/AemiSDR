@@ -18,7 +18,11 @@
         public var configuration: ClearGlassConfiguration {
             didSet {
                 guard configuration != oldValue else { return }
-                if configuration.shape != oldValue.shape { field = nil }
+                if configuration.shape != oldValue.shape {
+                    field = nil
+                    fieldValues = nil
+                    fieldKey = nil
+                }
                 setNeedsRedraw()
             }
         }
@@ -28,6 +32,7 @@
         private var sourceOriginOverride: CGPoint?
         private var field: MTLTexture?
         private var fieldKey: String?
+        private var fieldValues: GlassDistanceField?
         private var redrawPending = false
 
         /// The glass is drawn in a child layer that reaches `configuration.margin` points beyond the bounds, so the dark
@@ -106,12 +111,12 @@
                 sourceOrigin: CGPoint(x: (origin.x - margin) * scale, y: (origin.y - margin) * scale),
                 sourceSize: CGSize(width: source.width, height: source.height))
             guard let drawable = metalLayer.nextDrawable(), let buffer = renderer.makeCommandBuffer() else { return }
-            let sdf = distanceField(renderer: renderer, outer: outer.size, margin: margin, scale: scale)
+            let (sdf, exact) = distanceField(renderer: renderer, outer: outer.size, margin: margin, scale: scale)
+            var plan = configuration.blurPlan(scale: scale)
+            plan.lookReach = configuration.lookReach(size: bounds.size, scale: scale, field: exact)
             guard
                 renderer.encode(
-                    into: buffer, source: source, uniforms: uniforms, blur: configuration.blurPlan(scale: scale),
-                    field: sdf,
-                    target: drawable.texture)
+                    into: buffer, source: source, uniforms: uniforms, blur: plan, field: sdf, target: drawable.texture)
             else { return }
             buffer.present(drawable)
             buffer.commit()
@@ -119,19 +124,20 @@
 
         /// The distance texture for a path shape, rebuilt only when the path or the pixel size changes. The raster covers
         /// the whole layer, margin included, so the field is defined just outside the shape too.
-        private func distanceField(renderer: ClearGlassRenderer, outer: CGSize, margin: CGFloat, scale: CGFloat)
-            -> MTLTexture?
-        {
-            guard case .path(let path) = configuration.shape else { return nil }
+        private func distanceField(
+            renderer: ClearGlassRenderer, outer: CGSize, margin: CGFloat, scale: CGFloat
+        ) -> (MTLTexture?, GlassDistanceField?) {
+            guard case .path(let path) = configuration.shape else { return (nil, nil) }
             let width = Int((outer.width * scale).rounded())
             let height = Int((outer.height * scale).rounded())
             let key = "\(path.hashValue)-\(width)x\(height)-\(margin)"
-            if let field, fieldKey == key { return field }
+            if let field, let fieldValues, fieldKey == key { return (field, fieldValues) }
             let values = SignedDistanceField.exact(
                 path: path, width: width, height: height, scale: scale, origin: CGPoint(x: margin, y: margin))
             field = renderer.makeFieldTexture(values)
+            fieldValues = values
             fieldKey = key
-            return field
+            return (field, values)
         }
     }
 #endif

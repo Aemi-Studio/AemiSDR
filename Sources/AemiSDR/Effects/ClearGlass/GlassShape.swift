@@ -41,9 +41,10 @@ public enum GlassCornerCurve: Equatable, Sendable {
 public enum GlassShape: Equatable, @unchecked Sendable {
     /// A rounded rectangle filling the view.
     case roundedRect(radii: GlassCornerRadii, curve: GlassCornerCurve = .continuous)
-    /// A rounded rectangle whose radius is half its shorter side.
+    /// Native glass's capsule: continuous corners with a radius of half the shorter side. Its field differs from a
+    /// circular capsule near the joins to the straight edges; those differences matter for deformation.
     case capsule
-    /// An ellipse inscribed in the view (a circle when the view is square).
+    /// A circle when the view is square; otherwise a circular capsule of the shorter side.
     case circle
     /// Any closed path, in the view's coordinate space (points, origin top left).
     case path(CGPath)
@@ -62,10 +63,10 @@ public enum GlassShape: Equatable, @unchecked Sendable {
             return SIMD4(
                 pixels(radii.topLeading, curve), pixels(radii.topTrailing, curve),
                 pixels(radii.bottomLeading, curve), pixels(radii.bottomTrailing, curve))
-        case .capsule, .circle:
-            // A circle is the capsule of a square: the ends are circular whatever the curve.
-            let value = Float(half)
-            return SIMD4(repeating: value)
+        case .capsule:
+            return SIMD4(repeating: half > 0 ? -Float(half) : 0)
+        case .circle:
+            return SIMD4(repeating: Float(half))
         case .path:
             return .zero
         }

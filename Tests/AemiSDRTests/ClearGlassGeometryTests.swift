@@ -24,6 +24,16 @@ struct ClearGlassGeometryTests {
         #expect(abs(total - 1) < 1e-6, "sigma \(sigma): the kernel sums to \(total)")
     }
 
+    @Test func `invalid and enormous blur radii produce finite bounded kernels`() {
+        for sigma: Float in [.nan, .infinity, -.infinity, .greatestFiniteMagnitude, -1, 0] {
+            let kernel = GaussianKernel(sigma: sigma)
+            #expect((1...GaussianKernel.maximumRadius).contains(kernel.radius))
+            #expect(kernel.weights.allSatisfy { $0.isFinite && $0 >= 0 })
+            #expect(kernel.pairedTaps.allSatisfy { $0.x.isFinite && $0.y.isFinite })
+            #expect(abs(kernel.weights[0] + 2 * kernel.weights.dropFirst().reduce(0, +) - 1) < 1e-5)
+        }
+    }
+
     @Test func `the kernel falls off monotonically and follows the Gaussian`() {
         let sigma: Float = 2.8
         let kernel = GaussianKernel(sigma: sigma)
@@ -166,23 +176,41 @@ struct ClearGlassGeometryTests {
             "a zero radius is a positive zero, never the bit pattern of -0.0")
     }
 
-    @Test func `a capsule and a circle round their ends fully`() {
+    @Test func `a capsule uses native continuous corners and a circle stays circular`() {
         let size = CGSize(width: 200, height: 60)
-        #expect(GlassShape.capsule.shaderRadii(size: size, scale: 2) == SIMD4(repeating: 60))
+        #expect(GlassShape.capsule.shaderRadii(size: size, scale: 2) == SIMD4(repeating: -60))
         #expect(GlassShape.circle.shaderRadii(size: CGSize(width: 80, height: 80), scale: 1) == SIMD4(repeating: 40))
+    }
+
+    @Test func `mutating blur components keeps the active weights normalised`() {
+        for weights: [CGFloat] in [
+            [], [1, 1, 1, 1], [0, 0, 0], [.greatestFiniteMagnitude, .greatestFiniteMagnitude], [.nan, 2, 3],
+        ] {
+            var configuration = ClearGlassConfiguration()
+            configuration.blur.components = weights.map { .init(radius: 1, weight: $0) }
+            let resolved = configuration.blurWeights
+            for values in [resolved.edge, resolved.inner] {
+                #expect((0..<4).allSatisfy { values[$0].isFinite && values[$0] >= 0 })
+                #expect(abs(values.x + values.y + values.z - 1) < 1e-6)
+            }
+        }
     }
 
     // MARK: Uniform layout
 
     @Test func `the uniform block has the layout the shader declares`() {
-        #expect(MemoryLayout<ClearGlassUniforms>.size == 128)
-        #expect(MemoryLayout<ClearGlassUniforms>.stride == 128)
+        #expect(MemoryLayout<ClearGlassUniforms>.size == 192)
+        #expect(MemoryLayout<ClearGlassUniforms>.stride == 192)
         #expect(MemoryLayout<ClearGlassUniforms>.offset(of: \.radii) == 32)
         #expect(MemoryLayout<ClearGlassUniforms>.offset(of: \.sdfRect) == 48)
         #expect(MemoryLayout<ClearGlassUniforms>.offset(of: \.rimEdge) == 64)
         #expect(MemoryLayout<ClearGlassUniforms>.offset(of: \.outline) == 88)
         #expect(MemoryLayout<ClearGlassUniforms>.offset(of: \.outlineDirection) == 96)
         #expect(MemoryLayout<ClearGlassUniforms>.offset(of: \.lightGain) == 124)
+        #expect(MemoryLayout<ClearGlassUniforms>.offset(of: \.weightsEdge) == 128)
+        #expect(MemoryLayout<ClearGlassUniforms>.offset(of: \.veilColor) == 160)
+        #expect(MemoryLayout<ClearGlassUniforms>.offset(of: \.chromatic) == 184)
+        #expect(MemoryLayout<ClearGlassUniforms>.offset(of: \.rimProfile) == 188)
     }
 
     @Test func `the configuration converts points to pixels`() {
@@ -305,15 +333,15 @@ struct ClearGlassGeometryTests {
             "the raster gradient (\(rasterSpread)) must be visibly worse, or this test proves nothing")
     }
 
-    /// The displacement read off native clear glass with a position-coded background (Glass Lab, Tools/deformation.py),
-    /// the same for a square, a capsule, a circle, a rounded rectangle and a triangle, in pixels at 3x.
+    /// Native circle, phase probe with flat-red cancellation of neutral tone AND rim light, rejecting clipping.
+    /// Median over +/-0.06 px depth bands, 44...129 valid samples per band, in pixels at 3x (diary 15).
+    /// The former table's tone-only inversion biased the first pixels of the rim by several pixels.
     private static let nativeProfile: [(depth: Double, pull: Double)] = [
-        (1.5, 134.0), (2.5, 127.0), (3.5, 119.0), (4.5, 111.0), (6, 100.0), (8, 89.0), (10, 79.5), (12, 71.5),
-        (15, 60.3),
-        (20, 45.4), (25, 33.4), (30, 23.9), (40, 10.2), (50, 2.4), (60, 0.0),
+        (0.5, 156.77), (1.5, 139.91), (2.5, 128.66), (3.5, 119.41), (4.5, 111.64), (8.5, 87.70),
+        (12.5, 70.04), (20.5, 44.49), (30.5, 23.30), (40.5, 9.80), (50.5, 2.28), (60.5, -0.02),
     ]
 
-    @Test func `the native rim profile follows the measured displacement to within two pixels`() {
+    @Test func `the native rim profile follows the measured displacement to within a quarter pixel`() {
         let rim = ClearGlassRim.nativeClear
         var worst = 0.0
         for (depth, measured) in Self.nativeProfile {
@@ -321,16 +349,30 @@ struct ClearGlassGeometryTests {
             let modelled = Double(rim.pull(atDepth: CGFloat(depth / 3))) * 3
             worst = max(worst, abs(modelled - measured))
         }
-        #expect(worst < 2.0, "the rim differs from the measured native profile by \(worst) px")
+        #expect(worst < 0.25, "the rim differs from the measured native profile by \(worst) px")
     }
 
-    @Test func `a single Gaussian cannot follow the measured profile, which is why the rim has two terms`() {
+    @Test func `the circular arc is monotone and stops at its height`() {
+        let rim = ClearGlassRim.circularArc(depth: 60, height: 20)
+        #expect(rim.pull(atDepth: -1) == 60)
+        #expect(rim.pull(atDepth: 0) == 60)
+        #expect(rim.pull(atDepth: 20) == 0)
+        #expect(rim.pull(atDepth: 200) == 0)
+        let values = (0...1000).map { rim.pull(atDepth: CGFloat($0) / 50) }
+        #expect(zip(values, values.dropFirst()).allSatisfy { $0 >= $1 && $1 >= 0 })
+        let uniforms = ClearGlassConfiguration(rim: rim).uniforms(
+            size: CGSize(width: 100, height: 100), scale: 3, sourceOrigin: .zero,
+            sourceSize: CGSize(width: 300, height: 300))
+        #expect(uniforms.rimProfile == 1 && uniforms.rimEdge == 180 && uniforms.rimEdgeFalloff == 60)
+    }
+
+    @Test func `a single Gaussian cannot follow the measured native rim profile`() {
         // Best single Gaussian through the measured table (fitted offline): 109 px, width 22 px.
         let gaussian = ClearGlassRim.gaussian(depth: 109.2 / 3, width: 22.3 / 3)
         var worst = 0.0
         for (depth, measured) in Self.nativeProfile {
             worst = max(worst, abs(Double(gaussian.pull(atDepth: CGFloat(depth / 3))) * 3 - measured))
         }
-        #expect(worst > 10, "if one Gaussian fitted, the second term would be dead weight: worst \(worst) px")
+        #expect(worst > 10, "the measured edge is not a Gaussian: worst \(worst) px")
     }
 }
