@@ -33,6 +33,8 @@ model and the code it describes, and (3) the guarantee that a lie or a stale pro
 |---|---|
 | falloff-curves | each of six easing polynomials maps [0,1] into [0,1], is non-decreasing, fixes 0 and 1 |
 | rounded-rect-sdf | sign of the distance (negative exactly inside), centre value, **corner wedges and the outermost pixel row are fully masked for every radius and fade width**, in both mask kernels |
+| circular-sdf | **circular rounded box is globally 1-Lipschitz over real points** across all 16 region pairs, checked with absolute contraction and Cauchy-Schwarz lemmas and sharpness witnesses |
+| circular-arc | real circular-arc refraction is bounded in [0, A], stops at its height, is monotone and sensitivity-bounded |
 | snell-refraction | air to denser medium never totally reflects, so the guard cannot reject an angle; the refracted direction is a unit vector |
 | schlick-fresnel | transmission stays in [0, 1 − F0] so the clamp is inert, is non-decreasing in cos, and equals 1 − F0 at normal incidence |
 | sellmeier-dispersion | each term decreases across the visible band, no resonance lies inside it, and every material's typed-in data gives blue > green > red > air and the published index at 546.1 nm |
@@ -41,9 +43,7 @@ model and the code it describes, and (3) the guarantee that a lie or a stale pro
 
 - Float32 or half-precision rounding. The proofs are real-number models; GPU-versus-CPU tests bound the arithmetic.
 - That native Liquid Glass is matched. That is empirical (Glass Lab) and measured, not proved.
-- That the SDF is 1-Lipschitz (a true distance bound). **Open.** The monolithic query returns `unknown`; splitting it into
-  64 sign cases proves 48 and leaves the 16 in which both points lie in a corner region, which need the absolute-value step
-  as a separate lemma. It stays open until all cases are decided; it is not asserted.
+- The continuous native field is not claimed to be globally 1-Lipschitz (the half-rounded term and polynomial correction differ from a Euclidean SDF).
 - Anything about code that is not pinned. A claim about unpinned code is a comment.
 
 ## Consequences
