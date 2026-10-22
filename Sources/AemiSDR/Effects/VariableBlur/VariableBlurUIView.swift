@@ -204,6 +204,7 @@
 
     extension VariableBlurUIView {
         fileprivate func setupVariableBlurFilter() {
+            guard PrivateAPIPolicy.isEnabled else { return }
             if let variableBlurFilter {
                 if installedRadius != configuredMaxBlurRadius {
                     variableBlurFilter.setValue(configuredMaxBlurRadius, forKey: _InternedKeys.radiusParam)

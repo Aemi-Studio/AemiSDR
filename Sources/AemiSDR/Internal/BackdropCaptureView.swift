@@ -20,6 +20,7 @@
     @MainActor
     final class BackdropCaptureView: UIView {
         override class var layerClass: AnyClass {
+            guard PrivateAPIPolicy.isEnabled else { return CALayer.self }
             if let cls = NSClassFromString(_InternedKeys.backdropLayerClass) { return cls }
             _PrivateAPIDiagnostics.logOnce(
                 key: "backdropLayerClass",
@@ -50,6 +51,7 @@
         }
 
         private func configureBackdropLayer() {
+            guard PrivateAPIPolicy.isEnabled else { return }
             let backdrop = layer
 
             // Unique group name to avoid cross-effect interference

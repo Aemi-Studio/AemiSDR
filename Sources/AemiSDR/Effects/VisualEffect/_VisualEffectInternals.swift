@@ -3,6 +3,7 @@
 //  AemiSDR
 //
 
+import Abysm
 import Foundation
 import OSLog
 
@@ -49,8 +50,8 @@ extension NSObject {
         return objects.first { filter in
             for lookupKey in [_InternedKeys.kindKey, _InternedKeys.kindFallbackA, _InternedKeys.kindFallbackB] {
                 if filter.responds(to: NSSelectorFromString(lookupKey)),
-                   let value = filter.value(forKeyPath: lookupKey) as? String,
-                   value == filterType
+                    let value = filter.value(forKeyPath: lookupKey) as? String,
+                    value == filterType
                 {
                     return true
                 }
@@ -87,12 +88,15 @@ extension NSObject {
         }
 
         func prepareForChanges() {
+            guard PrivateAPIPolicy.isEnabled else { return }
             effect = UIBlurEffect(style: .light)
-            gaussianBlur?.setValue(1.0, forKeyPath: _InternedKeys.scaleHintKey)
+            if let gaussianBlur {
+                try? RuntimeObject(gaussianBlur).setValue(1.0, forKey: _InternedKeys.scaleHintKey)
+            }
         }
 
         func applyChanges() {
-            guard let backdropView else { return }
+            guard PrivateAPIPolicy.isEnabled, let backdropView else { return }
             let sel = Selector(_InternedKeys.commitFiltersSelector)
             guard backdropView.responds(to: sel) else {
                 _PrivateAPIDiagnostics.logOnce(
@@ -109,8 +113,8 @@ extension NSObject {
 
     extension NSObject {
         var requestedValues: [String: Any]? {
-            get { value(forKeyPath: _InternedKeys.pendingValuesKey) as? [String: Any] }
-            set { setValue(newValue, forKeyPath: _InternedKeys.pendingValuesKey) }
+            get { (try? RuntimeObject(self).value(forKey: _InternedKeys.pendingValuesKey)) as? [String: Any] }
+            set { try? RuntimeObject(self).setValue(newValue, forKey: _InternedKeys.pendingValuesKey) }
         }
     }
 
@@ -135,7 +139,7 @@ extension NSObject {
         /// traversing the layer hierarchy to find the `CABackdropLayer`.
         var backdropLayer: CALayer? {
             if responds(to: NSSelectorFromString(_InternedKeys.backdropLayerRef)),
-               let layer = value(forKey: _InternedKeys.backdropLayerRef) as? CALayer
+                let layer = value(forKey: _InternedKeys.backdropLayerRef) as? CALayer
             {
                 return layer
             }
@@ -158,7 +162,8 @@ extension NSObject {
 
         /// The `colorBrightness` CAFilter from the backdrop layer's filters array.
         var colorBrightnessFilter: NSObject? {
-            backdropLayer?._filterValue(forKey: _InternedKeys.filterListKey, filterType: _InternedKeys.brightnessFilterID)
+            backdropLayer?._filterValue(
+                forKey: _InternedKeys.filterListKey, filterType: _InternedKeys.brightnessFilterID)
         }
     }
 #endif
