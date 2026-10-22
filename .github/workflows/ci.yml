@@ -23,10 +23,18 @@ jobs:
         uses: Aemi-Studio/aemi/.github/actions/setup-swift@main
       - name: Install Metal compiler
         run: xcodebuild -downloadComponent MetalToolchain
+      - name: Install Z3 solver
+        run: brew install z3
       - name: Resolve published dependencies
-        run: swift package update
+        run: swift package resolve
       - name: Test renderer
         run: swift test
+      - name: Test iOS renderer with the Xcode toolchain
+        if: matrix.swift == '6.4'
+        run: |
+          xcodebuild -quiet -workspace .swiftpm/xcode/package.xcworkspace \
+            -scheme AemiSDR-Package -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
+            -derivedDataPath "$RUNNER_TEMP/AemiSDR-ios" CODE_SIGNING_ALLOWED=NO test
       - name: Build iOS renderer with the Xcode toolchain
         if: matrix.swift == '6.3'
         run: |
