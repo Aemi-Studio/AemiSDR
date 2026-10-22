@@ -53,6 +53,8 @@
 
         private var displayLink: CADisplayLink?
         private var displayLinkProxy: DisplayLinkProxy?
+        private let makeDisplayLink: ((DisplayLinkProxy) -> CADisplayLink)?
+        private let refreshRatePolicy: ((Int) -> Int)?
         /// User-initiated pause — `true` while the app is backgrounded. Set by
         /// `pauseDisplayLink` / `resumeDisplayLink` only. Kept separate from
         /// `systemPaused` so a reduce-motion / thermal pause that fires while
@@ -98,7 +100,12 @@
             cachedBackgroundColor = nil
         }
 
-        init() {
+        init(
+            makeDisplayLink: ((DisplayLinkProxy) -> CADisplayLink)? = nil,
+            refreshRatePolicy: ((Int) -> Int)? = nil
+        ) {
+            self.makeDisplayLink = makeDisplayLink
+            self.refreshRatePolicy = refreshRatePolicy
             // Lifecycle notifications are funnelled through a single
             // process-wide registry that fans events out to every live
             // coordinator. This caps observer registration at five per
@@ -123,6 +130,7 @@
         /// Returns 0 to signal "fully pause"; otherwise an fps value bounded
         /// by `refreshRate` and the strictest active cap.
         private var effectiveRefreshRate: Int {
+            if let refreshRatePolicy { return max(0, refreshRatePolicy(refreshRate)) }
             // `UIAccessibility.isReduceMotionEnabled` is `@unsafe`-annotated on
             // iOS 26 SDK because it can be queried from any thread; we're on
             // MainActor here, where the read is safe.
@@ -199,7 +207,9 @@
             // ObjC API; the proxy is `@MainActor` and the link is added to the
             // main run loop below, so the selector dispatch always lands on
             // main. No `unsafe` needed under the iOS 26 SDK annotations.
-            let link = CADisplayLink(target: proxy, selector: #selector(DisplayLinkProxy.fire(_:)))
+            let link =
+                makeDisplayLink?(proxy)
+                ?? CADisplayLink(target: proxy, selector: #selector(DisplayLinkProxy.fire(_:)))
             applyFrameRate(to: link)
             link.add(to: .main, forMode: .common)
             displayLink = link
@@ -244,8 +254,8 @@
         }
 
         private func resumeDisplayLink() {
-            guard continuousCapture else { return }
             userPaused = false
+            guard continuousCapture else { return }
             // Only un-pause if the system state also permits it. A pending
             // reduce-motion / thermal-critical pause must keep the link
             // suspended even though the user-pause has cleared.
@@ -267,7 +277,6 @@
             guard effectView.window != nil else { return }
 
             performCapture()
-            hasCaptured = true
         }
 
         private func performCapture() {
@@ -304,16 +313,16 @@
             // cheap visual signature is unchanged. A typical app screen is static
             // between user inputs; this saves a full hierarchy rasterisation per
             // display-link tick.
-            if !forceCaptureEveryFrame {
-                let signature = ContentSignature(
+            let signature: ContentSignature? =
+                forceCaptureEveryFrame
+                ? nil
+                : ContentSignature(
                     bounds: contentView.bounds,
                     subviewCount: contentView.subviews.count,
                     sublayerCount: contentView.layer.sublayers?.count ?? 0,
                     contentsIdentifier: contentView.layer.contents.map { ObjectIdentifier($0 as AnyObject) }
                 )
-                if signature == lastContentSignature && hasCaptured { return }
-                lastContentSignature = signature
-            }
+            if let signature, signature == lastContentSignature && hasCaptured { return }
 
             ensureBridge(width: pixelWidth, height: pixelHeight)
             guard let bridge, let consumerID = bridgeConsumerID else { return }
@@ -346,6 +355,8 @@
                 ctx.restoreGState()
             }
             if let captured {
+                lastContentSignature = signature
+                hasCaptured = true
                 processTexture(captured)
             }
         }
@@ -459,6 +470,7 @@
                     ctx.restoreGState()
                 })
             {
+                hasCaptured = true
                 processTexture(captured)
             }
         }
