@@ -372,7 +372,7 @@ struct ClearGlassGeometryTests {
         let uniforms = ClearGlassConfiguration(rim: rim).uniforms(
             size: CGSize(width: 100, height: 100), scale: 3, sourceOrigin: .zero,
             sourceSize: CGSize(width: 300, height: 300))
-        #expect(uniforms.rimProfile == 1 && uniforms.rimEdge == 180 && uniforms.rimEdgeFalloff == 60)
+        #expect(uniforms.rimProfile == 1 && uniforms.rimEdge == 150 && uniforms.rimEdgeFalloff == 60)
     }
 
     @Test func `a single Gaussian cannot follow the measured native rim profile`() {

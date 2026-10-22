@@ -38,7 +38,7 @@ public enum GlassCornerCurve: Equatable, Sendable {
     case continuous
 }
 
-public enum GlassShape: Equatable, @unchecked Sendable {
+public enum GlassShape: Equatable, Sendable {
     /// A rounded rectangle filling the view.
     case roundedRect(radii: GlassCornerRadii, curve: GlassCornerCurve = .continuous)
     /// Native glass's capsule: continuous corners with a radius of half the shorter side. Its field differs from a
@@ -47,7 +47,10 @@ public enum GlassShape: Equatable, @unchecked Sendable {
     /// A circle when the view is square; otherwise a circular capsule of the shorter side.
     case circle
     /// Any closed path, in the view's coordinate space (points, origin top left).
-    case path(CGPath)
+    case path(GlassPath)
+
+    /// Snapshots a caller-owned path before it can cross a rendering boundary.
+    public static func path(_ path: CGPath) -> GlassShape { .path(GlassPath(path)) }
 
     /// The signed pixel radii the shader expects: (topLeft, topRight, bottomLeft, bottomRight), negative for a
     /// continuous corner. Only meaningful for the analytic shapes.
