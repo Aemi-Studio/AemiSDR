@@ -44,12 +44,18 @@
 
         /// Current display scale, used for pixel-accurate mask generation
         private var currentScale: CGFloat { displayScale }
+        /// Test seam: counts how many times a mask image was applied to `layer.mask`.
+        var maskApplicationCount: Int = 0
+
         private var reusableMaskLayer: CALayer?
 
         /// Identity of the most recently *requested* mask. A background
         /// generation publishes its result on main only when this matches —
         /// a newer `updateMask` invalidates an in-flight task without race.
         private var pendingMaskKey: MaskCacheKey?
+
+        /// Identity of the currently applied mask image, avoiding redundant layer reassignments.
+        private var appliedMaskKey: MaskCacheKey?
 
         /// Whether a mask CGImage has ever been installed on the layer mask.
         /// Before the first install the view's `.mask` is `nil`, so the host
@@ -174,12 +180,15 @@
                 inverted: configuredInverted
             )
 
+            // When the mask is already applied to this view's layer mask, layout does no work.
+            guard key != appliedMaskKey || layer.mask == nil else { return }
+
             // Fast path: identical mask already cached. Stay on main and
             // apply to the layer immediately — no flicker on reattach or
             // common-config recycling.
             if let cached = MaskCache.peek(for: key) {
                 pendingMaskKey = nil
-                applyMaskImage(cached)
+                applyMaskImage(cached, for: key)
                 hasAppliedMask = true
                 return
             }
@@ -207,7 +216,7 @@
                     inverted: inverted
                 ) {
                     MaskCache.insert(image, for: key)
-                    applyMaskImage(image)
+                    applyMaskImage(image, for: key)
                     hasAppliedMask = true
                     pendingMaskKey = nil
                     return
@@ -235,20 +244,27 @@
                         guard let self else { return }
                         guard self.pendingMaskKey == key else { return }
                         self.pendingMaskKey = nil
-                        self.applyMaskImage(image)
+                        self.applyMaskImage(image, for: key)
                         self.hasAppliedMask = true
                     }
                 }
             }
         }
 
-        private func applyMaskImage(_ image: CGImage) {
+        private func applyMaskImage(_ image: CGImage, for key: MaskCacheKey? = nil) {
+            maskApplicationCount += 1
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
             let maskLayer = reusableMaskLayer ?? CALayer()
             reusableMaskLayer = maskLayer
             maskLayer.frame = bounds
             maskLayer.contents = image
             if layer.mask !== maskLayer {
                 layer.mask = maskLayer
+            }
+            CATransaction.commit()
+            if let key {
+                appliedMaskKey = key
             }
         }
 
