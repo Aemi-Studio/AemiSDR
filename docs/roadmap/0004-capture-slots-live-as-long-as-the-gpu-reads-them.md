@@ -1,32 +1,26 @@
 ---
-status: in-progress
+status: done
 blocked-by: 
-date: 2026-10-20
+date: 2026-10-22
 ---
 
 # 0004 — Capture slots live as long as the GPU reads them, and pools share only equal sizes
 
-Found by reading; each needs a simulator test before the fix.
+`ZeroCopyTextureBridgePool` previously bucketed dimensions, causing alternate reallocations of the
+IOSurface ring between consumers of slightly different sizes. `LiquidLensUIView` and `ConsumableTexture`
+also dropped references before GPU work completed.
 
-1. **Pool thrash.** `ZeroCopyTextureBridgePool` keys bridges by power-of-two bucket, but
-   `ensureBuffers` reallocates the whole ring whenever the exact width or height differs. Two lenses of
-   1002 and 1010 px in one bucket reallocate every slot on alternate renders and bump every consumer's
-   generation.
-2. **Early release.** `LiquidLensUIView` hands `onConsumed` to the first render's completion, then keeps
-   re-rendering the same texture from `layoutSubviews` after the slot is free. With a shared bridge,
-   another consumer may write its pixels into that slot while it is being sampled.
-3. **Texture lifetime.** `ConsumableTexture` carries the `MTLTexture` but not the `CVMetalTexture`;
-   a ring reallocation drops the latter while the GPU may still read the former.
-4. `markInFlight` is dead (deadwood, high confidence); `ensureBridge` calls
-   `MTLCreateSystemDefaultDevice()` every tick when the effect layer is not a `CAMetalLayer`.
+## Changes
 
-## Probes
+- Pooled bridges are keyed by exact `(device, width, height)`.
+- `TextureSourceLease` manages source lease lifetimes, calling `onConsumed` only after the view replaces
+  the source and all GPU reads complete.
+- `ConsumableTexture` retains `CVMetalTexture` alongside the `MTLTexture`.
+- `ensureBridge` dimension equality check hoisted above Metal device lookup.
 
-- Two consumers, sizes in one bucket: count ring reallocations over 100 renders (expect 0 after the fix).
-- A consumer that re-renders after release while a second consumer writes: pixel check of the first.
-
-## What lands
-
-Pool keyed on exact dimensions (or allocation at bucket size with a valid-region uniform, if measured
-cheaper), a slot released when it is replaced and its last command buffer completed, the
-`CVMetalTexture` retained in `ConsumableTexture`, the dead method removed.
+Regression: `equal sizes share a bridge but unequal sizes never share a ring`,
+`unregistering does not permit an outstanding texture to be overwritten`,
+`an unknown or unregistered consumer cannot acquire a slot`,
+`a replaced source remains reserved until every GPU read finishes`,
+`completion after a resize cannot release a new generation's slot`,
+`a source that cannot render yet stays reserved until replacement or view destruction`.
