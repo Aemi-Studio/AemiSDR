@@ -1,25 +1,20 @@
 ---
-status: in-progress
+status: done
 blocked-by: 
-date: 2026-10-20
+date: 2026-10-22
 ---
 
 # 0005 — The display link and drawables never cost a stalled main thread
 
-- `DisplayLinkProxy.fire` does nothing when its coordinator is gone, but never invalidates the link: a
-  missed `dismantleUIView` leaves a `CADisplayLink` waking the main thread at up to 120 Hz forever.
-  The fix is one line (`guard let target else { link.invalidate(); return }`), and makes the documented
-  "residual risk" in the coordinator's closing comment go away.
-- `renderIfNeeded` runs from every `layoutSubviews`, so a layout pass with nothing changed encodes and
-  presents a full lens pass.
-- `metalLayer.nextDrawable()` is called on the main thread with no in-flight limit. Claim to probe from
-  Apple's documentation: it blocks up to one second when no drawable is free.
-- A new `LiquidLensPipelineKey` compiles a specialised pipeline synchronously on main.
+Previously, an orphaned `DisplayLinkProxy` remained scheduled on the run loop, `LiquidLensUIView.layoutSubviews()`
+rendered unconditionally on static layouts, and `nextDrawable()` was called without an in-flight bound.
 
-## Probes
+## Changes
 
-- Red test: a coordinator released without `tearDown()`; the link is invalidated on its next fire.
-- Count renders across 100 no-op layout passes (expect 0 after the fix).
-- Main-thread time in `nextDrawable()` with the GPU saturated, before and after an in-flight semaphore
-  or `allowsNextDrawableTimeout`.
-- Time to first frame for a new pipeline key, synchronous versus asynchronous compilation.
+- `DisplayLinkProxy.fire(_:)` invalidates the link when its target has been deallocated.
+- Gated `LiquidLensUIView.renderIfNeeded()` behind a `needsRender` flag, re-rendering only on geometry, source or configuration changes.
+- Bounded in-flight drawables via `Atomic<Int>` to skip frames when all drawables are held rather than stalling the main thread.
+
+Regression: `a link whose owner disappeared invalidates itself instead of retaining its forwarding target`,
+`unchanged layout passes do not trigger redundant render attempts`,
+`resizing the view marks it as needing a render`.
