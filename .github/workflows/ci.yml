@@ -31,6 +31,8 @@ jobs:
         run: swift test
       - name: Build iOS renderer with the Xcode toolchain
         run: |
+          # Swift.org toolchains do not bundle Apple's linker; ensure the Xcode toolchain is used for iOS Simulator.
+          unset TOOLCHAINS
           # The checked-in navigation workspace exposes only the demo scheme.
           # Let Xcode discover schemes from Package.swift for this package build.
           mv AemiSDR.xcworkspace "$RUNNER_TEMP/AemiSDR-navigation.xcworkspace"
