@@ -1,12 +1,12 @@
 {
-  "originHash" : "00846b5d34aac5b84e7a2998f07eab069510d16e6f14b8d7d2b252e928a5c902",
+  "originHash" : "5646891e57632cb256cdd6bacc7f7f181f4143f0fa7967ecd4f2d499007de7aa",
   "pins" : [
     {
       "identity" : "abysm",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/g-cqd/Abysm.git",
       "state" : {
-        "revision" : "3081b0da9221e0f7e8735270a852707619206919"
+        "revision" : "368f8f7c939c42f0e0672cb859b76d48f85dd6b2"
       }
     },
     {
@@ -14,7 +14,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/Aemi-Studio/aemi.git",
       "state" : {
-        "revision" : "31df13e5fcfbab12b79f82eb46e3669f8e584e29"
+        "revision" : "afc1be3d578045b381e76f6b1712a81b39956ced"
       }
     },
     {
@@ -22,8 +22,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-collections.git",
       "state" : {
-        "revision" : "35a1edcb8ebd2bfe251d587f0b69e62af28f508c",
-        "version" : "1.7.3"
+        "revision" : "844289ac455816e193f1dbbe014f3c4dbe429410",
+        "version" : "1.7.4"
       }
     },
     {
