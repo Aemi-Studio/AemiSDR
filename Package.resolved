@@ -1,12 +1,12 @@
 {
-  "originHash" : "5646891e57632cb256cdd6bacc7f7f181f4143f0fa7967ecd4f2d499007de7aa",
+  "originHash" : "7d00b2593e655d7763ba030d8c8700fc42652d4d044b052d53ac469320630196",
   "pins" : [
     {
       "identity" : "abysm",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/g-cqd/Abysm.git",
       "state" : {
-        "revision" : "368f8f7c939c42f0e0672cb859b76d48f85dd6b2"
+        "revision" : "ee78fe70242143400e6c33c6df25da1982cfdbcb"
       }
     },
     {
@@ -14,7 +14,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/Aemi-Studio/aemi.git",
       "state" : {
-        "revision" : "afc1be3d578045b381e76f6b1712a81b39956ced"
+        "revision" : "785c6b25cb3f4dc16ca2334fd69428fae4ee0b01"
       }
     },
     {
