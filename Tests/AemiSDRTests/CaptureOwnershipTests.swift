@@ -35,7 +35,7 @@
             #expect(!captures.isEmpty)
             #expect(!captures.contains { ObjectIdentifier($0.texture) == ObjectIdentifier(held.texture) })
             held.onConsumed()
-            captures.forEach { $0.onConsumed() }
+            for capture in captures { capture.onConsumed() }
             bridge.unregister(arriving)
         }
 

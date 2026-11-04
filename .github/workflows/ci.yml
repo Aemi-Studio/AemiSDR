@@ -1,41 +1,22 @@
 name: CI
+
+# swift-ci plans and runs the checks from .ci/action.json (https://github.com/g-cqd/swift-ci); .ci/README.md lists
+# what runs when. `.ci/swift-ci local` runs the same checks on a developer's machine.
 on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
+  schedule:
+    - cron: "17 3 * * *"
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
-  test:
-    name: Swift ${{ matrix.swift }}
-    runs-on: macos-26
-    strategy:
-      fail-fast: false
-      matrix:
-        swift: ['6.3', '6.4']
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - name: Select SDK
-        run: sudo xcode-select -s /Applications/Xcode_26.6.app
-      - name: Install Swift 6.4
-        if: matrix.swift == '6.4'
-        uses: Aemi-Studio/aemi/.github/actions/setup-swift@afc1be3d578045b381e76f6b1712a81b39956ced # aemi afc1be3
-      - name: Install Metal compiler
-        run: xcodebuild -downloadComponent MetalToolchain
-      - name: Install Z3 solver
-        run: brew install z3
-      - name: Resolve published dependencies
-        run: swift package resolve
-      - name: Test renderer
-        run: swift test
-      - name: Build iOS renderer with the Xcode toolchain
-        run: |
-          # Swift.org toolchains do not bundle Apple's linker; ensure the Xcode toolchain is used for iOS Simulator.
-          unset TOOLCHAINS
-          # The checked-in navigation workspace exposes only the demo scheme.
-          # Let Xcode discover schemes from Package.swift for this package build.
-          mv AemiSDR.xcworkspace "$RUNNER_TEMP/AemiSDR-navigation.xcworkspace"
-          xcodebuild -skipMacroValidation -skipPackagePluginValidation \
-            -scheme AemiSDR -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath "$RUNNER_TEMP/AemiSDR" CODE_SIGNING_ALLOWED=NO build
+  ci:
+    name: Checks
+    uses: g-cqd/swift-ci/.github/workflows/swift-ci.yml@4843bd85121c134890fa0ca8c9c2af246008e814 # swift-ci 4843bd8
+    permissions:
+      contents: write # reusable publish permission; this package publishes no archives

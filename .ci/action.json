@@ -1,0 +1,18 @@
+{
+  "project": { "linux": false },
+  "swift": { "versions": ["6.4.1", "6.3.3"], "matrix": ["macos-debug"], "xcode": "26.6" },
+  "commands": [
+    {
+      "id": "renderer-toolchain",
+      "title": "Setup · Metal Toolchain & Z3",
+      "run": "xcodebuild -downloadComponent MetalToolchain && brew install z3",
+      "before": ["macos-debug"]
+    },
+    {
+      "id": "ios-renderer",
+      "title": "Compatibility · iOS Simulator Renderer",
+      "run": "unset TOOLCHAINS; mv AemiSDR.xcworkspace \"$RUNNER_TEMP/AemiSDR-navigation.xcworkspace\"; xcodebuild -skipMacroValidation -skipPackagePluginValidation -scheme AemiSDR -destination 'generic/platform=iOS Simulator' -derivedDataPath \"$RUNNER_TEMP/AemiSDR\" CODE_SIGNING_ALLOWED=NO build; status=$?; mv \"$RUNNER_TEMP/AemiSDR-navigation.xcworkspace\" AemiSDR.xcworkspace; exit $status",
+      "after": "macos-debug"
+    }
+  ]
+}

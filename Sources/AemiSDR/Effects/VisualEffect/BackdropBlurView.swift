@@ -35,7 +35,6 @@ import SwiftUI
     ///
     /// - Warning: This implementation uses private APIs and may break in future iOS versions.
     public struct BackdropBlurView: UIViewRepresentable {
-
         /// Single source of truth for the effect state. The scalar-parameter
         /// init below funnels into this via a synthesised configuration.
         private let configuration: BackdropBlurConfiguration
@@ -96,7 +95,6 @@ import SwiftUI
     /// the same continuous parameter control as iOS — blur radius, saturation, brightness, and tint
     /// can all be set to arbitrary values rather than being limited to discrete materials.
     public struct BackdropBlurView: NSViewRepresentable {
-
         private let configuration: BackdropBlurConfiguration
 
         // MARK: - Initialization
