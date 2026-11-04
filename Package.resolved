@@ -1,12 +1,12 @@
 {
-  "originHash" : "bc74a1a6bb6fe8aeebec945a33cf4f4a775b7f32b650df5eff1ff8dfe58d9421",
+  "originHash" : "e0f702d3bb60027bf7064d0f3da014d8020a2894bdfdf3b617505b95b105f580",
   "pins" : [
     {
       "identity" : "abysm",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/g-cqd/Abysm.git",
       "state" : {
-        "revision" : "f180a858f0b5a15be699861097d1f0c2fe2806df"
+        "revision" : "e910759664234486e99c04571ed49e7c38037e64"
       }
     },
     {

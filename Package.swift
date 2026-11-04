@@ -30,7 +30,7 @@ private let package = Package(
         // Typed, verified private-API access (docs/adr/0002), published independently of InternedStrings.
         .package(
             url: "https://github.com/g-cqd/Abysm.git",
-            revision: "f180a858f0b5a15be699861097d1f0c2fe2806df"
+            revision: "e910759664234486e99c04571ed49e7c38037e64"
         ),
     ],
     targets: [
