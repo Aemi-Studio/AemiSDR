@@ -25,7 +25,7 @@ private let package = Package(
         // developer tested, and moving the pin is a reviewed commit. CI resolves; it never updates (ADR-0004).
         .package(
             url: "https://github.com/Aemi-Studio/aemi.git",
-            revision: "f6da05cd0efdf60700e854efb5b6092eae89b8c5"
+            revision: "a2cd87ada2654070fd5730fa601eb24b2271e2e5"
         ),
         // Typed, verified private-API access (docs/adr/0002), published independently of InternedStrings.
         .package(
