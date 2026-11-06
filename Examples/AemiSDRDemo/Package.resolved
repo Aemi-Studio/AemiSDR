@@ -6,7 +6,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/g-cqd/Abysm.git",
       "state" : {
-        "revision" : "7831773684710210308843028026404caf07cf34"
+        "revision" : "2e7017323c55a70217dacf2ade87d587412934b5"
       }
     },
     {
@@ -14,7 +14,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/Aemi-Studio/aemi.git",
       "state" : {
-        "revision" : "e30aad82377cbea62171cc722a88041e97021db2"
+        "revision" : "409c647a91736065ac53c1877abe2cf4840f7617"
       }
     },
     {
