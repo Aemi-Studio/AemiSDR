@@ -60,6 +60,7 @@ package enum _InternedKeys {
     @Interned static var setGroupNameSelector = "setGroupName:"
     @Interned static var setWindowServerAwareSelector = "setWindowServerAware:"
     @Interned static var inputKeysSelector = "inputKeys"
+    @Interned static var filterTypesSelector = "filterTypes"
 
     #if os(iOS)
 
