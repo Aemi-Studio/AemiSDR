@@ -50,4 +50,15 @@ final class BlurBackdropLayer {
         applied = recipe
         return true
     }
+
+    /// Assigns the applied recipe's filters again, for a layer that changed size: the variable blur's mask is fitted to the layer
+    /// when the filters are assigned, so a mask set while the layer was empty (a SwiftUI view before its first layout) stays
+    /// unfitted and the blur ends at the layer's edge at full strength. Plain blurs need nothing.
+    func refit() {
+        guard let applied, case .variable = applied.shape, let filters = BlurFilterFactory.filters(for: applied) else {
+            return
+        }
+        layer.filters = filters
+        filterAssignmentCount += 1
+    }
 }

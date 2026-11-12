@@ -16,12 +16,16 @@ enum BlurMaskImages {
         return made
     }
 
-    /// Alpha per row, top first: 1 over the solid part from the edge, then a straight fall to 0.
+    /// Alpha per row, top first: 1 over the solid part from the edge, then a cubic fall to 0. The alpha scales the blur's radius, and
+    /// fine detail is gone at a small part of it: with a straight fall the content stays blurred out until the last few points and
+    /// comes back along a line. The cubic gives most of the fall to small radii, where the eye still sees them change (probed:
+    /// diary 2026-11-13-01).
     static func alpha(row: Int, of mask: BlurMask) -> Double {
         let fromEdge = Double(mask.edge == .top ? row : rows - 1 - row) / Double(rows - 1)
         guard fromEdge > mask.solidFraction else { return 1 }
         let fade = 1 - mask.solidFraction
-        return fade > 0 ? max(0, 1 - (fromEdge - mask.solidFraction) / fade) : 0
+        let linear = fade > 0 ? max(0, 1 - (fromEdge - mask.solidFraction) / fade) : 0
+        return linear * linear * linear
     }
 
     private static func make(_ mask: BlurMask) -> CGImage? {

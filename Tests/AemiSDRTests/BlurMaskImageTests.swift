@@ -42,4 +42,12 @@ import Testing
         let again = BlurMaskImages.image(for: .edge(.top, solid: 76, fade: 76))
         #expect(first != nil && first === again)
     }
+
+    @Test func `the fall is cubic, so the blur comes back gradually instead of along a line`() throws {
+        let mask = BlurMask.edge(.top, solid: 0, fade: 1)
+        let rows = BlurMaskImages.rows
+        let middle = BlurMaskImages.alpha(row: (rows - 1) / 2, of: mask)
+        #expect(abs(middle - 0.125) < 0.02, "half way through the fall, an eighth of the radius")
+        #expect(BlurMaskImages.alpha(row: rows - 1, of: mask) == 0)
+    }
 }

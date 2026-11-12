@@ -46,7 +46,10 @@
             super.layout()
             CATransaction.begin()
             CATransaction.setDisableActions(true)
+            let resized = backdrop?.layer.frame.size != bounds.size
             backdrop?.layer.frame = bounds
+            // A masked filter is fitted to the layer's size when it is assigned: a new size needs the filters again.
+            if resized, !bounds.isEmpty { backdrop?.refit() }
             CATransaction.commit()
             material?.frame = bounds
         }

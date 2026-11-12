@@ -50,6 +50,17 @@
             #expect(backdrop.apply(.uniform(radius: 14)) && backdrop.filterAssignmentCount == 2)
         }
 
+        @Test func `a variable blur is assigned again for a new size, a plain one is not`() throws {
+            let layer = try #require(BlurBackdropLayer.make())
+            layer.apply(.variable(radius: 24, mask: edge))
+            layer.refit()
+            #expect(layer.filterAssignmentCount == 2, "the mask is fitted to the size the layer has when assigned")
+            let plain = try #require(BlurBackdropLayer.make())
+            plain.apply(.uniform(radius: 8))
+            plain.refit()
+            #expect(plain.filterAssignmentCount == 1)
+        }
+
         @Test func `with private API off no filter and no backdrop layer is made`() {
             let was = PrivateAPIPolicy.isEnabled
             defer { PrivateAPIPolicy.isEnabled = was }
