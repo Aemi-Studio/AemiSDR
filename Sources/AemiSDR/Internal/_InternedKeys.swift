@@ -51,8 +51,17 @@ package enum _InternedKeys {
 
     // MARK: - iOS-Only Keys
 
+    @Interned static var maskedBlurFilterID = "variableBlur"
+
+    // MARK: - Backdrop layer (both platforms; roadmap 0020, diary 2026-11-12-01)
+
+    @Interned static var backdropClass = "CABackdropLayer"
+    @Interned static var setScaleSelector = "setScale:"
+    @Interned static var setGroupNameSelector = "setGroupName:"
+    @Interned static var setWindowServerAwareSelector = "setWindowServerAware:"
+    @Interned static var inputKeysSelector = "inputKeys"
+
     #if os(iOS)
-        @Interned static var maskedBlurFilterID = "variableBlur"
 
         // Effect View Classes
         @Interned static var customBlurEffectClass = "_UICustomBlurEffect"
