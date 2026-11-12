@@ -50,4 +50,28 @@ import Testing
         #expect(abs(middle - 0.125) < 0.02, "half way through the fall, an eighth of the radius")
         #expect(BlurMaskImages.alpha(row: rows - 1, of: mask) == 0)
     }
+
+    @Test func `an around mask is full in the middle and falls to nothing at every side`() throws {
+        let mask = BlurMask.around(width: 200, height: 100, fade: 25)
+        #expect(mask.solidFractionX == 0.75 && mask.solidFraction == 0.5)
+        let last = BlurMaskImages.rows - 1
+        let middle = last / 2
+        #expect(BlurMaskImages.alpha(column: middle, row: middle, of: mask) == 1)
+        for (column, row) in [(0, middle), (last, middle), (middle, 0), (middle, last), (0, 0)] {
+            #expect(BlurMaskImages.alpha(column: column, row: row, of: mask) == 0)
+        }
+        let image = try #require(BlurMaskImages.image(for: mask))
+        #expect(image.width == BlurMaskImages.rows && image.height == BlurMaskImages.rows)
+    }
+
+    @Test func `a corner mask is full at its corner and along its sides, and falls to nothing at the two others`() {
+        let mask = BlurMask.corner(.topTrailing, width: 100, height: 80, fade: 20)
+        #expect(mask.solidFractionX == 0.8 && mask.solidFraction == 0.75)
+        let last = BlurMaskImages.rows - 1
+        #expect(BlurMaskImages.alpha(column: last, row: 0, of: mask) == 1, "the corner")
+        #expect(BlurMaskImages.alpha(column: last, row: last / 2, of: mask) == 1, "along the trailing side")
+        #expect(BlurMaskImages.alpha(column: last / 2, row: 0, of: mask) == 1, "along the top")
+        #expect(BlurMaskImages.alpha(column: 0, row: 0, of: mask) == 0, "the leading side")
+        #expect(BlurMaskImages.alpha(column: last, row: last, of: mask) == 0, "the bottom")
+    }
 }
