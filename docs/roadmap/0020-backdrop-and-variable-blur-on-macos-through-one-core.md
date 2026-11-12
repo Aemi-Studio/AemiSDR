@@ -20,6 +20,12 @@ the ends of its sidebar list) and a tuned backdrop blur for panels and the comma
 5. **Budgets** (roadmap 0013): main-thread cost of `apply` with an unchanged recipe (target: no filter writes, no allocation),
    GPU cost of a 38 pt variable band over a scrolling page, release build, median and p99.
 
+## Done so far
+
+- Slices 1–3 (2026-11-12): `BlurRecipe`, `BlurMask`, `BlurFilterPlan`, `BlurMaskImages`, `BlurFilterFactory`, `BlurBackdropLayer`,
+  `BlurBackdropMode`, `BlurBackdropNSView`, `BlurBackdropView`. Tests: `BlurRecipeTests`, `BlurMaskImageTests`,
+  `BlurBackdropLayerTests`, `BlurBackdropNSViewTests` (18). iOS simulator build succeeds (the core compiles there; no iOS view yet).
+
 ## Not yet known
 
 - The GPU cost of `variableBlur` against `gaussianBlur` at the same radius.
