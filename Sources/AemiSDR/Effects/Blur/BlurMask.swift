@@ -7,6 +7,8 @@ public struct BlurMask: Sendable, Hashable {
     /// at a corner and along its two sides, and falls towards the two others.
     public enum Edge: Sendable, Hashable {
         case top, bottom, around
+        /// Strong at the leading (or trailing) side, falling across towards the other: the end of a row that scrolls sideways.
+        case leading, trailing
         case corner(Corner)
         /// Strong along `top` (or bottom), falling away from it and towards both ends: a blur under one control of a bar.
         case under(top: Bool)
@@ -15,7 +17,8 @@ public struct BlurMask: Sendable, Hashable {
     public enum Corner: Sendable, Hashable { case topLeading, topTrailing, bottomLeading, bottomTrailing }
 
     public let edge: Edge
-    /// The part of the layer, from the edge, that is fully blurred (0 to 1); the rest fades to none.
+    /// The part of the layer, from the edge, that is fully blurred (0 to 1); the rest fades to none. For `leading` and `trailing`
+    /// it is a part of the width.
     public let solidFraction: Double
     /// For `around`, `corner` and `under`: the part of the width that is fully blurred (1 for the edge masks).
     public var solidFractionX = 1.0

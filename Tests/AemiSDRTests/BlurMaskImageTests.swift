@@ -37,6 +37,23 @@ import Testing
         #expect(bottom == top.reversed())
     }
 
+    @Test func `a trailing edge mask falls across, from full at the trailing side to nothing at the leading one`()
+        throws
+    {
+        let mask = BlurMask.edge(.trailing, solid: 1, fade: 3)
+        let last = BlurMaskImages.rows - 1
+        #expect(mask.solidFraction == 0.25)
+        for row in [0, last / 2, last] {
+            #expect(BlurMaskImages.alpha(column: last, row: row, of: mask) == 1)
+            #expect(BlurMaskImages.alpha(column: 0, row: row, of: mask) == 0)
+        }
+        let leading = BlurMask.edge(.leading, solid: 1, fade: 3)
+        for column in 0...last {
+            let mirrored = BlurMaskImages.alpha(column: last - column, row: 0, of: mask)
+            #expect(abs(BlurMaskImages.alpha(column: column, row: 0, of: leading) - mirrored) < 1e-9)
+        }
+    }
+
     @Test func `the same shape gives the same image object: a resize does no mask work`() {
         let first = BlurMaskImages.image(for: .edge(.top, solid: 38, fade: 38))
         let again = BlurMaskImages.image(for: .edge(.top, solid: 76, fade: 76))

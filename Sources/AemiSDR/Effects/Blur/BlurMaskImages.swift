@@ -25,7 +25,7 @@ enum BlurMaskImages {
         switch mask.edge {
         case .top: fall(Double(row) / Double(rows - 1), solid: mask.solidFraction)
         case .bottom: fall(Double(rows - 1 - row) / Double(rows - 1), solid: mask.solidFraction)
-        case .around, .corner, .under: alpha(column: (rows - 1) / 2, row: row, of: mask)
+        case .around, .corner, .under, .leading, .trailing: alpha(column: (rows - 1) / 2, row: row, of: mask)
         }
     }
 
@@ -45,6 +45,8 @@ enum BlurMaskImages {
             let x = leading ? Double(column) / last : 1 - Double(column) / last
             let y = top ? Double(row) / last : 1 - Double(row) / last
             return fall(x, solid: mask.solidFractionX) * fall(y, solid: mask.solidFraction)
+        case .leading: return fall(Double(column) / last, solid: mask.solidFraction)
+        case .trailing: return fall(1 - Double(column) / last, solid: mask.solidFraction)
         case .under(let top):
             let y = top ? Double(row) / last : 1 - Double(row) / last
             return fall(fromMiddle(column), solid: mask.solidFractionX) * fall(y, solid: mask.solidFraction)
