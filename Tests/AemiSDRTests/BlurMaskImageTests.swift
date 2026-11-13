@@ -74,4 +74,15 @@ import Testing
         #expect(BlurMaskImages.alpha(column: 0, row: 0, of: mask) == 0, "the leading side")
         #expect(BlurMaskImages.alpha(column: last, row: last, of: mask) == 0, "the bottom")
     }
+
+    @Test func `an under mask is full along its edge in the middle, and falls away from it and towards both ends`() {
+        let mask = BlurMask.under(top: true, width: 200, height: 80, solid: 40, endFade: 25)
+        #expect(mask.solidFraction == 0.5 && mask.solidFractionX == 0.75)
+        let last = BlurMaskImages.rows - 1
+        #expect(BlurMaskImages.alpha(column: last / 2, row: 0, of: mask) == 1)
+        #expect(BlurMaskImages.alpha(column: last / 2, row: last / 3, of: mask) == 1, "the solid part")
+        #expect(BlurMaskImages.alpha(column: last / 2, row: last, of: mask) == 0, "the far side")
+        #expect(BlurMaskImages.alpha(column: 0, row: 0, of: mask) == 0, "the leading end")
+        #expect(BlurMaskImages.alpha(column: last, row: 0, of: mask) == 0, "the trailing end")
+    }
 }

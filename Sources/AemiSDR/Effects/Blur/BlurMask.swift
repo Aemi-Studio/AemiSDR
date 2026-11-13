@@ -8,6 +8,8 @@ public struct BlurMask: Sendable, Hashable {
     public enum Edge: Sendable, Hashable {
         case top, bottom, around
         case corner(Corner)
+        /// Strong along `top` (or bottom), falling away from it and towards both ends: a blur under one control of a bar.
+        case under(top: Bool)
     }
 
     public enum Corner: Sendable, Hashable { case topLeading, topTrailing, bottomLeading, bottomTrailing }
@@ -15,7 +17,7 @@ public struct BlurMask: Sendable, Hashable {
     public let edge: Edge
     /// The part of the layer, from the edge, that is fully blurred (0 to 1); the rest fades to none.
     public let solidFraction: Double
-    /// For `around` and `corner`: the part of the width that is fully blurred (1 for the edge masks).
+    /// For `around`, `corner` and `under`: the part of the width that is fully blurred (1 for the edge masks).
     public var solidFractionX = 1.0
 
     /// A mask over `solid + fade` points: full for `solid`, then falling to none over `fade`. Negative lengths count as zero; with
@@ -45,5 +47,18 @@ public struct BlurMask: Sendable, Hashable {
             return min(max((length - fade) / length, 0), 1)
         }
         return Self(edge: .corner(corner), solidFraction: solid(height), solidFractionX: solid(width))
+    }
+
+    /// A mask over a layer of `width` × `height` points: full over `solid` points from its top (or bottom) edge, then falling to none
+    /// over the rest of the height; across, falling to none over `endFade` points at both ends. One per control of a bar, so that
+    /// each control's blur has no side of its own.
+    public static func under(
+        top: Bool, width: Double, height: Double, solid: Double, endFade: Double
+    ) -> Self {
+        let y = height.isFinite && height > 0 ? min(max(solid / height, 0), 1) : 1
+        let x =
+            width.isFinite && width > 0 && endFade.isFinite && endFade > 0
+            ? min(max((width - 2 * endFade) / width, 0), 1) : 1
+        return Self(edge: .under(top: top), solidFraction: y, solidFractionX: x)
     }
 }
