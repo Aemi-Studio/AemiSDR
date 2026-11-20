@@ -2,6 +2,8 @@
     import Testing
     import UIKit
 
+    import func AemiTestKit.waitUntil
+
     @testable import AemiSDR
 
     @MainActor
@@ -49,11 +51,10 @@
             view.frame = CGRect(x: 0, y: 0, width: 250, height: 120)
             view.layoutSubviews()
 
-            for _ in 0..<50 {
-                if view.maskApplicationCount > initialApplications { break }
-                try await Task.sleep(for: .milliseconds(20))
+            // The mask has no event to wait on: waitUntil looks until it is applied, and fails here, naming it, if it never is.
+            try await waitUntil(timeout: .seconds(10), label: "the mask applied with the new dimensions") {
+                view.maskApplicationCount > initialApplications
             }
-            #expect(view.maskApplicationCount > initialApplications, "resizing must apply mask with new dimensions")
         }
     }
 #endif

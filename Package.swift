@@ -48,9 +48,6 @@ private let package = Package(
             exclude: [
                 "Shaders"
             ],
-            resources: [
-                .process("Previews/Assets.xcassets")
-            ],
             swiftSettings: swiftSettings,
             plugins: [
                 .plugin(name: "MetalShaderBuildPlugin")
@@ -89,7 +86,7 @@ private let package = Package(
         // Tests
         .testTarget(
             name: "AemiSDRTests",
-            dependencies: ["AemiSDR"],
+            dependencies: ["AemiSDR", .product(name: "AemiTestKit", package: "aemi")],
             swiftSettings: swiftSettings
         ),
     ]
