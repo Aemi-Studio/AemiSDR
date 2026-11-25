@@ -25,12 +25,12 @@ private let package = Package(
         // developer tested, and moving the pin is a reviewed commit. CI resolves; it never updates (ADR-0004).
         .package(
             url: "https://github.com/Aemi-Studio/aemi.git",
-            revision: "9e38d1bee60d5d65acffef4538c671b49860c6af"
+            revision: "340c49040faa49313d5632003d8224d9d0084fb0"
         ),
         // Typed, verified private-API access (docs/adr/0002), published independently of InternedStrings.
         .package(
             url: "https://github.com/g-cqd/Abysm.git",
-            revision: "24fdaf4d8642caf417a6a14e9748f69bf1dd7c8e"
+            revision: "3e7418e55c0bc1eb482a712d356b56eab5854d53"
         ),
     ],
     targets: [
