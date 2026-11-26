@@ -11,7 +11,6 @@ updates:
   - package-ecosystem: "swift"
     directories:
       - "/"
-      - "/Examples/AemiSDRDemo"
       - "/Examples/CAPrivateAPIProbe"
     schedule:
       interval: "weekly"
