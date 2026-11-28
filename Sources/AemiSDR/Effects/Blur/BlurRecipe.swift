@@ -14,6 +14,9 @@ public struct BlurRecipe: Sendable, Equatable {
     public var saturation: Double = 1
     /// `colorBrightness`'s amount after the blur; 0 leaves brightness as it is.
     public var brightness: Double = 0
+    /// Brings what is under it into the standard range before blurring, as the system's materials do (probed, macOS 27.2:
+    /// `sdrNormalize` first): an HDR highlight (a video, a sun drawn past white) is not spread into a glow by the blur.
+    public var normalizesDynamicRange = true
     /// Smooths the blur's edges where it meets unblurred content.
     public var normalizesEdges = true
     /// The resolution the backdrop is captured at, relative to the screen's; below 1 is cheaper and softer.

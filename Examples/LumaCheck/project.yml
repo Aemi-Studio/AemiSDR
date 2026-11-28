@@ -1,0 +1,47 @@
+# The live check of ADR-0010 on iOS: a package's tests run in a host with no window scene, so nothing they put in a
+# window is drawn and no luma comes. Here the tests run in this app, whose scene is on screen.
+#   xcodegen generate && xcodebuild -project LumaCheck.xcodeproj -scheme LumaCheck \
+#     -destination 'platform=iOS Simulator,name=<an iPhone>' CODE_SIGNING_ALLOWED=NO test
+name: LumaCheck
+options:
+  bundleIdPrefix: studio.aemi
+  deploymentTarget:
+    iOS: "18.0"
+packages:
+  AemiSDR:
+    path: ../..
+targets:
+  LumaCheck:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+    dependencies:
+      - package: AemiSDR
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        GENERATE_INFOPLIST_FILE: true
+        INFOPLIST_KEY_UILaunchScreen_Generation: true
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
+  LumaCheckTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests
+    dependencies:
+      - target: LumaCheck
+      - package: AemiSDR
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: true
+schemes:
+  LumaCheck:
+    build:
+      targets:
+        LumaCheck: all
+    test:
+      targets:
+        - LumaCheckTests

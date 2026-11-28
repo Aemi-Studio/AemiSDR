@@ -14,7 +14,7 @@
             private let edge = BlurMask.edge(.top, solid: 38, fade: 38)
 
             @Test func `a planned filter becomes a CAFilter of its type with exactly its inputs set`() throws {
-                let spec = try #require(BlurFilterPlan.filters(for: .variable(radius: 24, mask: edge)).first)
+                let spec = try #require(BlurFilterPlan.filters(for: .variable(radius: 24, mask: edge)).last)
                 let filter = try #require(BlurFilterFactory.make(spec))
                 let object = RuntimeObject(filter)
                 #expect((try object.value(forKey: "inputRadius") as? NSNumber)?.doubleValue == 24)
@@ -41,7 +41,7 @@
                 recipe.captureScale = 0.5
                 #expect(backdrop.apply(recipe))
                 let filters = try #require(backdrop.layer.filters as? [NSObject])
-                #expect(filters.count == 2)
+                #expect(filters.count == 3)
                 #expect((try RuntimeObject(backdrop.layer).value(forKey: "scale") as? NSNumber)?.doubleValue == 0.5)
             }
 

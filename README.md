@@ -7,6 +7,7 @@ AemiSDR works seamlessly with `ScrollView` and dynamic content, providing high-p
 - **Variable Blur**: Gradient-driven blur with rounded rectangle and superellipse shapes (iOS)
 - **Alpha Masks**: Fade content edges with configurable mask shapes (iOS)
 - **Backdrop Blur**: Customizable backdrop blur with tint, saturation, and system material presets (iOS + macOS)
+- **Backdrop Luma**: The luma of what is behind a view, for text that takes a light or dark ink (iOS + macOS)
 - **Liquid Background**: Physics-based refraction with chromatic aberration and Sellmeier dispersion (iOS)
 - **Display Corner Radius**: Retrieve the device's actual screen corner radius (iOS)
 - **Optimized**: Metal shaders compiled automatically via SPM build plugin, with result caching and zero-copy texture bridging
@@ -176,6 +177,18 @@ config.colorTint = .blue
 config.colorTintAlpha = 0.1
 BackdropBlurView(configuration: config)
 ```
+
+### Backdrop Luma (iOS 18+ / macOS 15+)
+
+```swift
+let reader = BackdropLumaNSView(frame: label.frame)   // BackdropLumaUIView on iOS
+reader.onLevel = { level in label.textColor = level == .light ? .black : .white }
+container.addSubview(reader, positioned: .below, relativeTo: label)
+```
+
+Readings come every `interval` seconds while the view is in a window and drawn (an occluded window gives none). The value
+is the display's luma, 0 to 1; `onLevel` changes only past `boundaries`. Without private API, `isAvailable` is false and
+nothing comes (ADR-0010).
 
 ### Liquid Background (iOS 18+)
 

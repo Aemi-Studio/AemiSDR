@@ -4,8 +4,10 @@ import QuartzCore
 
 /// Makes the `CAFilter` a `BlurFilterSpec` describes, through Abysm (ADR-0002, ADR-0009): the class is checked to come from
 /// QuartzCore, `+filterWithType:` and `-inputKeys` are checked against their type encodings (probed: `@24@0:8@16`, `@16@0:8`; `+filterTypes` `@16@0:8`),
-/// resolved once per process. A value is written only when the filter lists its key: `CAFilter` keeps unknown keys silently
-/// (probed), so a key renamed by the OS would otherwise do nothing without a word. Nothing here throws to the caller or crashes:
+/// resolved once per process. A value is written only when the filter has its key: `CAFilter` keeps unknown keys silently
+/// (probed), so a key renamed by the OS would otherwise do nothing without a word. iOS's `CAFilter` has no `-inputKeys`
+/// (iOS 27.2 simulator, diary 2026-11-28-01), so the whole core fell back to the material there; it has `-CAMLTypeForKey:`
+/// (`@24@0:8@16`), which names the type of each key a filter has and nothing for any other, and is asked instead. Nothing here throws to the caller or crashes:
 /// a failure makes no filter, and Abysm reports it once.
 @MainActor
 enum BlurFilterFactory {
@@ -14,7 +16,8 @@ enum BlurFilterFactory {
         /// `+filterTypes`: `+filterWithType:` returns an object for any name, a made-up one included (found by a test), so the
         /// type is checked against this list first.
         let types: Set<String>
-        let inputKeys: (NSObject) throws(RuntimeError) -> NSArray?
+        /// Whether a filter has an input key.
+        let has: (NSObject, String) -> Bool
     }
 
     /// Resolved on first use while private API is allowed; nil when that failed (and it is not tried again).
@@ -27,7 +30,7 @@ enum BlurFilterFactory {
             guard let filter = try? RuntimeClass(_InternedKeys.caLayerFilterClass, in: .quartzCore),
                 let make = try? filter.method(
                     _InternedKeys.filterCreationSelector, kind: .class, as: ((String) -> NSObject?).self),
-                let keys = try? filter.method(_InternedKeys.inputKeysSelector, as: (() -> NSArray?).self),
+                let has = keyCheck(filter),
                 let typesMethod = try? filter.method(
                     _InternedKeys.filterTypesSelector, kind: .class, as: (() -> NSArray?).self),
                 let types = (try? typesMethod()) as? [String]
@@ -39,11 +42,23 @@ enum BlurFilterFactory {
             return Entries(
                 make: { (type: String) throws(RuntimeError) -> NSObject? in try make(type) },
                 types: Set(types),
-                inputKeys: { (filter: NSObject) throws(RuntimeError) -> NSArray? in try keys(on: filter) }
+                has: has
             )
         }()
         entries = .some(resolved)
         return resolved
+    }
+
+    /// How a filter is asked whether it has a key: its `-inputKeys` (macOS), else `-CAMLTypeForKey:` (iOS); nil when neither
+    /// resolves.
+    private static func keyCheck(_ filter: RuntimeClass) -> ((NSObject, String) -> Bool)? {
+        if let keys = try? filter.method(_InternedKeys.inputKeysSelector, as: (() -> NSArray?).self) {
+            return { object, key in ((try? keys(on: object)) as? [String])?.contains(key) == true }
+        }
+        if let type = try? filter.method(_InternedKeys.keyTypeSelector, as: ((String) -> NSObject?).self) {
+            return { object, key in ((try? type(on: object, key)) ?? nil) != nil }
+        }
+        return nil
     }
 
     /// The filter, or nil when private API is off, a name does not resolve, the type is unknown, or a mask has no image.
@@ -52,9 +67,8 @@ enum BlurFilterFactory {
         else {
             return nil
         }
-        let listed = Set(((try? entries.inputKeys(filter)) as? [String]) ?? [])
         let object = RuntimeObject(filter)
-        for value in spec.values where listed.contains(value.key) {
+        for value in spec.values where entries.has(filter, value.key) {
             let written: Any
             switch value {
             case .number(_, let number): written = NSNumber(value: number)

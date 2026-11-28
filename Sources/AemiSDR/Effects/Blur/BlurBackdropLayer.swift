@@ -20,21 +20,14 @@ final class BlurBackdropLayer {
     /// A backdrop layer, or nil when private API is off or the class or its setters do not resolve. Layers with the same
     /// `groupName` share one capture of what is under them.
     static func make(groupName: String? = nil) -> BlurBackdropLayer? {
-        guard RuntimeAccess.isEnabled,
-            let backdrop = try? RuntimeClass(_InternedKeys.backdropClass, in: .quartzCore),
-            let type = backdrop.value as? CALayer.Type,
-            let scale = try? backdrop.action(_InternedKeys.setScaleSelector, as: ((Double) -> Void).self),
-            let group = try? backdrop.action(_InternedKeys.setGroupNameSelector, as: ((String) -> Void).self)
-        else {
+        guard let backdrop = BackdropLayerClass() else {
             _PrivateAPIDiagnostics.logOnce(
                 key: "blurBackdropLayer", "CABackdropLayer unavailable; blur falls back to the material.")
             return nil
         }
-        let layer = type.init()
-        if let groupName { try? group(on: layer, groupName) }
-        return BlurBackdropLayer(layer: layer) { (layer: CALayer, value: Double) throws(RuntimeError) in
-            try scale(on: layer, value)
-        }
+        let layer = backdrop.type.init()
+        if let groupName { try? backdrop.setGroupName(layer, groupName) }
+        return BlurBackdropLayer(layer: layer, setScale: backdrop.setScale)
     }
 
     /// Installs the recipe's filters; false when they could not be made (the caller falls back). Equal recipes do no work.

@@ -14,15 +14,15 @@ import Testing
 
     @Test func `a uniform recipe plans a gaussian blur and no colour filter`() {
         let plan = BlurFilterPlan.filters(for: .uniform(radius: 20))
-        #expect(plan.map(\.type) == ["gaussianBlur"])
-        #expect(plan.first?.values.contains(.number("inputRadius", 20)) == true)
+        #expect(plan.map(\.type) == ["sdrNormalize", "gaussianBlur"])
+        #expect(plan.last?.values.contains(.number("inputRadius", 20)) == true)
     }
 
     @Test func `a variable recipe plans a masked blur carrying its mask and normalised edges`() {
         let mask = BlurMask.edge(.top, solid: 38, fade: 38)
         let plan = BlurFilterPlan.filters(for: .variable(radius: 24, mask: mask))
-        #expect(plan.map(\.type) == ["variableBlur"])
-        let values = plan.first?.values ?? []
+        #expect(plan.map(\.type) == ["sdrNormalize", "variableBlur"])
+        let values = plan.last?.values ?? []
         #expect(values.contains(.number("inputRadius", 24)) && values.contains(.mask("inputMaskImage", mask)))
         #expect(values.contains(.flag("inputNormalizeEdges", true)))
     }
@@ -32,9 +32,17 @@ import Testing
         recipe.saturation = 1.8
         recipe.brightness = -0.08
         #expect(
-            BlurFilterPlan.filters(for: recipe).map(\.type) == ["gaussianBlur", "colorSaturate", "colorBrightness"])
+            BlurFilterPlan.filters(for: recipe).map(\.type)
+                == ["sdrNormalize", "gaussianBlur", "colorSaturate", "colorBrightness"])
         recipe.saturation = 1
-        #expect(BlurFilterPlan.filters(for: recipe).map(\.type) == ["gaussianBlur", "colorBrightness"])
+        #expect(BlurFilterPlan.filters(for: recipe).map(\.type) == ["sdrNormalize", "gaussianBlur", "colorBrightness"])
+    }
+
+    @Test func `the dynamic range is brought into the standard one before the blur, as the system's materials do`() {
+        var recipe = BlurRecipe.uniform(radius: 12)
+        #expect(BlurFilterPlan.filters(for: recipe).first == BlurFilterSpec(type: "sdrNormalize", values: []))
+        recipe.normalizesDynamicRange = false
+        #expect(BlurFilterPlan.filters(for: recipe).map(\.type) == ["gaussianBlur"])
     }
 
     @Test func `a radius of zero or less, or not finite, plans no blur`() {

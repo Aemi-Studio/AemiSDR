@@ -1,11 +1,14 @@
 import Foundation
 
-/// The filters a recipe asks for, in order: the blur (none when its radius blurs nothing), then saturation and brightness when they
-/// change anything. Pure: no private API is touched here (ADR-0009).
+/// The filters a recipe asks for, in order: the dynamic range brought into the standard one, the blur (none when its radius
+/// blurs nothing), then saturation and brightness when they change anything. Pure: no private API is touched here (ADR-0009).
 enum BlurFilterPlan {
     static func filters(for recipe: BlurRecipe) -> [BlurFilterSpec] {
         guard recipe.radius.isFinite, recipe.radius > 0 else { return [] }
         var filters: [BlurFilterSpec] = []
+        if recipe.normalizesDynamicRange {
+            filters.append(BlurFilterSpec(type: _InternedKeys.dynamicRangeFilterID, values: []))
+        }
         let radius = BlurFilterSpec.Value.number(_InternedKeys.radiusParam, recipe.radius)
         let edges = BlurFilterSpec.Value.flag(_InternedKeys.normalizeParam, recipe.normalizesEdges)
         switch recipe.shape {
